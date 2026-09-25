@@ -1,0 +1,112 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile & Gamification",
+      "description": "User profile with points, badges, daily streaks and level",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "email": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "points": { "type": "number", "description": "XP / Total score" },
+        "level": { "type": "number" },
+        "levelTitle": { "type": "string" },
+        "badges": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "dailyStreak": { "type": "number" },
+        "lastChallengeDate": { "type": "string" },
+        "exercisesCompleted": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["uid", "points", "level"]
+    },
+    "MemoryPalace": {
+      "title": "Memory Palace",
+      "description": "Custom or default memory palace with loci stations and associations",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "category": { "type": "string" },
+        "isPermanent": { "type": "boolean" },
+        "loci": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "stepNumber": { "type": "number" },
+              "roomName": { "type": "string" },
+              "title": { "type": "string" },
+              "positionDescription": { "type": "string" },
+              "storedContent": { "type": "string" },
+              "mnemonicScene": { "type": "string" }
+            }
+          }
+        },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "userId", "name"]
+    },
+    "PersonalAssociation": {
+      "title": "Personal Association",
+      "description": "User custom association for phone numbers, facts, codes",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "targetSubject": { "type": "string" },
+        "storedNumberOrFact": { "type": "string" },
+        "encodedMnemonic": { "type": "string" },
+        "methodUsed": { "type": "string" },
+        "successCount": { "type": "number" },
+        "failCount": { "type": "number" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "userId", "targetSubject", "encodedMnemonic"]
+    },
+    "TestResult": {
+      "title": "Test Result",
+      "description": "Record of a recall test evaluated by AI",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "category": { "type": "string" },
+        "question": { "type": "string" },
+        "targetAssociation": { "type": "string" },
+        "userResponse": { "type": "string" },
+        "isCorrect": { "type": "boolean" },
+        "score": { "type": "number" },
+        "verdictTitle": { "type": "string" },
+        "explanation": { "type": "string" },
+        "memoryTip": { "type": "string" },
+        "timestamp": { "type": "number" }
+      },
+      "required": ["id", "userId", "score", "isCorrect"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profile with points, badges and streak"
+    },
+    "/palaces/{palaceId}": {
+      "schema": "MemoryPalace",
+      "description": "User memory palaces"
+    },
+    "/personal_associations/{assocId}": {
+      "schema": "PersonalAssociation",
+      "description": "Custom user mnemonics and associations"
+    },
+    "/test_results/{testId}": {
+      "schema": "TestResult",
+      "description": "History of active recall tests"
+    }
+  }
+}

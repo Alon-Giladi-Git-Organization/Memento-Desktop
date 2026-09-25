@@ -1,0 +1,6 @@
+{
+  "name": "מאסטר הזיכרון - אקדמיית אלופי הזיכרון",
+  "description": "אימון בשיטות הזיכרון המתקדמות של אלופי העולם: ארמונות זיכרון, שיטת Major בעברית, PAO, שמות ופנים, מנטור אישי ובחינת אסוציאציות מבוססת AI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
