@@ -351,3 +351,7 @@ export const TECHNIQUE_SUMMARIES: Record<string, TechniqueSummaryData> = {
     ],
   },
 };
+
+// Aliases for alternate lookups
+TECHNIQUE_SUMMARIES.loci = TECHNIQUE_SUMMARIES.palaces;
+TECHNIQUE_SUMMARIES.locations = TECHNIQUE_SUMMARIES.palaces;

@@ -74,6 +74,22 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
   const [quizFeedback, setQuizFeedback] = useState<'idle' | 'correct' | 'incorrect'>('idle');
   const [revealQuizAnswer, setRevealQuizAnswer] = useState(false);
 
+  // Jump to specific number in registry
+  const [highlightedNum, setHighlightedNum] = useState<number | null>(null);
+
+  const scrollToNumber = (num: number) => {
+    setHighlightedNum(num);
+    setTimeout(() => {
+      const el = document.getElementById(`pao-item-${num}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 50);
+    setTimeout(() => {
+      setHighlightedNum(null);
+    }, 2500);
+  };
+
   const handleGeneratePao6 = () => {
     let res = '';
     for (let i = 0; i < 6; i++) {
@@ -191,38 +207,38 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
   });
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
+    <div className="bg-white border-2 border-slate-200 border-b-6 border-b-slate-300 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6 text-slate-900">
       {/* Header and Sub-Tabs */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-4 border-b-2 border-slate-200">
         <div>
           <div className="flex items-center gap-3">
-            <h2 className="text-xl font-bold text-white flex items-center gap-2">
-              <User className="w-5 h-5 text-indigo-400" />
+            <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+              <User className="w-5 h-5 text-[#1CB0F6]" />
               <span>שלשות PAO (אדם - פעולה - חפץ)</span>
             </h2>
             {onOpenSummary && (
               <button
                 onClick={() => onOpenSummary('pao')}
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30 text-xs font-bold transition-all cursor-pointer"
+                className="btn-duo-neutral inline-flex items-center gap-1.5 px-3 py-1 text-xs cursor-pointer"
                 title="צפה בסיכום הטכניקה ודוגמאות מעשיות"
               >
-                <BookOpen className="w-3.5 h-3.5" />
+                <BookOpen className="w-3.5 h-3.5 text-[#1CB0F6]" />
                 <span>סיכום ודוגמאות</span>
               </button>
             )}
           </div>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-slate-500 font-medium mt-1">
             קודד 6 ספרות לסצנה קולנועית אחת לפי ראשי תיבות של אותיות ה-Major (למשל 14 = ל.ד.)
           </p>
         </div>
 
-        <div className="flex items-center gap-1.5 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 self-stretch md:self-auto justify-center">
+        <div className="flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-2xl border-2 border-slate-200 self-stretch md:self-auto justify-center">
           <button
             onClick={() => setSubView('sixDigits')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
               subView === 'sixDigits'
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-[#1CB0F6] text-white border-b-2 border-[#1899d6] shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
@@ -230,10 +246,10 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
           </button>
           <button
             onClick={() => setSubView('registry')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
               subView === 'registry'
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-[#1CB0F6] text-white border-b-2 border-[#1899d6] shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <User className="w-3.5 h-3.5" />
@@ -241,10 +257,10 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
           </button>
           <button
             onClick={() => setSubView('quiz')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
               subView === 'quiz'
-                ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/20'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-[#1CB0F6] text-white border-b-2 border-[#1899d6] shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <Sparkles className="w-3.5 h-3.5" />
@@ -502,24 +518,75 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
             </form>
           )}
 
-          {/* PAO Cards Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 max-h-[550px] overflow-y-auto pr-1">
-            {filteredItems.map((item) => {
-              const isEditing = editingNum === item.number;
-              const p = item.userPerson || item.person;
-              const a = item.userAction || item.action;
-              const o = item.userObject || item.object;
-              const isCustom = !!item.userPerson || !!item.userAction || !!item.userObject;
-
-              return (
-                <div
-                  key={item.number}
-                  className={`bg-slate-950 border rounded-2xl p-4 transition-all flex flex-col justify-between ${
-                    isCustom
-                      ? 'border-indigo-500/50 shadow-sm shadow-indigo-500/10'
-                      : 'border-slate-800 hover:border-slate-700'
-                  }`}
+          {/* Quick Navigator Bar (סרגל ניווט מהיר לשלשות 00-99) */}
+          <div className="bg-slate-950/90 border border-slate-800 rounded-2xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 shadow-inner">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[11px] font-bold text-indigo-400 ml-1">סרגל עשורים ושלשות:</span>
+              {[
+                { label: '0-9', min: 0 },
+                { label: '10-19', min: 10 },
+                { label: '20-29', min: 20 },
+                { label: '30-39', min: 30 },
+                { label: '40-49', min: 40 },
+                { label: '50-59', min: 50 },
+                { label: '60-69', min: 60 },
+                { label: '70-79', min: 70 },
+                { label: '80-89', min: 80 },
+                { label: '90-99', min: 90 },
+              ].map((dec) => (
+                <button
+                  key={dec.min}
+                  onClick={() => scrollToNumber(dec.min)}
+                  className="text-[10px] font-mono font-bold px-2 py-1 rounded-lg bg-slate-900 hover:bg-indigo-500/20 text-slate-300 hover:text-indigo-300 border border-slate-800 hover:border-indigo-500/40 transition-all cursor-pointer"
                 >
+                  {dec.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-1.5 self-end sm:self-auto shrink-0">
+              <span className="text-[10px] text-slate-400">קפיצה לשלשה:</span>
+              <select
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  if (!isNaN(val)) scrollToNumber(val);
+                }}
+                defaultValue=""
+                className="bg-slate-900 border border-slate-700 text-indigo-300 text-xs rounded-lg px-2 py-1 focus:outline-none cursor-pointer"
+              >
+                <option value="" disabled>בחר מספר...</option>
+                {paoItems.map((item) => (
+                  <option key={item.number} value={item.number}>
+                    #{item.numberStr} - {item.userPerson || item.person}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* PAO Cards Grid with Side Navigator */}
+          <div className="flex gap-3 items-start">
+            <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 max-h-[580px] overflow-y-auto pr-1 scroll-smooth">
+              {filteredItems.map((item) => {
+                const isEditing = editingNum === item.number;
+                const p = item.userPerson || item.person;
+                const a = item.userAction || item.action;
+                const o = item.userObject || item.object;
+                const isCustom = !!item.userPerson || !!item.userAction || !!item.userObject;
+                const isHighlighted = highlightedNum === item.number;
+
+                return (
+                  <div
+                    id={`pao-item-${item.number}`}
+                    key={item.number}
+                    className={`bg-slate-950 border rounded-2xl p-4 transition-all duration-300 flex flex-col justify-between ${
+                      isHighlighted
+                        ? 'border-indigo-400 ring-4 ring-indigo-400/30 scale-[1.02] shadow-xl shadow-indigo-500/20 bg-indigo-950/20'
+                        : isCustom
+                        ? 'border-indigo-500/50 shadow-sm shadow-indigo-500/10'
+                        : 'border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
                   <div className="space-y-2.5">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -714,6 +781,26 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                 </div>
               );
             })}
+            </div>
+
+            {/* Vertical Sticky Side Index for PAO (00-99) */}
+            <div className="hidden lg:flex flex-col gap-1 bg-slate-950 p-2 rounded-2xl border border-slate-800 max-h-[580px] overflow-y-auto no-scrollbar shrink-0 w-16 text-center shadow-inner">
+              <span className="text-[9px] font-bold text-slate-400 pb-1 border-b border-slate-800">שלשה</span>
+              {paoItems.map((item) => (
+                <button
+                  key={item.number}
+                  onClick={() => scrollToNumber(item.number)}
+                  title={`#${item.numberStr} - ${item.userPerson || item.person}`}
+                  className={`text-[10px] font-mono py-1 rounded-lg transition-colors cursor-pointer ${
+                    highlightedNum === item.number
+                      ? 'bg-indigo-600 text-white font-black'
+                      : 'text-slate-400 hover:text-indigo-300 hover:bg-slate-900'
+                  }`}
+                >
+                  {item.numberStr}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}

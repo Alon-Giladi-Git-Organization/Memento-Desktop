@@ -54,19 +54,17 @@ export const AIFeedbackDashboard: React.FC<AIFeedbackDashboardProps> = ({
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-16">
       {/* Header Banner */}
-      <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950/40 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-
+      <div className="bg-slate-900 border-2 border-slate-800 border-b-6 border-b-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl relative overflow-hidden">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative z-10">
           <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 px-3.5 py-1 rounded-full text-xs font-semibold">
+            <div className="inline-flex items-center gap-2 bg-[#CE82FF]/15 border-2 border-[#CE82FF]/40 text-[#CE82FF] px-3.5 py-1 rounded-2xl text-xs font-black">
               <Brain className="w-3.5 h-3.5" />
               <span>מערכת משוב נוירו-קוגניטיבית מבוססת Gemini AI</span>
             </div>
             <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
               ניתוח ביצועים ומשוב טכניקות אישי
             </h1>
-            <p className="text-slate-300 text-sm sm:text-base max-w-2xl leading-relaxed">
+            <p className="text-slate-300 text-sm sm:text-base max-w-2xl leading-relaxed font-medium">
               ה-AI מנתח את התרגילים שלך לאורך זמן, מזהה חוזקות וצווארי בקבוק (קינטיקה, פענוח פונטי,
               שליפה פעילה ועגינה מרחבית), ומעניק המלצות פעולה מדויקות ומעצימות.
             </p>
@@ -75,16 +73,16 @@ export const AIFeedbackDashboard: React.FC<AIFeedbackDashboardProps> = ({
           <button
             onClick={handleRunAnalysis}
             disabled={isAnalyzing}
-            className="flex items-center gap-2.5 bg-gradient-to-r from-indigo-500 to-teal-400 hover:from-indigo-400 hover:to-teal-300 text-slate-950 font-black px-6 py-3 rounded-2xl shadow-xl shadow-indigo-500/20 text-sm transition-all disabled:opacity-50 cursor-pointer shrink-0"
+            className="btn-duo-purple flex items-center gap-2.5 px-6 py-3 text-sm cursor-pointer shrink-0 disabled:opacity-50"
           >
             {isAnalyzing ? (
               <>
-                <Loader2 className="w-5 h-5 animate-spin text-slate-950" />
+                <Loader2 className="w-5 h-5 animate-spin" />
                 <span>מבצע ניתוח נוירונלי...</span>
               </>
             ) : (
               <>
-                <Sparkles className="w-5 h-5 text-slate-950" />
+                <Sparkles className="w-5 h-5" />
                 <span>צור ניתוח ביצועים עדכני ב-AI</span>
               </>
             )}
@@ -93,18 +91,18 @@ export const AIFeedbackDashboard: React.FC<AIFeedbackDashboardProps> = ({
 
         {/* History of Reports selector */}
         {feedbackReports.length > 1 && (
-          <div className="flex items-center gap-2 mt-6 pt-4 border-t border-slate-800 overflow-x-auto no-scrollbar">
-            <span className="text-xs text-slate-400 font-medium ml-2 flex items-center gap-1">
+          <div className="flex items-center gap-2 mt-6 pt-4 border-t-2 border-slate-800 overflow-x-auto no-scrollbar">
+            <span className="text-xs text-slate-400 font-bold ml-2 flex items-center gap-1">
               <History className="w-3.5 h-3.5" /> היסטוריית דוחות:
             </span>
             {feedbackReports.map((rep, idx) => (
               <button
                 key={rep.id}
                 onClick={() => setSelectedReportIndex(idx)}
-                className={`text-xs px-3 py-1.5 rounded-xl font-bold whitespace-nowrap cursor-pointer transition-all ${
+                className={`text-xs px-3.5 py-1.5 rounded-2xl font-black whitespace-nowrap cursor-pointer transition-all active:translate-y-0.5 ${
                   selectedReportIndex === idx
-                    ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/50'
-                    : 'bg-slate-800 text-slate-400 hover:text-slate-200'
+                    ? 'bg-[#CE82FF]/20 text-[#CE82FF] border-2 border-[#CE82FF] border-b-4 border-b-[#a855f7]'
+                    : 'bg-slate-950 text-slate-400 hover:text-white border-2 border-slate-800'
                 }`}
               >
                 דו"ח {new Date(rep.createdAt).toLocaleDateString('he-IL')}

@@ -72,6 +72,17 @@ export const GlobalAIMentorWidget: React.FC<GlobalAIMentorWidgetProps> = ({
     }
   }, [messages, isOpen]);
 
+  // ESC key to close
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        setIsOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
+
   const handleSend = async (textToSend?: string) => {
     const text = textToSend || input;
     if (!text.trim() || isLoading) return;
@@ -199,7 +210,16 @@ export const GlobalAIMentorWidget: React.FC<GlobalAIMentorWidgetProps> = ({
 
       {/* Floating Chat Drawer */}
       {isOpen && (
-        <div className="fixed bottom-20 left-4 sm:left-6 z-50 w-[calc(100vw-32px)] sm:w-[460px] h-[580px] max-h-[85vh] bg-slate-900 border border-amber-500/30 rounded-3xl shadow-2xl flex flex-col overflow-hidden backdrop-blur-xl animate-fadeIn">
+        <>
+          {/* Backdrop for click outside */}
+          <div
+            className="fixed inset-0 z-45 bg-slate-950/40 backdrop-blur-[2px] transition-opacity"
+            onClick={() => setIsOpen(false)}
+          />
+          <div
+            className="fixed bottom-20 left-4 sm:left-6 z-50 w-[calc(100vw-32px)] sm:w-[460px] h-[580px] max-h-[85vh] bg-slate-900 border border-amber-500/30 rounded-3xl shadow-2xl flex flex-col overflow-hidden backdrop-blur-xl animate-fadeIn"
+            onClick={(e) => e.stopPropagation()}
+          >
           {/* Drawer Header */}
           <div className="p-4 bg-gradient-to-r from-slate-950 via-slate-900 to-amber-950/40 border-b border-slate-800 flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -319,6 +339,7 @@ export const GlobalAIMentorWidget: React.FC<GlobalAIMentorWidgetProps> = ({
             </button>
           </form>
         </div>
+        </>
       )}
     </>
   );

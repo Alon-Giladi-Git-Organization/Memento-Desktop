@@ -115,6 +115,27 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
   const [userGuess, setUserGuess] = useState('');
   const [quizFeedback, setQuizFeedback] = useState<'idle' | 'correct' | 'incorrect'>('idle');
   const [revealHint, setRevealHint] = useState(false);
+  const [isQuizEditing, setIsQuizEditing] = useState(false);
+  const [quizEditWord, setQuizEditWord] = useState('');
+  const [quizEditConsonants, setQuizEditConsonants] = useState('');
+  const [quizEditHint, setQuizEditHint] = useState('');
+
+  // Jump to specific number in table
+  const [highlightedNum, setHighlightedNum] = useState<number | null>(null);
+
+  const scrollToNumber = (num: number) => {
+    setDecadeFilter('all');
+    setHighlightedNum(num);
+    setTimeout(() => {
+      const el = document.getElementById(`major-item-${num}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 50);
+    setTimeout(() => {
+      setHighlightedNum(null);
+    }, 2500);
+  };
 
   const handleNextQuestion = () => {
     if (majorItems.length === 0) return;
@@ -123,6 +144,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
     setUserGuess('');
     setQuizFeedback('idle');
     setRevealHint(false);
+    setIsQuizEditing(false);
   };
 
   const handleCheckAnswer = () => {
@@ -145,6 +167,18 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
     } else {
       setQuizFeedback('incorrect');
     }
+  };
+
+  const handleSaveQuizEdit = () => {
+    const current = majorItems[quizIndex];
+    if (!current) return;
+    onUpdateMajorItem(current.number, {
+      userWord: quizEditWord.trim(),
+      userConsonants: quizEditConsonants.trim(),
+      userImageHint: quizEditHint.trim(),
+    });
+    setIsQuizEditing(false);
+    onEarnPoints(10, 'עדכון אסוציאציה מתוך מבחן השליפה');
   };
 
   const handleAddNewItem = (e: React.FormEvent) => {
@@ -186,38 +220,38 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
   });
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
+    <div className="bg-white border-2 border-slate-200 border-b-6 border-b-slate-300 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6 text-slate-900">
       {/* Header and Sub-Tabs */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-4 border-b-2 border-slate-200">
         <div>
           <div className="flex items-center gap-3">
-            <h2 className="text-xl font-bold text-white flex items-center gap-2">
-              <Hash className="w-5 h-5 text-amber-400" />
+            <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+              <Hash className="w-5 h-5 text-[#58CC02]" />
               <span>שיטת Major - המרת מספרים לאותיות ודימויים</span>
             </h2>
             {onOpenSummary && (
               <button
                 onClick={() => onOpenSummary('major')}
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 text-xs font-bold transition-all cursor-pointer"
+                className="btn-duo-neutral inline-flex items-center gap-1.5 px-3 py-1 text-xs cursor-pointer"
                 title="צפה בסיכום הטכניקה ודוגמאות מעשיות"
               >
-                <BookOpen className="w-3.5 h-3.5" />
+                <BookOpen className="w-3.5 h-3.5 text-[#58CC02]" />
                 <span>סיכום ודוגמאות</span>
               </button>
             )}
           </div>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-slate-500 font-medium mt-1">
             הגדר והתאם אישית את ספרות היסוד (0-9), את מאגר המספרים (00-99+), והיבחן עליהם
           </p>
         </div>
 
-        <div className="flex items-center gap-1.5 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 self-stretch md:self-auto justify-center">
+        <div className="flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-2xl border-2 border-slate-200 self-stretch md:self-auto justify-center">
           <button
             onClick={() => setSubView('digits')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
               subView === 'digits'
-                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-[#58CC02] text-white border-b-2 border-[#46a302] shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <Sliders className="w-3.5 h-3.5" />
@@ -225,10 +259,10 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
           </button>
           <button
             onClick={() => setSubView('table')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
               subView === 'table'
-                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-[#58CC02] text-white border-b-2 border-[#46a302] shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <Hash className="w-3.5 h-3.5" />
@@ -236,10 +270,10 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
           </button>
           <button
             onClick={() => setSubView('quiz')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
               subView === 'quiz'
-                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-[#58CC02] text-white border-b-2 border-[#46a302] shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <Sparkles className="w-3.5 h-3.5" />
@@ -249,25 +283,25 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
       </div>
 
       {/* Connecting Letters Rule Note / חוק אותיות הקישור */}
-      <div className="bg-gradient-to-r from-sky-950/60 via-slate-900 to-indigo-950/50 border border-sky-500/30 rounded-2xl p-4 shadow-lg flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-right">
+      <div className="bg-gradient-to-r from-sky-50 via-white to-indigo-50 border border-sky-200 rounded-2xl p-4 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-right">
         <div className="flex items-start sm:items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-sky-500/20 text-sky-300 border border-sky-500/40 flex items-center justify-center font-bold shrink-0 text-base shadow-inner">
+          <div className="w-9 h-9 rounded-xl bg-sky-100 text-sky-700 border border-sky-300 flex items-center justify-center font-bold shrink-0 text-base shadow-xs">
             💡
           </div>
           <div className="space-y-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-black text-sky-300">
+              <span className="text-xs font-black text-sky-900">
                 חוק "אותיות הקישור" (ללא ספרה משויכת):
               </span>
-              <span className="text-xs font-mono font-bold text-sky-100 bg-sky-900/80 px-2.5 py-0.5 rounded-lg border border-sky-500/40">
+              <span className="text-xs font-mono font-bold text-sky-800 bg-sky-100 px-2.5 py-0.5 rounded-lg border border-sky-300">
                 א', ה', ו', י, נ', ע'
               </span>
-              <span className="text-xs font-black text-amber-300 bg-amber-500/15 px-2.5 py-0.5 rounded-lg border border-amber-500/30">
+              <span className="text-xs font-black text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-lg border border-amber-300">
                 ביטוי עזר אנגרמתי לזיכרון: "אני עונה"
               </span>
             </div>
-            <p className="text-[11px] text-slate-300 leading-relaxed">
-              לאותיות אלו אין ספרה משויכת, והן משמשות חופשי כחומרי קישור. כל מילות 00-99 מורכבות <strong>אך ורק</strong> מעיצורי המספר עצמו + אותיות הקישור הללו (למשל: <span className="text-amber-300 font-bold">11 = לול</span>, כי 1=ל ו-ו' אות קישור, ללא עיצורים זרים).
+            <p className="text-[11px] text-slate-600 leading-relaxed">
+              לאותיות אלו אין ספרה משויכת, והן משמשות חופשי כחומרי קישור. כל מילות 00-99 מורכבות <strong>אך ורק</strong> מעיצורי המספר עצמו + אותיות הקישור הללו (למשל: <span className="text-amber-800 font-bold">11 = לול</span>, כי 1=ל ו-ו' אות קישור, ללא עיצורים זרים).
             </p>
           </div>
         </div>
@@ -495,7 +529,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
       {subView === 'table' && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="flex items-center gap-2 w-full sm:w-auto">
+            <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
               <div className="relative flex-1 sm:w-64">
                 <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-500" />
                 <input
@@ -530,6 +564,52 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
               <Plus className="w-4 h-4" />
               <span>הוסף מספר ואסוציאציה חדשה</span>
             </button>
+          </div>
+
+          {/* Quick Number Navigator Bar */}
+          <div className="bg-slate-950/90 border border-slate-800 rounded-2xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 shadow-inner">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[11px] font-bold text-amber-400 ml-1">סרגל עשורים וניווט מהיר:</span>
+              {[
+                { label: '0-9', min: 0 },
+                { label: '10-19', min: 10 },
+                { label: '20-29', min: 20 },
+                { label: '30-39', min: 30 },
+                { label: '40-49', min: 40 },
+                { label: '50-59', min: 50 },
+                { label: '60-69', min: 60 },
+                { label: '70-79', min: 70 },
+                { label: '80-89', min: 80 },
+                { label: '90-99', min: 90 },
+              ].map((dec) => (
+                <button
+                  key={dec.min}
+                  onClick={() => scrollToNumber(dec.min)}
+                  className="text-[10px] font-mono font-bold px-2 py-1 rounded-lg bg-slate-900 hover:bg-amber-500/20 text-slate-300 hover:text-amber-300 border border-slate-800 hover:border-amber-500/40 transition-all cursor-pointer"
+                >
+                  {dec.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-1.5 self-end sm:self-auto shrink-0">
+              <span className="text-[10px] text-slate-400">קפוץ למספר:</span>
+              <select
+                onChange={(e) => {
+                  const val = parseInt(e.target.value, 10);
+                  if (!isNaN(val)) scrollToNumber(val);
+                }}
+                defaultValue=""
+                className="bg-slate-900 border border-slate-700 text-amber-300 text-xs rounded-lg px-2 py-1 focus:outline-none cursor-pointer"
+              >
+                <option value="" disabled>בחר מספר...</option>
+                {majorItems.map((item) => (
+                  <option key={item.number} value={item.number}>
+                    #{item.numberStr} - {item.userWord || item.defaultWord}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {/* Add New Item Form */}
@@ -634,24 +714,30 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
             </form>
           )}
 
-          {/* Cards Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-[550px] overflow-y-auto pr-1">
-            {filteredItems.map((item) => {
-              const isEditing = editingNum === item.number;
-              const activeWord = item.userWord || item.defaultWord;
-              const activeConsonants = item.userConsonants || item.consonants;
-              const activeHint = item.userImageHint || item.imageHint;
-              const isCustom = !!item.userWord || !!item.userConsonants;
+          {/* Cards Grid with Side Navigator */}
+          <div className="flex gap-3 items-start">
+            {/* Main Cards Grid */}
+            <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-[580px] overflow-y-auto pr-1 scroll-smooth">
+              {filteredItems.map((item) => {
+                const isEditing = editingNum === item.number;
+                const activeWord = item.userWord || item.defaultWord;
+                const activeConsonants = item.userConsonants || item.consonants;
+                const activeHint = item.userImageHint || item.imageHint;
+                const isCustom = !!item.userWord || !!item.userConsonants;
+                const isHighlighted = highlightedNum === item.number;
 
-              return (
-                <div
-                  key={item.number}
-                  className={`bg-slate-950 border rounded-2xl p-3.5 transition-all flex flex-col justify-between ${
-                    isCustom
-                      ? 'border-amber-500/50 shadow-sm shadow-amber-500/10'
-                      : 'border-slate-800 hover:border-slate-700'
-                  }`}
-                >
+                return (
+                  <div
+                    id={`major-item-${item.number}`}
+                    key={item.number}
+                    className={`bg-slate-950 border rounded-2xl p-3.5 transition-all duration-300 flex flex-col justify-between ${
+                      isHighlighted
+                        ? 'border-amber-400 ring-4 ring-amber-400/30 scale-[1.02] shadow-xl shadow-amber-500/20 bg-amber-950/20'
+                        : isCustom
+                        ? 'border-amber-500/50 shadow-sm shadow-amber-500/10'
+                        : 'border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -818,6 +904,26 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                 </div>
               );
             })}
+            </div>
+
+            {/* Vertical Sticky Side Index for 1-100 */}
+            <div className="hidden lg:flex flex-col gap-1 bg-slate-950 p-2 rounded-2xl border border-slate-800 max-h-[580px] overflow-y-auto no-scrollbar shrink-0 w-16 text-center shadow-inner">
+              <span className="text-[9px] font-bold text-slate-400 pb-1 border-b border-slate-800">מספר</span>
+              {majorItems.map((item) => (
+                <button
+                  key={item.number}
+                  onClick={() => scrollToNumber(item.number)}
+                  title={`#${item.numberStr} - ${item.userWord || item.defaultWord}`}
+                  className={`text-[10px] font-mono py-1 rounded-lg transition-colors cursor-pointer ${
+                    highlightedNum === item.number
+                      ? 'bg-amber-500 text-slate-950 font-black'
+                      : 'text-slate-400 hover:text-amber-300 hover:bg-slate-900'
+                  }`}
+                >
+                  {item.numberStr}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -825,10 +931,13 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
       {/* SUB-VIEW 3: QUIZ */}
       {subView === 'quiz' && (
         <div className="space-y-6">
-          <div className="flex justify-end">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+            <div className="text-xs text-slate-400 font-medium">
+              💡 טיפ: לחץ <kbd className="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-amber-300 font-mono text-[10px]">Ctrl + Enter</kbd> לחשיפת התשובה והסצנה בכל שלב
+            </div>
             <button
               onClick={handleNextQuestion}
-              className="flex items-center gap-1.5 text-xs text-amber-400 hover:text-amber-300 bg-slate-800 px-3 py-1.5 rounded-xl cursor-pointer"
+              className="flex items-center gap-1.5 text-xs text-amber-400 hover:text-amber-300 bg-slate-800 px-3.5 py-1.5 rounded-xl cursor-pointer hover:bg-slate-700 transition-colors"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>מספר אקראי חדש</span>
@@ -837,7 +946,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
 
           {majorItems[quizIndex] && (
             <div className="max-w-xl mx-auto space-y-6 text-center">
-              <div className="p-8 rounded-3xl bg-slate-950 border border-slate-800 shadow-inner space-y-3">
+              <div className="p-8 rounded-3xl bg-slate-950 border border-slate-800 shadow-inner space-y-3 relative overflow-hidden">
                 <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">
                   מה המילה המנמונית של המספר:
                 </span>
@@ -859,6 +968,11 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                     value={userGuess}
                     onChange={(e) => setUserGuess(e.target.value)}
                     onKeyDown={(e) => {
+                      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                        e.preventDefault();
+                        setRevealHint(true);
+                        return;
+                      }
                       if (e.key === 'Enter') {
                         e.preventDefault();
                         if (quizFeedback === 'correct') {
@@ -885,6 +999,24 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                   </button>
                 </div>
 
+                <div className="flex items-center justify-center gap-3">
+                  <button
+                    onClick={handleNextQuestion}
+                    className="text-xs text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700 px-3 py-1.5 rounded-xl transition-all cursor-pointer inline-flex items-center gap-1"
+                  >
+                    <span>דלג למספר הבא ⏭️</span>
+                  </button>
+                  {!revealHint && quizFeedback !== 'correct' && (
+                    <button
+                      onClick={() => setRevealHint(true)}
+                      className="text-xs text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-3 py-1.5 rounded-xl transition-all cursor-pointer inline-flex items-center gap-1"
+                    >
+                      <HelpCircle className="w-3.5 h-3.5" />
+                      <span>חשוף תשובה (Ctrl+Enter)</span>
+                    </button>
+                  )}
+                </div>
+
                 {quizFeedback === 'correct' && (
                   <div className="p-4 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 flex flex-col items-center justify-center gap-1.5 animate-fadeIn">
                     <div className="flex items-center gap-2">
@@ -900,51 +1032,118 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                 {quizFeedback === 'incorrect' && (
                   <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center gap-2 animate-fadeIn">
                     <XCircle className="w-5 h-5" />
-                    <span className="font-bold text-sm">לא מדויק. נסה שוב או חשוף את התשובה</span>
+                    <span className="font-bold text-sm">לא מדויק. לחץ Ctrl+Enter לחשיפת התשובה או דלג הלאה</span>
                   </div>
                 )}
 
                 {/* Always show full association and kinetic scene on correct answer OR when revealing */}
                 {(quizFeedback === 'correct' || revealHint) && (
-                  <div className="bg-slate-950/90 border border-amber-500/40 rounded-2xl p-5 text-xs space-y-2.5 text-right animate-fadeIn shadow-xl shadow-amber-500/5">
+                  <div className="bg-slate-950/90 border border-amber-500/40 rounded-2xl p-5 text-xs space-y-3 text-right animate-fadeIn shadow-xl shadow-amber-500/5">
                     <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                       <span className="text-amber-400 font-bold flex items-center gap-1.5">
                         <Sparkles className="w-4 h-4 text-amber-400" />
                         האסוציאציה המלאה שנקבעה:
                       </span>
-                      <span className="text-[11px] font-mono text-slate-400">
-                        מספר {majorItems[quizIndex].numberStr} | עיצורים: {majorItems[quizIndex].userConsonants || majorItems[quizIndex].consonants}
-                      </span>
-                    </div>
-                    <div className="text-amber-300 font-bold text-sm">
-                      מילה מנמונית: <span className="text-white text-base font-black">{majorItems[quizIndex].userWord || majorItems[quizIndex].defaultWord}</span>
-                    </div>
-                    <div className="text-slate-200 bg-slate-900/90 p-3 rounded-xl border border-slate-800 text-xs leading-relaxed">
-                      ⚡ <strong className="text-amber-400">סצנה קינטית מוקצנת:</strong>{' '}
-                      {majorItems[quizIndex].userImageHint || majorItems[quizIndex].imageHint || 'התנגשות קינטית עזה שצרובה בהיפוקמפוס.'}
-                    </div>
-                    {quizFeedback === 'correct' && (
-                      <div className="flex justify-center pt-1">
+                      <div className="flex items-center gap-2">
                         <button
-                          onClick={handleNextQuestion}
-                          className="text-xs text-amber-400 hover:text-amber-300 font-bold inline-flex items-center gap-1 bg-slate-900 px-3 py-1.5 rounded-xl border border-amber-500/30 cursor-pointer"
+                          onClick={() => {
+                            const cur = majorItems[quizIndex];
+                            if (cur) {
+                              setQuizEditWord(cur.userWord || cur.defaultWord);
+                              setQuizEditConsonants(cur.userConsonants || cur.consonants);
+                              setQuizEditHint(cur.userImageHint || cur.imageHint || '');
+                              setIsQuizEditing(!isQuizEditing);
+                            }
+                          }}
+                          className="text-[11px] text-amber-300 hover:text-white bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 cursor-pointer"
                         >
-                          <span>למספר האקראי הבא (Enter ↵)</span>
+                          <Edit3 className="w-3 h-3" />
+                          <span>{isQuizEditing ? 'סגור עריכה' : 'שנה אסוציאציה'}</span>
                         </button>
+                        <span className="text-[11px] font-mono text-slate-400">
+                          #{majorItems[quizIndex].numberStr}
+                        </span>
                       </div>
-                    )}
-                  </div>
-                )}
+                    </div>
 
-                {quizFeedback !== 'correct' && !revealHint && (
-                  <div className="flex justify-center gap-3">
-                    <button
-                      onClick={() => setRevealHint(true)}
-                      className="flex items-center gap-1 text-xs text-slate-400 hover:text-amber-300 cursor-pointer"
-                    >
-                      <HelpCircle className="w-3.5 h-3.5" />
-                      <span>חשוף תשובה וסצנה קינטית</span>
-                    </button>
+                    {isQuizEditing ? (
+                      <div className="space-y-3 bg-slate-900 p-3.5 rounded-xl border border-amber-500/30 animate-fadeIn">
+                        <div className="text-xs font-bold text-amber-300">עריכת האסוציאציה למספר {majorItems[quizIndex].numberStr}:</div>
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-[10px] text-slate-400 font-bold">מילה מנמונית:</label>
+                            <AIFieldGeneratorButton
+                              promptType="major_word"
+                              inputContext={majorItems[quizIndex].number.toString()}
+                              extraContext={quizEditConsonants}
+                              onGenerated={(val) => setQuizEditWord(val)}
+                              label="מילה עם AI"
+                              compact
+                            />
+                          </div>
+                          <input
+                            type="text"
+                            value={quizEditWord}
+                            onChange={(e) => setQuizEditWord(e.target.value)}
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white"
+                          />
+                        </div>
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-[10px] text-slate-400 font-bold">סצנה קינטית:</label>
+                            <AIFieldGeneratorButton
+                              promptType="major_hint"
+                              inputContext={majorItems[quizIndex].number.toString()}
+                              extraContext={quizEditWord}
+                              onGenerated={(val) => setQuizEditHint(val)}
+                              label="סצנה עם AI"
+                              compact
+                            />
+                          </div>
+                          <input
+                            type="text"
+                            value={quizEditHint}
+                            onChange={(e) => setQuizEditHint(e.target.value)}
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white"
+                          />
+                        </div>
+                        <div className="flex justify-end gap-2 pt-1">
+                          <button
+                            type="button"
+                            onClick={() => setIsQuizEditing(false)}
+                            className="text-xs text-slate-400 px-3 py-1"
+                          >
+                            ביטול
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleSaveQuizEdit}
+                            className="text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-4 py-1 rounded-lg cursor-pointer"
+                          >
+                            שמור שינויים
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="text-amber-300 font-bold text-sm">
+                          מילה מנמונית: <span className="text-white text-base font-black">{majorItems[quizIndex].userWord || majorItems[quizIndex].defaultWord}</span>
+                        </div>
+                        <div className="text-slate-200 bg-slate-900/90 p-3 rounded-xl border border-slate-800 text-xs leading-relaxed">
+                          ⚡ <strong className="text-amber-400">סצנה קינטית מוקצנת:</strong>{' '}
+                          {majorItems[quizIndex].userImageHint || majorItems[quizIndex].imageHint || 'התנגשות קינטית עזה שצרובה בהיפוקמפוס.'}
+                        </div>
+                      </>
+                    )}
+
+                    <div className="flex justify-center pt-1">
+                      <button
+                        onClick={handleNextQuestion}
+                        className="text-xs text-amber-400 hover:text-amber-300 font-bold inline-flex items-center gap-1 bg-slate-900 px-4 py-2 rounded-xl border border-amber-500/30 cursor-pointer hover:bg-slate-800 transition-colors"
+                      >
+                        <span>למספר האקראי הבא (Enter ↵)</span>
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>

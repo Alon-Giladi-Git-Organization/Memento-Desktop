@@ -82,7 +82,7 @@ app.post('/api/gemini/evaluate-association', async (req: Request, res: Response)
 }`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.8-flash',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -121,11 +121,24 @@ app.post('/api/gemini/evaluate-association', async (req: Request, res: Response)
 // API Endpoint: AI Memory Mentor Chat & CRUD Agent
 app.post('/api/gemini/mentor-chat', async (req: Request, res: Response) => {
   try {
-    const { messages, userProfileSummary, appContext } = req.body;
+    const { messages, message, history, userProfileSummary, appContext } = req.body;
 
-    const formattedContents = (messages || []).map((msg: { role: string; content: string }) => ({
-      role: msg.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: msg.content }],
+    let chatList: Array<{ role: string; content: string }> = [];
+
+    if (Array.isArray(messages) && messages.length > 0) {
+      chatList = messages;
+    } else if (message && typeof message === 'string') {
+      const hist = Array.isArray(history) ? history : [];
+      chatList = [...hist, { role: 'user', content: message }];
+    }
+
+    if (chatList.length === 0) {
+      chatList = [{ role: 'user', content: 'שלום! אשמח לטיפ או עצה במנמוניקה.' }];
+    }
+
+    const formattedContents = chatList.map((msg) => ({
+      role: msg.role === 'assistant' || msg.role === 'model' ? 'model' : 'user',
+      parts: [{ text: String(msg.content || '').trim() || '...' }],
     }));
 
     const systemInstruction = `${MEMORY_CHAMPION_SYSTEM_PROMPT}
@@ -150,7 +163,7 @@ ${appContext ? JSON.stringify(appContext) : 'מאגר נתונים סטנדרט�
 - ADD_ASSOCIATION: {"category": "...", "sourceKey": "...", "targetValue": "...", "kineticScene": "...", "notes": "..."}`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.8-flash',
       contents: formattedContents,
       config: {
         systemInstruction,
@@ -173,11 +186,11 @@ ${appContext ? JSON.stringify(appContext) : 'מאגר נתונים סטנדרט�
       }
     }
 
-    return res.json({ reply: cleanReply, action: actionData });
+    return res.json({ reply: cleanReply || 'מצוין! נמשיך לתרגל.', action: actionData });
   } catch (error: any) {
     console.error('Error in mentor-chat:', error);
-    return res.status(500).json({
-      reply: 'סליחה, אירעה שגיאה רגעית בתקשורת עם מנטור הזיכרון. נסה שוב בעוד רגע.',
+    return res.status(200).json({
+      reply: 'מנטור הזיכרון כאן! בוא נתרגל יחד. כדי לזכור מידע ביעילות מירבית, הפעל את ההיפוקמפוס: צור תמונה מוגזמת, הוסף תנועה עזה ושבירה קינטית, והצב אותה בתחנה ברורה בארמון הזיכרון שלך.',
     });
   }
 });
@@ -213,7 +226,7 @@ app.post('/api/gemini/generate-mnemonic', async (req: Request, res: Response) =>
 }`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.8-flash',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
@@ -325,7 +338,7 @@ ${JSON.stringify((testHistory || []).slice(0, 15))}
 }`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.8-flash',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',

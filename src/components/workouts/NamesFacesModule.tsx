@@ -136,38 +136,38 @@ export const NamesFacesModule: React.FC<NamesFacesModuleProps> = ({
   });
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
+    <div className="bg-white border-2 border-slate-200 border-b-6 border-b-slate-300 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6 text-slate-900">
       {/* Header and Sub-Tabs */}
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-4 border-b-2 border-slate-200">
         <div>
           <div className="flex items-center gap-3">
-            <h2 className="text-xl font-bold text-white flex items-center gap-2">
-              <Smile className="w-5 h-5 text-emerald-400" />
+            <h2 className="text-xl font-black text-slate-900 flex items-center gap-2">
+              <Smile className="w-5 h-5 text-[#FF9600]" />
               <span>שמות ופנים (Names & Faces System)</span>
             </h2>
             {onOpenSummary && (
               <button
                 onClick={() => onOpenSummary('names')}
-                className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/30 text-xs font-bold transition-all cursor-pointer"
+                className="btn-duo-neutral inline-flex items-center gap-1.5 px-3 py-1 text-xs cursor-pointer"
                 title="צפה בסיכום הטכניקה ודוגמאות מעשיות"
               >
-                <BookOpen className="w-3.5 h-3.5" />
+                <BookOpen className="w-3.5 h-3.5 text-[#FF9600]" />
                 <span>סיכום ודוגמאות</span>
               </button>
             )}
           </div>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-slate-500 font-medium mt-1">
             הצמדת שמות לעוגן מורפולוגי בפנים בעזרת מילת תחליף והתנגשות קינטית
           </p>
         </div>
 
-        <div className="flex items-center gap-1.5 bg-slate-950 p-1.5 rounded-2xl border border-slate-800 self-stretch md:self-auto justify-center">
+        <div className="flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-2xl border-2 border-slate-200 self-stretch md:self-auto justify-center">
           <button
             onClick={() => setSubView('cards')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
               subView === 'cards'
-                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-[#FF9600] text-white border-b-2 border-[#e07e00] shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <Smile className="w-3.5 h-3.5" />
@@ -175,10 +175,10 @@ export const NamesFacesModule: React.FC<NamesFacesModuleProps> = ({
           </button>
           <button
             onClick={() => setSubView('trainer')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
               subView === 'trainer'
-                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-[#FF9600] text-white border-b-2 border-[#e07e00] shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <Eye className="w-3.5 h-3.5" />
@@ -186,10 +186,10 @@ export const NamesFacesModule: React.FC<NamesFacesModuleProps> = ({
           </button>
           <button
             onClick={() => setSubView('quiz')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
               subView === 'quiz'
-                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-[#FF9600] text-white border-b-2 border-[#e07e00] shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <Sparkles className="w-3.5 h-3.5" />

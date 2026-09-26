@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useMemoryStore } from './hooks/useMemoryStore';
 import { Navbar, TabType } from './components/Navbar';
 import { WorkoutsHub } from './components/WorkoutsHub';
@@ -11,10 +11,49 @@ import { AIMentorChat } from './components/AIMentorChat';
 import { TheorySection } from './components/TheorySection';
 import { TechniqueSummaryModal } from './components/TechniqueSummaryModal';
 import { GlobalAIMentorWidget } from './components/GlobalAIMentorWidget';
+import { GlobalSearchModal } from './components/GlobalSearchModal';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<TabType>('workouts');
+  const [selectedWorkoutSubModule, setSelectedWorkoutSubModule] = useState<
+    'major' | 'pao' | 'names' | 'pegs' | 'academic' | undefined
+  >('major');
   const [activeSummaryTechnique, setActiveSummaryTechnique] = useState<string | null>(null);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+
+  // Global keyboard shortcut for search (Ctrl+K or Cmd+K)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsSearchOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  const handleSearchNavigate = (tab: TabType, subModule?: string, itemId?: string | number) => {
+    setCurrentTab(tab);
+    if (tab === 'workouts' && subModule) {
+      setSelectedWorkoutSubModule(subModule as any);
+    }
+    if (itemId !== undefined) {
+      setTimeout(() => {
+        const el =
+          document.getElementById(`major-item-${itemId}`) ||
+          document.getElementById(`pao-item-${itemId}`) ||
+          document.getElementById(`locus-${itemId}`) ||
+          document.getElementById(`palace-card-${itemId}`) ||
+          document.getElementById(`person-card-${itemId}`) ||
+          document.getElementById(`shape-peg-${itemId}`) ||
+          document.getElementById(`body-peg-${itemId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 250);
+    }
+  };
 
   const {
     currentUser,
@@ -93,7 +132,7 @@ export default function App() {
       : 0;
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-amber-500/30 selection:text-amber-200">
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-amber-500/20 selection:text-amber-900">
       {/* Navigation Header */}
       <Navbar
         currentTab={currentTab}
@@ -106,12 +145,15 @@ export default function App() {
         onLogin={loginWithGoogle}
         onLogout={logout}
         onResetDefaults={resetToDefaults}
+        onOpenSearch={() => setIsSearchOpen(true)}
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12">
         {currentTab === 'workouts' && (
           <WorkoutsHub
+            selectedSubModule={selectedWorkoutSubModule}
+            onSubModuleChange={setSelectedWorkoutSubModule}
             majorDigits={majorDigits}
             majorItems={majorItems}
             paoItems={paoItems}
@@ -278,10 +320,27 @@ export default function App() {
         }}
       />
 
+      {/* Global Universal Search Modal (Ctrl + K) */}
+      <GlobalSearchModal
+        isOpen={isSearchOpen}
+        onClose={() => setIsSearchOpen(false)}
+        majorItems={majorItems}
+        paoItems={paoItems}
+        peopleCards={peopleCards}
+        palaces={palaces}
+        shapePegs={shapePegs}
+        bodyPegs={bodyPegs}
+        academicPoints={academicPoints}
+        onNavigate={handleSearchNavigate}
+        onOpenSummary={(techId) => {
+          setActiveSummaryTechnique(techId);
+        }}
+      />
+
       {/* Footer */}
-      <footer className="border-t border-slate-900 bg-slate-950/80 py-6 text-center text-xs text-slate-500">
+      <footer className="border-t border-slate-200 bg-white/90 py-6 text-center text-xs text-slate-500 shadow-xs">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <p>
+          <p className="font-medium text-slate-600">
             ממנטו (Memento) • מבוסס על מחקרי נובל 2014, פרופ' אלינור מגווייר (UCL) ותקן אלופי העולם בזיכרון (WMC)
           </p>
           <p className="text-slate-400">

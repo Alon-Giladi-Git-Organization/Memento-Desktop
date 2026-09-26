@@ -1,1 +1,190 @@
 @import "tailwindcss";
+
+@layer base {
+  :root {
+    --duo-green: #58CC02;
+    --duo-green-dark: #46a302;
+    --duo-blue: #1CB0F6;
+    --duo-blue-dark: #1899d6;
+    --duo-yellow: #FFC800;
+    --duo-yellow-dark: #e5b400;
+    --duo-red: #FF4B4B;
+    --duo-red-dark: #ea2b2b;
+    --duo-purple: #CE82FF;
+    --duo-purple-dark: #a855f7;
+    --duo-orange: #FF9600;
+    --duo-orange-dark: #e07e00;
+  }
+
+  body {
+    background-color: #f8fafc;
+    color: #0f172a;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+}
+
+/* Duolingo-style Tactile 3D Buttons */
+.btn-duo-green {
+  background-color: #58CC02;
+  color: #ffffff;
+  border-bottom: 4px solid #46a302;
+  border-radius: 1rem;
+  font-weight: 800;
+  transition: all 0.1s ease-in-out;
+  box-shadow: 0 4px 6px -1px rgba(88, 204, 2, 0.25);
+}
+.btn-duo-green:hover {
+  background-color: #5ee002;
+}
+.btn-duo-green:active {
+  transform: translateY(3px);
+  border-bottom-width: 1px;
+  box-shadow: 0 1px 2px rgba(88, 204, 2, 0.2);
+}
+
+.btn-duo-blue {
+  background-color: #1CB0F6;
+  color: #ffffff;
+  border-bottom: 4px solid #1899d6;
+  border-radius: 1rem;
+  font-weight: 800;
+  transition: all 0.1s ease-in-out;
+  box-shadow: 0 4px 6px -1px rgba(28, 176, 246, 0.25);
+}
+.btn-duo-blue:hover {
+  background-color: #2ec5ff;
+}
+.btn-duo-blue:active {
+  transform: translateY(3px);
+  border-bottom-width: 1px;
+  box-shadow: 0 1px 2px rgba(28, 176, 246, 0.2);
+}
+
+.btn-duo-yellow {
+  background-color: #FFC800;
+  color: #0f172a;
+  border-bottom: 4px solid #d9a700;
+  border-radius: 1rem;
+  font-weight: 800;
+  transition: all 0.1s ease-in-out;
+  box-shadow: 0 4px 6px -1px rgba(255, 200, 0, 0.25);
+}
+.btn-duo-yellow:hover {
+  background-color: #ffd226;
+}
+.btn-duo-yellow:active {
+  transform: translateY(3px);
+  border-bottom-width: 1px;
+  box-shadow: 0 1px 2px rgba(255, 200, 0, 0.2);
+}
+
+.btn-duo-red {
+  background-color: #FF4B4B;
+  color: #ffffff;
+  border-bottom: 4px solid #ea2b2b;
+  border-radius: 1rem;
+  font-weight: 800;
+  transition: all 0.1s ease-in-out;
+  box-shadow: 0 4px 6px -1px rgba(255, 75, 75, 0.25);
+}
+.btn-duo-red:hover {
+  background-color: #ff5f5f;
+}
+.btn-duo-red:active {
+  transform: translateY(3px);
+  border-bottom-width: 1px;
+  box-shadow: 0 1px 2px rgba(255, 75, 75, 0.2);
+}
+
+.btn-duo-purple {
+  background-color: #CE82FF;
+  color: #ffffff;
+  border-bottom: 4px solid #a855f7;
+  border-radius: 1rem;
+  font-weight: 800;
+  transition: all 0.1s ease-in-out;
+  box-shadow: 0 4px 6px -1px rgba(206, 130, 255, 0.25);
+}
+.btn-duo-purple:hover {
+  background-color: #d896ff;
+}
+.btn-duo-purple:active {
+  transform: translateY(3px);
+  border-bottom-width: 1px;
+  box-shadow: 0 1px 2px rgba(206, 130, 255, 0.2);
+}
+
+.btn-duo-neutral {
+  background-color: #ffffff;
+  color: #1e293b;
+  border: 2px solid #e2e8f0;
+  border-bottom: 4px solid #cbd5e1;
+  border-radius: 1rem;
+  font-weight: 700;
+  transition: all 0.1s ease-in-out;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+}
+.btn-duo-neutral:hover {
+  background-color: #f8fafc;
+  border-color: #cbd5e1;
+}
+.btn-duo-neutral:active {
+  transform: translateY(2px);
+  border-bottom-width: 2px;
+}
+
+/* Card 3D Effect for Light Theme */
+.card-duo {
+  background-color: #ffffff;
+  border: 2px solid #e2e8f0;
+  border-radius: 1.5rem;
+  box-shadow: 0 4px 0 0 #e2e8f0, 0 4px 12px rgba(0, 0, 0, 0.03);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.card-duo-interactive {
+  background-color: #ffffff;
+  border: 2px solid #e2e8f0;
+  border-bottom: 4px solid #cbd5e1;
+  border-radius: 1.5rem;
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.03);
+}
+.card-duo-interactive:hover {
+  border-color: #58CC02;
+  border-bottom-color: #46a302;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px -2px rgba(88, 204, 2, 0.15);
+}
+
+/* Custom scrollbar for Light Theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Utility Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.18s ease-out forwards;
+}

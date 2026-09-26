@@ -24,6 +24,8 @@ import { ShapesModule } from './workouts/ShapesModule';
 import { AcademicModule } from './workouts/AcademicModule';
 
 export interface WorkoutsHubProps {
+  selectedSubModule?: WorkoutCategory;
+  onSubModuleChange?: (module: WorkoutCategory) => void;
   majorDigits: MajorItem[];
   majorItems: MajorItem[];
   paoItems: PAOItem[];
@@ -85,16 +87,17 @@ export interface WorkoutsHubProps {
   onOpenSummary?: (techniqueId: string) => void;
 }
 
-type WorkoutCategory = 'major' | 'pao' | 'names' | 'pegs' | 'shapes' | 'academic';
+type WorkoutCategory = 'major' | 'pao' | 'names' | 'pegs' | 'academic';
 
 export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
+  selectedSubModule,
+  onSubModuleChange,
   majorDigits,
   majorItems,
   paoItems,
   shapePegs,
   bodyPegs,
   peopleCards,
-  abstractShapes,
   academicPoints,
   onEarnPoints,
   onUnlockBadge,
@@ -121,17 +124,24 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
   onUpdatePersonFaceCard,
   onDeletePersonFaceCard,
   onResetPersonFaceCards,
-  onAddAbstractShape,
-  onUpdateAbstractShape,
-  onDeleteAbstractShape,
-  onResetAbstractShapes,
   onAddAcademicPoint,
   onUpdateAcademicPoint,
   onDeleteAcademicPoint,
   onResetAcademicPoints,
   onOpenSummary,
 }) => {
-  const [activeModule, setActiveModule] = useState<WorkoutCategory>('major');
+  const [activeModule, setActiveModule] = useState<WorkoutCategory>(selectedSubModule || 'major');
+
+  React.useEffect(() => {
+    if (selectedSubModule && selectedSubModule !== activeModule) {
+      setActiveModule(selectedSubModule);
+    }
+  }, [selectedSubModule]);
+
+  const handleSelectModule = (mod: WorkoutCategory) => {
+    setActiveModule(mod);
+    onSubModuleChange?.(mod);
+  };
 
   const modulesList = [
     {
@@ -139,15 +149,19 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
       title: '1. שיטת Major',
       subtitle: 'מספרים ועיצורים',
       icon: Hash,
-      color: 'amber',
+      color: '#58CC02',
+      bgActive: 'bg-[#58CC02]/10 border-[#58CC02] border-b-4 border-b-[#46a302] text-slate-900 shadow-sm',
+      badgeBg: 'bg-[#58CC02]/20 text-[#2e6e01]',
       count: majorItems.length,
     },
     {
       id: 'pao' as const,
-      title: '2. שלשות PAO',
+      title: '2. שיטת PAO',
       subtitle: 'אדם - פעולה - חפץ',
       icon: User,
-      color: 'indigo',
+      color: '#1CB0F6',
+      bgActive: 'bg-[#1CB0F6]/10 border-[#1CB0F6] border-b-4 border-b-[#1899d6] text-slate-900 shadow-sm',
+      badgeBg: 'bg-[#1CB0F6]/20 text-[#0d7bb0]',
       count: paoItems.length,
     },
     {
@@ -155,7 +169,9 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
       title: '3. שמות ופנים',
       subtitle: 'עוגנים מורפולוגיים',
       icon: Smile,
-      color: 'emerald',
+      color: '#FF9600',
+      bgActive: 'bg-[#FF9600]/10 border-[#FF9600] border-b-4 border-b-[#e07e00] text-slate-900 shadow-sm',
+      badgeBg: 'bg-[#FF9600]/20 text-[#b35900]',
       count: peopleCards.length,
     },
     {
@@ -163,23 +179,19 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
       title: '4. מתלי צורה וגוף',
       subtitle: 'Peg Systems',
       icon: Layers,
-      color: 'yellow',
+      color: '#FFC800',
+      bgActive: 'bg-[#FFC800]/15 border-[#FFC800] border-b-4 border-b-[#d9a700] text-slate-900 shadow-sm',
+      badgeBg: 'bg-[#FFC800]/30 text-[#8c6500]',
       count: shapePegs.length + bodyPegs.length,
     },
     {
-      id: 'shapes' as const,
-      title: '5. צורות ומרקמים',
-      subtitle: 'פריידוליה מופשטת',
-      icon: Sparkles,
-      color: 'teal',
-      count: abstractShapes.length,
-    },
-    {
       id: 'academic' as const,
-      title: '6. חומרים אקדמיים',
+      title: '5. חומרים אקדמיים',
       subtitle: 'מושגים ומאמרים',
       icon: BookOpen,
-      color: 'indigo',
+      color: '#FF4B4B',
+      bgActive: 'bg-[#FF4B4B]/10 border-[#FF4B4B] border-b-4 border-b-[#ea2b2b] text-slate-900 shadow-sm',
+      badgeBg: 'bg-[#FF4B4B]/20 text-[#b52424]',
       count: academicPoints.length,
     },
   ];
@@ -187,7 +199,7 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
   return (
     <div className="space-y-8 pb-16">
       {/* Category Tabs Header */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {modulesList.map((m) => {
           const Icon = m.icon;
           const isActive = activeModule === m.id;
@@ -195,34 +207,38 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
           return (
             <button
               key={m.id}
-              onClick={() => setActiveModule(m.id)}
-              className={`p-3.5 rounded-2xl border text-right transition-all flex flex-col justify-between cursor-pointer ${
+              onClick={() => handleSelectModule(m.id)}
+              className={`p-4 rounded-2xl border-2 text-right transition-all flex flex-col justify-between cursor-pointer active:translate-y-0.5 ${
                 isActive
-                  ? 'bg-slate-900 border-amber-500 shadow-lg shadow-amber-500/10'
-                  : 'bg-slate-950/80 border-slate-800/80 hover:border-slate-700 hover:bg-slate-900/40'
+                  ? m.bgActive
+                  : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50 border-b-4 border-b-slate-300 shadow-xs'
               }`}
             >
-              <div className="flex items-center justify-between w-full mb-2">
+              <div className="flex items-center justify-between w-full mb-3">
                 <div
-                  className={`w-8 h-8 rounded-xl flex items-center justify-center ${
-                    isActive ? 'bg-amber-500 text-slate-950 font-bold' : 'bg-slate-900 text-slate-400'
+                  className="w-10 h-10 rounded-xl flex items-center justify-center transition-transform shadow-xs"
+                  style={{
+                    backgroundColor: isActive ? m.color : '#f1f5f9',
+                    color: isActive ? '#ffffff' : '#64748b',
+                  }}
+                >
+                  <Icon className="w-5 h-5 font-black" />
+                </div>
+                <span
+                  className={`text-[11px] px-2.5 py-0.5 rounded-full font-black ${
+                    isActive ? m.badgeBg : 'bg-slate-100 text-slate-600 border border-slate-200'
                   }`}
                 >
-                  <Icon className="w-4 h-4" />
-                </div>
-                <span className="text-[10px] bg-slate-900 text-slate-400 px-2 py-0.5 rounded-md font-mono">
                   {m.count}
                 </span>
               </div>
               <div>
-                <h3
-                  className={`text-xs font-bold transition-colors ${
-                    isActive ? 'text-amber-400' : 'text-white'
-                  }`}
-                >
+                <h3 className="text-sm font-black text-slate-900">
                   {m.title}
                 </h3>
-                <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">{m.subtitle}</p>
+                <p className="text-[11px] text-slate-500 font-medium mt-0.5 line-clamp-1">
+                  {m.subtitle}
+                </p>
               </div>
             </button>
           );
@@ -287,19 +303,6 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
           onUpdateBodyPeg={onUpdateBodyPeg}
           onDeleteBodyPeg={onDeleteBodyPeg}
           onResetBodyPeg={onResetBodyPeg}
-          onOpenSummary={onOpenSummary}
-        />
-      )}
-
-      {activeModule === 'shapes' && (
-        <ShapesModule
-          abstractShapes={abstractShapes}
-          onEarnPoints={onEarnPoints}
-          onUnlockBadge={onUnlockBadge}
-          onAddAbstractShape={onAddAbstractShape}
-          onUpdateAbstractShape={onUpdateAbstractShape}
-          onDeleteAbstractShape={onDeleteAbstractShape}
-          onResetAbstractShapes={onResetAbstractShapes}
           onOpenSummary={onOpenSummary}
         />
       )}

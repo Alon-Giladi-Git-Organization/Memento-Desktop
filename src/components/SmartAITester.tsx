@@ -243,7 +243,7 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
             { id: 'pao', label: 'שלשות PAO (אדם-פעולה-חפץ)', icon: <User className="w-3.5 h-3.5" /> },
             { id: 'names', label: 'שמות ופנים (עוגנים בפנים)', icon: <Sparkles className="w-3.5 h-3.5" /> },
             { id: 'palace', label: 'ארמון הזיכרון (תחנות)', icon: <Compass className="w-3.5 h-3.5" /> },
-            { id: 'random', label: 'מעורב אקראי (אתגר מאסטר)', icon: <Trophy className="w-3.5 h-3.5 text-amber-400" /> },
+            { id: 'random', label: 'מעורב אקראי (אתגר מאסטר)', icon: <Trophy className="w-3.5 h-3.5 text-[#FFC800]" /> },
           ].map((cat) => (
             <button
               key={cat.id}
@@ -251,10 +251,10 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
                 setSelectedCategory(cat.id as TestCategory);
                 generateNewQuestion(cat.id as TestCategory);
               }}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-black transition-all cursor-pointer active:translate-y-0.5 ${
                 selectedCategory === cat.id
-                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 shadow-sm shadow-emerald-500/10'
-                  : 'bg-slate-800/80 text-slate-400 hover:text-slate-200 border border-slate-700/60'
+                  ? 'bg-[#58CC02]/20 text-[#58CC02] border-2 border-[#58CC02] border-b-4 border-b-[#46a302] shadow-sm'
+                  : 'bg-slate-950/80 text-slate-400 hover:text-white border-2 border-slate-800 border-b-4'
               }`}
             >
               {cat.icon}
@@ -266,34 +266,34 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
 
       {/* Main Testing Card */}
       {currentQuestion && (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-xl space-y-6">
+        <div className="bg-slate-900 border-2 border-slate-800 border-b-6 border-b-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
           {/* Question Banner */}
-          <div className="flex flex-col sm:flex-row items-start gap-4 pb-4 border-b border-slate-800">
+          <div className="flex flex-col sm:flex-row items-start gap-4 pb-4 border-b-2 border-slate-800">
             {currentQuestion.avatarUrl ? (
-              <div className="relative w-24 h-24 rounded-2xl overflow-hidden border-2 border-emerald-500/40 shadow-lg shrink-0">
+              <div className="relative w-24 h-24 rounded-2xl overflow-hidden border-2 border-[#58CC02] shadow-md shrink-0">
                 <img
                   src={currentQuestion.avatarUrl}
                   alt="Target"
                   className="w-full h-full object-cover"
                 />
-                <span className="absolute bottom-1 right-1 bg-slate-900/80 text-[10px] text-emerald-300 px-1.5 py-0.5 rounded backdrop-blur-sm">
+                <span className="absolute bottom-1 right-1 bg-slate-900/90 text-[10px] text-[#58CC02] font-black px-1.5 py-0.5 rounded-lg border border-[#58CC02]/40">
                   עוגן מורפולוגי
                 </span>
               </div>
             ) : (
-              <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 shrink-0">
+              <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-[#58CC02]/15 border-2 border-[#58CC02]/40 text-[#58CC02] shrink-0">
                 <HelpCircle className="w-7 h-7" />
               </div>
             )}
 
             <div className="space-y-1.5 flex-1">
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wider">
+                <span className="text-xs font-black text-[#58CC02] uppercase tracking-wider">
                   משימת שליפה פעילה
                 </span>
                 <button
                   onClick={() => generateNewQuestion()}
-                  className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200 p-1 hover:bg-slate-800 rounded transition-colors cursor-pointer"
+                  className="btn-duo-neutral flex items-center gap-1 text-xs px-3 py-1 cursor-pointer"
                   title="החלף שאלה"
                 >
                   <RotateCw className="w-3.5 h-3.5" />
@@ -301,12 +301,12 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
                 </button>
               </div>
 
-              <h2 className="text-lg sm:text-xl font-bold text-white leading-snug">
+              <h2 className="text-lg sm:text-xl font-extrabold text-white leading-snug">
                 {currentQuestion.question}
               </h2>
 
               {currentQuestion.hint && (
-                <p className="text-xs text-slate-400 bg-slate-800/60 inline-block px-2.5 py-1 rounded-md border border-slate-700/50">
+                <p className="text-xs text-slate-300 bg-slate-950/80 inline-block px-3 py-1 rounded-xl border-2 border-slate-800 font-medium">
                   💡 {currentQuestion.hint}
                 </p>
               )}
@@ -316,7 +316,7 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
           {/* User Input Form */}
           <form onSubmit={handleSubmitAnswer} className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-2">
+              <label className="block text-xs font-bold text-slate-300 mb-2">
                 התשובה שלך בשפה חופשית (תאר את הדימוי, התנועה, העוגן, האדם או הפעולה שנזכרת בהם):
               </label>
               <textarea
@@ -333,29 +333,29 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
                 placeholder="למשל: דמיינתי פיל ענק שמתנגש בטירה ומפוצץ אותה עם פטיש כבד..."
                 rows={3}
                 disabled={isLoading || evaluation !== null}
-                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-3 text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all disabled:opacity-60"
+                className="w-full bg-slate-950 border-2 border-slate-800 rounded-2xl px-4 py-3 text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:border-[#58CC02] transition-all disabled:opacity-60"
               />
             </div>
 
             {/* Actions */}
             {!evaluation ? (
               <div className="flex items-center justify-between">
-                <p className="text-[11px] text-slate-500">
+                <p className="text-[11px] text-slate-500 font-medium">
                   * ה-AI בודק התאמה סמנטית ואינו מחייב ניסוח אות-באות.
                 </p>
                 <button
                   type="submit"
                   disabled={!userResponse.trim() || isLoading}
-                  className="flex items-center gap-2 bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-slate-950 font-bold px-6 py-2.5 rounded-xl shadow-lg shadow-emerald-500/20 disabled:opacity-50 disabled:cursor-not-allowed transition-all cursor-pointer"
+                  className="btn-duo-green flex items-center gap-2 px-6 py-2.5 text-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isLoading ? (
                     <>
-                      <Loader2 className="w-4 h-4 animate-spin text-slate-950" />
+                      <Loader2 className="w-4 h-4 animate-spin" />
                       <span>מנתח שליפה נוירו-קוגניטיבית...</span>
                     </>
                   ) : (
                     <>
-                      <Send className="w-4 h-4 text-slate-950" />
+                      <Send className="w-4 h-4" />
                       <span>בדוק את התשובה שלי</span>
                     </>
                   )}
@@ -366,7 +366,7 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
                 <button
                   type="button"
                   onClick={() => generateNewQuestion()}
-                  className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-emerald-400 font-bold px-6 py-2.5 rounded-xl border border-emerald-500/40 transition-all cursor-pointer"
+                  className="btn-duo-blue flex items-center gap-2 px-6 py-2.5 text-xs cursor-pointer"
                 >
                   <span>לשאלה הבאה</span>
                   <ArrowRight className="w-4 h-4 rotate-180" />

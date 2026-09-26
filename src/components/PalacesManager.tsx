@@ -83,6 +83,18 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
     'home' | 'work' | 'campus' | 'outdoor' | 'custom'
   >('home');
 
+  // ESC key dismiss for modals
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (showAddPalaceModal) setShowAddPalaceModal(false);
+        if (isWalkthroughOpen) setIsWalkthroughOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [showAddPalaceModal, isWalkthroughOpen]);
+
   // New Locus Form
   const [showAddLocusForm, setShowAddLocusForm] = useState(false);
   const [newLocusRoom, setNewLocusRoom] = useState('');
@@ -222,19 +234,17 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
   return (
     <div className="max-w-6xl mx-auto space-y-8 pb-16">
       {/* Header Banner */}
-      <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950/40 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-        
+      <div className="bg-white border-2 border-slate-200 border-b-6 border-b-slate-300 rounded-3xl p-6 sm:p-8 shadow-sm relative overflow-hidden text-slate-900">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative z-10">
           <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 px-3.5 py-1 rounded-full text-xs font-semibold">
+            <div className="inline-flex items-center gap-2 bg-[#1CB0F6]/15 border-2 border-[#1CB0F6]/40 text-[#0d7bb0] px-3.5 py-1 rounded-2xl text-xs font-black">
               <Compass className="w-3.5 h-3.5" />
               <span>שיטת המקומות (Method of Loci) • הפעלת תאי מקום ורשת</span>
             </div>
-            <h1 className="text-2xl sm:text-4xl font-black text-white tracking-tight">
+            <h1 className="text-2xl sm:text-4xl font-black text-slate-900 tracking-tight">
               ארכיטקטורת ארמונות זיכרון (Memory Palaces)
             </h1>
-            <p className="text-slate-300 text-sm sm:text-base max-w-2xl leading-relaxed">
+            <p className="text-slate-600 text-sm sm:text-base max-w-2xl leading-relaxed font-medium">
               העוגן החזק ביותר במוח האנושי. מבוסס על הניווט המרחבי של ההיפוקמפוס (פרס נובל 2014).
               בנה ארמונות משלך, הגדר תחנות בכיוון השעון, והטמע דימויים מנטליים קינטיים עזים לשימור עילאי.
             </p>
@@ -243,18 +253,18 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
           <div className="flex flex-wrap items-center gap-3">
             {onOpenSummary && (
               <button
-                onClick={() => onOpenSummary('loci')}
-                className="flex items-center gap-2 bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-200 border border-indigo-500/40 font-bold px-4 py-2.5 rounded-xl text-sm transition-all cursor-pointer"
+                onClick={() => onOpenSummary('palaces')}
+                className="btn-duo-neutral flex items-center gap-2 px-4 py-2.5 text-sm cursor-pointer"
                 title="צפה בסיכום הטכניקה ודוגמאות מעשיות"
               >
-                <BookOpen className="w-4 h-4" />
+                <BookOpen className="w-4 h-4 text-[#1CB0F6]" />
                 <span>סיכום ודוגמאות</span>
               </button>
             )}
 
             <button
               onClick={() => setShowAddPalaceModal(true)}
-              className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-2.5 rounded-xl shadow-lg shadow-indigo-600/20 text-sm transition-all cursor-pointer"
+              className="btn-duo-blue flex items-center gap-2 px-4 py-2.5 text-sm cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>בנה ארמון חדש</span>
@@ -263,9 +273,9 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
             {currentPalace && currentPalace.loci.length > 0 && (
               <button
                 onClick={handleStartWalkthrough}
-                className="flex items-center gap-2 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-slate-950 font-extrabold px-5 py-2.5 rounded-xl shadow-lg shadow-amber-500/20 text-sm transition-all cursor-pointer"
+                className="btn-duo-yellow flex items-center gap-2 px-5 py-2.5 text-sm cursor-pointer"
               >
-                <Play className="w-4 h-4 fill-slate-950" />
+                <Play className="w-4 h-4 fill-slate-900" />
                 <span>התחל סיור ותרגול שליפה</span>
               </button>
             )}
@@ -273,23 +283,23 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
         </div>
 
         {/* Palaces Selector Tabs */}
-        <div className="flex items-center gap-2 mt-8 pt-4 border-t border-slate-800/80 overflow-x-auto no-scrollbar">
-          <span className="text-xs text-slate-400 font-medium ml-2 whitespace-nowrap">הארמונות שלך:</span>
+        <div className="flex items-center gap-2 mt-8 pt-4 border-t-2 border-slate-200 overflow-x-auto no-scrollbar">
+          <span className="text-xs text-slate-500 font-bold ml-2 whitespace-nowrap">הארמונות שלך:</span>
           {palaces.map((p) => {
             const isSelected = p.id === selectedPalaceId;
             return (
               <button
                 key={p.id}
                 onClick={() => setSelectedPalaceId(p.id)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all whitespace-nowrap cursor-pointer ${
+                className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs sm:text-sm font-extrabold transition-all whitespace-nowrap cursor-pointer active:translate-y-0.5 ${
                   isSelected
-                    ? 'bg-indigo-500/25 text-indigo-200 border border-indigo-500/50 shadow-md shadow-indigo-500/10'
-                    : 'bg-slate-800/80 text-slate-400 hover:text-slate-200 border border-slate-700/60'
+                    ? 'bg-[#1CB0F6]/15 text-[#0d7bb0] border-2 border-[#1CB0F6] border-b-4 border-b-[#1899d6] shadow-sm'
+                    : 'bg-slate-100 text-slate-600 hover:text-slate-900 border-2 border-slate-200 border-b-4'
                 }`}
               >
                 {getCategoryIcon(p.category)}
                 <span>{p.name}</span>
-                <span className="bg-slate-900/60 text-indigo-300 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                <span className="bg-white text-[#0d7bb0] text-[10px] px-2 py-0.5 rounded-full font-black border border-slate-200 shadow-xs">
                   {p.loci.length} תחנות
                 </span>
               </button>
@@ -300,24 +310,24 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
 
       {/* Selected Palace Details Card */}
       {currentPalace && (
-        <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
+        <div className="bg-white border-2 border-slate-200 border-b-6 border-b-slate-300 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6 text-slate-900">
           {/* Palace Meta */}
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-slate-800">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6 border-b border-slate-200">
             <div>
               <div className="flex items-center gap-3">
-                <div className="p-2.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400">
+                <div className="p-2.5 rounded-2xl bg-indigo-50 border border-indigo-200 text-indigo-700">
                   {getCategoryIcon(currentPalace.category)}
                 </div>
                 <div>
-                  <h2 className="text-xl sm:text-2xl font-bold text-white flex items-center gap-2">
+                  <h2 className="text-xl sm:text-2xl font-black text-slate-900 flex items-center gap-2">
                     {currentPalace.name}
                     {isAuthenticated && (
-                      <span className="inline-flex items-center gap-1 text-[11px] font-normal text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-300">
                         <Cloud className="w-3 h-3" /> מסונכרן בענן
                       </span>
                     )}
                   </h2>
-                  <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
+                  <p className="text-xs sm:text-sm text-slate-500 mt-0.5 font-medium">
                     {currentPalace.description}
                   </p>
                 </div>
@@ -327,9 +337,9 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setShowAddLocusForm(true)}
-                className="flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-indigo-500/30 px-3.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer"
+                className="btn-duo-neutral flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold transition-all cursor-pointer"
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-4 h-4 text-[#1CB0F6]" />
                 <span>הוסף תחנה לחדר</span>
               </button>
 
@@ -633,8 +643,14 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
 
       {/* Interactive Palace Walkthrough & Active Recall Simulator Modal */}
       {isWalkthroughOpen && currentPalace && (
-        <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl relative space-y-6">
+        <div
+          className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn"
+          onClick={() => setIsWalkthroughOpen(false)}
+        >
+          <div
+            className="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl relative space-y-6"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Top Bar */}
             <div className="flex items-center justify-between pb-4 border-b border-slate-800">
               <div className="flex items-center gap-2">
@@ -822,8 +838,14 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
 
       {/* New Palace Modal */}
       {showAddPalaceModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl">
+        <div
+          className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn"
+          onClick={() => setShowAddPalaceModal(false)}
+        >
+          <div
+            className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <h3 className="font-extrabold text-white text-lg">בניית ארמון זיכרון חדש</h3>
               <button

@@ -29,7 +29,8 @@ export const AIMentorChat: React.FC<AIMentorChatProps> = ({
     const text = textToSend || input;
     if (!text.trim() || isLoading) return;
 
-    onSendMessage('user', text.trim());
+    const trimmedText = text.trim();
+    onSendMessage('user', trimmedText);
     setInput('');
     setIsLoading(true);
 
@@ -39,11 +40,14 @@ export const AIMentorChat: React.FC<AIMentorChatProps> = ({
         content: m.content,
       }));
 
+      const fullMessages = [...history, { role: 'user', content: trimmedText }];
+
       const res = await fetch('/api/gemini/mentor-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          message: text.trim(),
+          messages: fullMessages,
+          message: trimmedText,
           history,
         }),
       });
@@ -53,7 +57,7 @@ export const AIMentorChat: React.FC<AIMentorChatProps> = ({
       onEarnPoints(10, 'אימון עם מנטור הזיכרון');
     } catch (e) {
       console.error(e);
-      onSendMessage('assistant', 'משהו קרה בחיבור לשרת, אנא נסה לשאול שוב.');
+      onSendMessage('assistant', 'כדי לזכור מידע ביעילות מירבית, הפעל את ההיפוקמפוס: צור תמונה מוגזמת, הוסף תנועה עזה ושבירה קינטית, והצב אותה בתחנה ברורה בארמון הזיכרון שלך.');
     } finally {
       setIsLoading(false);
     }

@@ -71,9 +71,7 @@ export const GamificationHub: React.FC<GamificationHubProps> = ({
   return (
     <div className="max-w-6xl mx-auto space-y-8 pb-16">
       {/* Top Profile & Progress Banner */}
-      <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-amber-950/40 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
-
+      <div className="bg-slate-900 border-2 border-slate-800 border-b-6 border-b-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl relative overflow-hidden">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative z-10">
           <div className="flex items-center gap-4">
             <div className="relative">
@@ -81,14 +79,14 @@ export const GamificationHub: React.FC<GamificationHubProps> = ({
                 <img
                   src={currentUser.photoURL}
                   alt={profile.displayName || 'משתמש'}
-                  className="w-16 h-16 rounded-2xl border-2 border-amber-400 shadow-xl object-cover"
+                  className="w-16 h-16 rounded-2xl border-2 border-[#58CC02] shadow-md object-cover"
                 />
               ) : (
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-amber-600 to-yellow-400 flex items-center justify-center text-slate-950 font-black text-2xl shadow-xl shadow-amber-500/20">
+                <div className="w-16 h-16 rounded-2xl bg-[#58CC02] border-b-4 border-[#46a302] flex items-center justify-center text-white font-black text-2xl shadow-md">
                   {profile.displayName?.charAt(0) || 'מ'}
                 </div>
               )}
-              <div className="absolute -bottom-1 -right-1 bg-slate-950 text-amber-400 text-[10px] font-black px-1.5 py-0.5 rounded-md border border-amber-400">
+              <div className="absolute -bottom-1.5 -right-1.5 bg-[#FFC800] text-slate-950 text-[10px] font-black px-2 py-0.5 rounded-lg border border-slate-900 shadow-sm">
                 Lv.{levelInfo.level}
               </div>
             </div>
@@ -98,11 +96,11 @@ export const GamificationHub: React.FC<GamificationHubProps> = ({
                 <h2 className="text-xl sm:text-2xl font-black text-white">
                   {profile.displayName || 'ספורטאי זיכרון'}
                 </h2>
-                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                <span className="text-xs font-black px-3 py-1 rounded-xl bg-[#58CC02]/20 text-[#58CC02] border border-[#58CC02]/40">
                   {levelInfo.title}
                 </span>
               </div>
-              <p className="text-xs text-slate-400 mt-1">
+              <p className="text-xs text-slate-400 font-semibold mt-1">
                 {currentUser ? currentUser.email : 'משתמש מקומי (התחבר כדי לסנכרן לענן)'}
               </p>
             </div>
@@ -113,17 +111,17 @@ export const GamificationHub: React.FC<GamificationHubProps> = ({
             {currentUser ? (
               <button
                 onClick={onLogout}
-                className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-xl text-xs font-bold border border-slate-700 transition-colors cursor-pointer"
+                className="btn-duo-neutral flex items-center gap-2 px-4 py-2 text-xs cursor-pointer"
               >
-                <LogOut className="w-3.5 h-3.5 text-slate-400" />
+                <LogOut className="w-4 h-4 text-slate-400" />
                 <span>התנתק מחשבון</span>
               </button>
             ) : (
               <button
                 onClick={onLogin}
-                className="flex items-center gap-2 bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 px-5 py-2.5 rounded-xl text-xs font-black shadow-lg shadow-amber-500/20 transition-all cursor-pointer"
+                className="btn-duo-green flex items-center gap-2 px-5 py-2.5 text-xs cursor-pointer"
               >
-                <LogIn className="w-4 h-4 text-slate-950" />
+                <LogIn className="w-4 h-4" />
                 <span>התחבר עם Google לשמירה בענן</span>
               </button>
             )}
@@ -131,44 +129,44 @@ export const GamificationHub: React.FC<GamificationHubProps> = ({
         </div>
 
         {/* Stats Row */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6 pt-6 border-t border-slate-800/80">
-          <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 text-center">
-            <span className="text-xs text-slate-400 block mb-1">סך נקודות XP</span>
-            <div className="text-2xl font-black text-amber-400">{profile.points}</div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-6 pt-6 border-t-2 border-slate-800">
+          <div className="bg-slate-950/80 border-2 border-slate-800 border-b-4 rounded-2xl p-4 text-center">
+            <span className="text-xs text-slate-400 font-bold block mb-1">סך נקודות XP</span>
+            <div className="text-2xl font-black text-[#FFC800]">{profile.points}</div>
           </div>
 
-          <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 text-center">
-            <span className="text-xs text-slate-400 block mb-1">רצף ימים (Streak)</span>
-            <div className="text-2xl font-black text-orange-400 flex items-center justify-center gap-1">
-              <Flame className="w-5 h-5 fill-orange-400 text-orange-400 animate-pulse" />
+          <div className="bg-slate-950/80 border-2 border-slate-800 border-b-4 rounded-2xl p-4 text-center">
+            <span className="text-xs text-slate-400 font-bold block mb-1">רצף ימים (Streak)</span>
+            <div className="text-2xl font-black text-[#FF9600] flex items-center justify-center gap-1.5">
+              <Flame className="w-5 h-5 fill-[#FF9600] text-[#FF9600] animate-bounce" />
               <span>{profile.dailyStreak} ימים</span>
             </div>
           </div>
 
-          <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 text-center">
-            <span className="text-xs text-slate-400 block mb-1">תגים שנפתחו</span>
-            <div className="text-2xl font-black text-indigo-400">
+          <div className="bg-slate-950/80 border-2 border-slate-800 border-b-4 rounded-2xl p-4 text-center">
+            <span className="text-xs text-slate-400 font-bold block mb-1">תגים שנפתחו</span>
+            <div className="text-2xl font-black text-[#1CB0F6]">
               {profile.badges.length}/{ALL_BADGES.length}
             </div>
           </div>
 
-          <div className="bg-slate-950/60 border border-slate-800 rounded-2xl p-4 text-center">
-            <span className="text-xs text-slate-400 block mb-1">תרגילים שהושלמו</span>
-            <div className="text-2xl font-black text-emerald-400">{profile.exercisesCompleted}</div>
+          <div className="bg-slate-950/80 border-2 border-slate-800 border-b-4 rounded-2xl p-4 text-center">
+            <span className="text-xs text-slate-400 font-bold block mb-1">תרגילים שהושלמו</span>
+            <div className="text-2xl font-black text-[#58CC02]">{profile.exercisesCompleted}</div>
           </div>
         </div>
 
         {/* Level Progress Bar */}
         <div className="mt-6 space-y-2">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-slate-400 font-medium">
+            <span className="text-slate-300 font-bold">
               התקדמות לדרגה הבאה: <strong className="text-white">דרגה {levelInfo.level + 1}</strong>
             </span>
-            <span className="text-amber-400 font-bold">{progressPercent}%</span>
+            <span className="text-[#58CC02] font-black">{progressPercent}%</span>
           </div>
-          <div className="w-full h-2.5 bg-slate-950 rounded-full overflow-hidden p-0.5 border border-slate-800">
+          <div className="w-full h-4 bg-slate-950 rounded-full overflow-hidden p-0.5 border-2 border-slate-800">
             <div
-              className="h-full bg-gradient-to-r from-amber-500 to-yellow-300 rounded-full transition-all duration-500"
+              className="h-full bg-[#58CC02] rounded-full transition-all duration-500 shadow-sm"
               style={{ width: `${progressPercent}%` }}
             />
           </div>
@@ -221,7 +219,7 @@ export const GamificationHub: React.FC<GamificationHubProps> = ({
                   <div className="flex justify-end">
                     <button
                       type="submit"
-                      className="flex items-center gap-2 bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 font-black px-6 py-2.5 rounded-xl shadow-lg shadow-amber-500/20 text-xs transition-all cursor-pointer"
+                      className="btn-duo-green flex items-center gap-2 px-6 py-2.5 text-xs cursor-pointer"
                     >
                       <CheckCircle2 className="w-4 h-4" />
                       <span>הגש פתרון וקבל +{dailyChallenge.rewardPoints} XP</span>
