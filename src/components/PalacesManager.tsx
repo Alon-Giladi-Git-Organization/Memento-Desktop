@@ -4,6 +4,7 @@ import {
   Plus,
   Play,
   CheckCircle,
+  XCircle,
   Eye,
   EyeOff,
   ChevronRight,
@@ -630,6 +631,35 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
                               )}
                             </>
                           )}
+
+                          {/* Ready for Practice Toggle */}
+                          <div className="pt-2 mt-2 border-t border-slate-800/80 flex items-center justify-between">
+                            <label className="inline-flex items-center gap-1.5 cursor-pointer select-none py-1 px-2 rounded-xl bg-slate-950/80 hover:bg-slate-800 border border-slate-700/80 transition-all">
+                              <input
+                                type="checkbox"
+                                checked={locus.is_ready_for_practice !== false}
+                                onChange={() =>
+                                  onUpdateLocus(currentPalace.id, locus.id, {
+                                    is_ready_for_practice: locus.is_ready_for_practice === false ? true : false,
+                                  })
+                                }
+                                className="w-3.5 h-3.5 rounded text-indigo-500 focus:ring-indigo-500 cursor-pointer accent-indigo-500"
+                              />
+                              <span
+                                className={`text-[11px] font-bold ${
+                                  locus.is_ready_for_practice !== false ? 'text-indigo-300' : 'text-slate-500'
+                                }`}
+                              >
+                                מוכן לתרגול
+                              </span>
+                            </label>
+                            {locus.is_ready_for_practice !== false && (
+                              <span className="text-[10px] bg-indigo-500/20 text-indigo-300 font-bold px-2 py-0.5 rounded-full border border-indigo-500/30 flex items-center gap-1">
+                                <Check className="w-3 h-3 text-indigo-400" />
+                                <span>מוכן</span>
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -708,53 +738,179 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
 
                       {/* Recall Card or Input */}
                       {isRecallHidden ? (
-                        <div className="mt-6 pt-6 border-t border-slate-800 space-y-4">
-                          <p className="text-xs text-slate-400">
+                        <div className="mt-6 pt-6 border-t border-slate-800 space-y-4 text-right">
+                          <p className="text-xs text-slate-300 font-medium">
                             עצור כאן. עצום עיניים ודמיין את התחנה הפיזית. מה הצבת כאן?
                           </p>
                           <input
                             type="text"
                             value={userRecallGuess}
                             onChange={(e) => setUserRecallGuess(e.target.value)}
-                            placeholder="הקלד כאן את המידע או הסצנה שאתה נזכר בה..."
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                setIsRecallHidden(false);
+                              }
+                            }}
+                            placeholder="הקלד את התשובה/הסצנה ולחץ Enter לבדיקה..."
                             className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-amber-400"
                           />
-                          <button
-                            onClick={() => setIsRecallHidden(false)}
-                            className="inline-flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-5 py-2 rounded-xl text-xs shadow-md shadow-amber-500/20 cursor-pointer"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            <span>חשוף ובדוק את התחנה</span>
-                          </button>
+                          <div className="flex justify-center pt-1">
+                            <button
+                              onClick={() => setIsRecallHidden(false)}
+                              className="inline-flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-6 py-2.5 rounded-xl text-xs shadow-md shadow-amber-500/20 cursor-pointer"
+                            >
+                              <Eye className="w-3.5 h-3.5" />
+                              <span>חשוף ובדוק תשובה (Enter ↵)</span>
+                            </button>
+                          </div>
                         </div>
                       ) : (
-                        <div className="mt-6 pt-6 border-t border-slate-800 space-y-4 animate-fadeIn">
-                          <div className="bg-emerald-950/40 border border-emerald-500/40 rounded-xl p-4 text-right">
-                            <span className="text-[11px] font-bold text-emerald-400 block mb-1">
-                              המידע המאוחסן:
-                            </span>
-                            <div className="text-base font-extrabold text-white">
-                              {locus.storedContent || 'תחנה ללא תוכן מוגדר עדיין'}
-                            </div>
-                          </div>
+                        <div className="mt-6 pt-6 border-t border-slate-800 space-y-4 animate-fadeIn text-right">
+                          {/* Answer Evaluation Feedback Badge */}
+                          {(() => {
+                            const guess = userRecallGuess.trim().toLowerCase();
+                            const targetContent = (locus.storedContent || '').trim().toLowerCase();
+                            const targetScene = (locus.mnemonicScene || '').trim().toLowerCase();
+                            const targetTitle = (locus.title || '').trim().toLowerCase();
 
-                          {locus.mnemonicScene && (
-                            <div className="bg-amber-950/30 border border-amber-500/40 rounded-xl p-3.5 text-right text-xs text-amber-200">
-                              <span className="font-bold text-amber-400">⚡ הסצנה הקינטית: </span>
-                              {locus.mnemonicScene}
-                            </div>
-                          )}
+                            const isCorrectMatch =
+                              guess.length > 0 &&
+                              (targetContent.includes(guess) ||
+                                guess.includes(targetContent) ||
+                                targetScene.includes(guess) ||
+                                targetTitle.includes(guess));
 
-                          {userRecallGuess && (
-                            <div className="text-right text-xs text-slate-400 bg-slate-900 p-2.5 rounded-lg border border-slate-800">
-                              <span className="font-medium text-slate-500">מה שכתבת: </span>
-                              "{userRecallGuess}"
+                            return (
+                              <div
+                                className={`p-3.5 rounded-2xl border-2 flex items-center justify-between gap-3 text-xs font-bold ${
+                                  isCorrectMatch
+                                    ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-300'
+                                    : 'bg-rose-950/60 border-rose-500/60 text-rose-300'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  {isCorrectMatch ? (
+                                    <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
+                                  ) : (
+                                    <XCircle className="w-5 h-5 text-rose-400 shrink-0" />
+                                  )}
+                                  <div>
+                                    <div className="text-sm font-black">
+                                      {isCorrectMatch ? '✓ תשובה נכונה!' : '✗ טעות - נדרש חיזוק'}
+                                    </div>
+                                    <p className="text-[11px] font-normal opacity-90">
+                                      {isCorrectMatch
+                                        ? 'זיהוי מוצלח! התשובה שלך תואמת את המידע המאוחסן בתחנה זו.'
+                                        : 'התשובה לא היתה מדויקת לחלוטין. קרא את המידע והסצנה השמורים למטה.'}
+                                    </p>
+                                  </div>
+                                </div>
+                                <span className="font-mono text-[10px] bg-slate-900/80 px-2 py-1 rounded border border-slate-700">
+                                  Enter ↵ לתחנה הבאה
+                                </span>
+                              </div>
+                            );
+                          })()}
+
+                          {/* Inline Edit or View Stored Content */}
+                          {editingLocusId === locus.id ? (
+                            <div className="bg-slate-900 border border-indigo-500/40 rounded-xl p-4 space-y-3">
+                              <div className="text-xs font-bold text-indigo-300">עריכה ישירה של תחנה זאת בארמון:</div>
+                              <div>
+                                <label className="text-[10px] text-slate-400 font-bold block mb-1">תוכן מאוחסן:</label>
+                                <input
+                                  type="text"
+                                  value={editContent}
+                                  onChange={(e) => setEditContent(e.target.value)}
+                                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white"
+                                />
+                              </div>
+                              <div>
+                                <div className="flex items-center justify-between mb-1">
+                                  <label className="text-[10px] text-indigo-400 font-bold">סצנה קינטית:</label>
+                                  <AIFieldGeneratorButton
+                                    promptType="palace_scene"
+                                    inputContext={editContent || locus.title}
+                                    extraContext={`תחנה: ${locus.title}, חדר: ${locus.roomName}`}
+                                    onGenerated={(val) => setEditScene(val)}
+                                    label="סצנה עם AI"
+                                    compact
+                                  />
+                                </div>
+                                <textarea
+                                  rows={2}
+                                  value={editScene}
+                                  onChange={(e) => setEditScene(e.target.value)}
+                                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white"
+                                />
+                              </div>
+                              <div className="flex justify-end gap-2 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingLocusId(null)}
+                                  className="text-xs text-slate-400 px-3 py-1"
+                                >
+                                  ביטול
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    onUpdateLocus(currentPalace.id, locus.id, {
+                                      storedContent: editContent,
+                                      mnemonicScene: editScene,
+                                    });
+                                    setEditingLocusId(null);
+                                  }}
+                                  className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-1 rounded-lg cursor-pointer"
+                                >
+                                  שמור שינויים
+                                </button>
+                              </div>
                             </div>
+                          ) : (
+                            <>
+                              <div className="bg-emerald-950/40 border border-emerald-500/40 rounded-xl p-4 text-right flex items-start justify-between gap-3">
+                                <div>
+                                  <span className="text-[11px] font-bold text-emerald-400 block mb-1">
+                                    המידע המאוחסן בתחנה:
+                                  </span>
+                                  <div className="text-base font-extrabold text-white">
+                                    {locus.storedContent || 'תחנה ללא תוכן מוגדר עדיין'}
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => {
+                                    setEditingLocusId(locus.id);
+                                    setEditContent(locus.storedContent || '');
+                                    setEditScene(locus.mnemonicScene || '');
+                                  }}
+                                  className="text-xs text-indigo-300 hover:text-white bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/40 px-2.5 py-1 rounded-lg font-bold inline-flex items-center gap-1 cursor-pointer shrink-0"
+                                >
+                                  <Edit2 className="w-3 h-3" />
+                                  <span>ערוך תוכן</span>
+                                </button>
+                              </div>
+
+                              {locus.mnemonicScene && (
+                                <div className="bg-amber-950/30 border border-amber-500/40 rounded-xl p-3.5 text-right text-xs text-amber-200">
+                                  <span className="font-bold text-amber-400">⚡ הסצנה הקינטית: </span>
+                                  {locus.mnemonicScene}
+                                </div>
+                              )}
+
+                              {userRecallGuess && (
+                                <div className="text-right text-xs text-slate-400 bg-slate-900 p-2.5 rounded-lg border border-slate-800">
+                                  <span className="font-medium text-slate-500">מה שכתבת: </span>
+                                  "{userRecallGuess}"
+                                </div>
+                              )}
+                            </>
                           )}
 
                           <div className="pt-2">
-                            <p className="text-xs text-slate-300 font-semibold mb-2">
-                              האם הצלחת לשלוף את התחנה במדויק?
+                            <p className="text-xs text-slate-300 font-semibold mb-2 text-center">
+                              האם הצלחת לשלוף את התחנה במדויק? (לחץ Enter למעבר לתחנה הבאה)
                             </p>
                             <div className="flex items-center justify-center gap-3">
                               <button
@@ -768,7 +924,7 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
                                 className="px-6 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-600/30 cursor-pointer inline-flex items-center gap-1.5"
                               >
                                 <Check className="w-3.5 h-3.5" />
-                                <span>כן! נשלף בהצלחה (+10 XP)</span>
+                                <span>כן! נשלף בהצלחה (+10 XP) ↵</span>
                               </button>
                             </div>
                           </div>

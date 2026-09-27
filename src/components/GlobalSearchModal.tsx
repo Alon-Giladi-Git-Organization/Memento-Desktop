@@ -15,10 +15,11 @@ import {
   MajorItem,
   PAOItem,
   PersonFaceCard,
-  Palace,
-  ShapePeg,
-  BodyPeg,
-  AcademicKnowledgePoint,
+  MemoryPalace,
+  PalaceLocus,
+  PegShapeItem,
+  BodyPegItem,
+  AcademicKeyPoint,
 } from '../types/memory';
 import { TECHNIQUE_SUMMARIES } from '../data/techniqueSummaries';
 import { TabType } from './Navbar';
@@ -29,10 +30,10 @@ interface GlobalSearchModalProps {
   majorItems: MajorItem[];
   paoItems: PAOItem[];
   peopleCards: PersonFaceCard[];
-  palaces: Palace[];
-  shapePegs: ShapePeg[];
-  bodyPegs: BodyPeg[];
-  academicPoints?: AcademicKnowledgePoint[];
+  palaces: MemoryPalace[];
+  shapePegs: PegShapeItem[];
+  bodyPegs: BodyPegItem[];
+  academicPoints?: AcademicKeyPoint[];
   onNavigate: (tab: TabType, subModule?: string, itemId?: string | number) => void;
   onOpenSummary: (techniqueId: string) => void;
 }
@@ -173,7 +174,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
       }
 
       // Check loci inside palace
-      palace.loci.forEach((locus) => {
+      palace.loci.forEach((locus: PalaceLocus) => {
         const lTitle = locus.title.toLowerCase();
         const lRoom = (locus.roomName || '').toLowerCase();
         const lScene = (locus.mnemonicScene || '').toLowerCase();
@@ -232,8 +233,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     Object.values(TECHNIQUE_SUMMARIES).forEach((tech) => {
       const tTitle = tech.title.toLowerCase();
       const tSubtitle = tech.subtitle.toLowerCase();
-      const tDesc = tech.scientificBackground.toLowerCase();
-      const tRules = tech.mentalRules.join(' ').toLowerCase();
+      const tDesc = (tech.scientificBasis || '').toLowerCase();
+      const tRules = (tech.coreRules || []).join(' ').toLowerCase();
 
       if (tTitle.includes(q) || tSubtitle.includes(q) || tDesc.includes(q) || tRules.includes(q)) {
         results.push({
@@ -255,10 +256,15 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
     // 6. Pegs
     shapePegs.forEach((peg) => {
+      const sName = (peg.userShapeName || peg.shapeName).toLowerCase();
+      const sObj = (peg.userObject || peg.defaultObject).toLowerCase();
+      const sMetaphor = (peg.visualMetaphor || '').toLowerCase();
+
       if (
         peg.number.toString().includes(q) ||
-        peg.shape.toLowerCase().includes(q) ||
-        peg.visualScene.toLowerCase().includes(q)
+        sName.includes(q) ||
+        sObj.includes(q) ||
+        sMetaphor.includes(q)
       ) {
         results.push({
           id: `shape-peg-${peg.number}`,
@@ -266,8 +272,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
           categoryLabel: 'יתדות צורה',
           categoryColor: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
           categoryIcon: <Dumbbell className="w-3.5 h-3.5 text-amber-400" />,
-          title: `🔢 יתד #${peg.number} - ${peg.shape}`,
-          subtitle: peg.visualScene,
+          title: `🔢 יתד #${peg.number} - ${peg.userShapeName || peg.shapeName}`,
+          subtitle: `${peg.userObject || peg.defaultObject} | ${peg.visualMetaphor}`,
           tag: 'יתדות',
           action: () => {
             onNavigate('workouts', 'pegs', peg.number);
@@ -278,22 +284,27 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     });
 
     bodyPegs.forEach((peg) => {
+      const bPart = (peg.userBodyPart || peg.bodyPartHebrew).toLowerCase();
+      const bObj = (peg.userObject || peg.defaultObject).toLowerCase();
+      const bTip = (peg.userKineticTip || peg.kineticTip).toLowerCase();
+
       if (
-        peg.number.toString().includes(q) ||
-        peg.bodyPart.toLowerCase().includes(q) ||
-        peg.kineticCue.toLowerCase().includes(q)
+        peg.index.toString().includes(q) ||
+        bPart.includes(q) ||
+        bObj.includes(q) ||
+        bTip.includes(q)
       ) {
         results.push({
-          id: `body-peg-${peg.number}`,
+          id: `body-peg-${peg.index}`,
           category: 'pegs',
           categoryLabel: 'יתדות גוף',
           categoryColor: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
           categoryIcon: <Dumbbell className="w-3.5 h-3.5 text-emerald-400" />,
-          title: `🦶 יתד גוף #${peg.number} - ${peg.bodyPart}`,
-          subtitle: peg.kineticCue,
+          title: `🦶 יתד גוף #${peg.index} - ${peg.userBodyPart || peg.bodyPartHebrew}`,
+          subtitle: `${peg.userObject || peg.defaultObject} | ${peg.userKineticTip || peg.kineticTip}`,
           tag: 'יתדות',
           action: () => {
-            onNavigate('workouts', 'pegs', peg.number);
+            onNavigate('workouts', 'pegs', peg.index);
             onClose();
           },
         });

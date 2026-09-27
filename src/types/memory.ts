@@ -8,6 +8,7 @@ export interface MajorItem {
   imageHint: string; // e.g. "בקבוק רעל זוהר"
   userImageHint?: string; // personal kinetic hint override
   customNotes?: string;
+  is_ready_for_practice?: boolean; // Flag: ready for testing & practice
 }
 
 export interface PAOItem {
@@ -19,6 +20,7 @@ export interface PAOItem {
   userPerson?: string;
   userAction?: string;
   userObject?: string;
+  is_ready_for_practice?: boolean; // Flag: ready for testing & practice
 }
 
 export interface PegShapeItem {
@@ -30,6 +32,7 @@ export interface PegShapeItem {
   userObject?: string;
   kineticTip: string;
   userKineticTip?: string;
+  is_ready_for_practice?: boolean;
 }
 
 export interface BodyPegItem {
@@ -40,6 +43,7 @@ export interface BodyPegItem {
   userObject?: string;
   kineticTip: string;
   userKineticTip?: string;
+  is_ready_for_practice?: boolean;
 }
 
 export interface PalaceLocus {
@@ -51,6 +55,7 @@ export interface PalaceLocus {
   storedContent?: string;
   mnemonicScene?: string;
   lastReviewed?: number;
+  is_ready_for_practice?: boolean; // Flag: locus is memorized and ready for walkthrough recall
 }
 
 export interface MemoryPalace {
@@ -61,6 +66,7 @@ export interface MemoryPalace {
   category: 'home' | 'work' | 'campus' | 'outdoor' | 'custom';
   loci: PalaceLocus[];
   isPermanent: boolean;
+  is_ready_for_practice?: boolean;
 }
 
 export interface PersonFaceCard {
@@ -73,6 +79,7 @@ export interface PersonFaceCard {
   substituteWord: string; // e.g. "רונית -> מונית", "חיים -> לחם חי"
   mnemonicScene: string; // e.g. "מונית צהובה דוהרת ומתנגשת ישירות באף הנשרי שלה"
   userCustomScene?: string;
+  is_ready_for_practice?: boolean; // Flag: ready for face recognition quiz
 }
 
 export interface AbstractShapeCard {
@@ -83,6 +90,7 @@ export interface AbstractShapeCard {
   textureDigit: number; // 1-5
   pareidoliaHint: string; // "אוזן שפן הפוכה", "מקור נשר", "מפתח שבור"
   mnemonicCode: string;
+  is_ready_for_practice?: boolean;
 }
 
 export interface PersonalContactAssociation {
@@ -95,6 +103,7 @@ export interface PersonalContactAssociation {
   lastTestedAt?: number;
   successCount: number;
   failCount: number;
+  is_ready_for_practice?: boolean;
 }
 
 export interface AcademicKeyPoint {
@@ -106,6 +115,7 @@ export interface AcademicKeyPoint {
   visualAnchor: string;
   palaceLocusInfo: string;
   mnemonicScene: string;
+  is_ready_for_practice?: boolean;
 }
 
 export interface TestResult {

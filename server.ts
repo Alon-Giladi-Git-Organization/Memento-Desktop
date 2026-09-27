@@ -25,33 +25,36 @@ const ai = new GoogleGenAI({
 });
 
 // System prompt grounded in world memory championships and Hebrew Major mapping
-const MEMORY_CHAMPION_SYSTEM_PROMPT = `אתה "מנטור הזיכרון האלופי של ממנטו (Memento)" - מאמן קוגניטיבי בכיר לאמנות הזיכרון והמנמוניקה התחרותית, המבוסס על מתודולוגיות של אלופי עולם בזיכרון (World Memory Championships).
+const MEMORY_CHAMPION_SYSTEM_PROMPT = `הגדרה קבועה למנטור ה-AI:
 
-עקרונות המנמוניקה של ממנטו בעברית:
-1. נוירו-קוגניציה: רתימת ההיפוקמפוס (תאי מקום ותאי סריג), ניווט מרחבי (Retrosplenial Cortex & Precuneus), קידוד כפול (Dual-Coding), ודחיסת זיכרון עבודה (Chunking).
-2. חוקי הדימוי המושלם:
-   - הגזמה גרוטסקית ופרופורציות ענק.
-   - קינטיות מתפרצת (שבירה, פיצוץ, התנגשות פיזית עזה - לעולם לא דימוי סטטי קפוא!).
-   - סינסתזיה רב-חושית: ריחות עזים, צלילים צורמים, טקסטורות מחוספסות, טמפרטורה.
-3. שיטת ה-Major המותאמת בעברית:
-   - 0 = ס, ז, שׂ (ספרת יסוד: 0 סוס)
-   - 1 = ל (ספרת יסוד: 1 לב)
-   - 2 = ב, פ (ספרת יסוד: 2 פה)
-   - 3 = כ, ק, ג (ספרת יסוד: 3 כוס)
-   - 4 = ט, ת, ד (ספרת יסוד: 4 תה)
-   - 5 = ח (ספרת יסוד: 5 חי)
-   - 6 = שׁ, צ (ספרת יסוד: 6 אש)
-   - 7 = ר (ספרת יסוד: 7 אור)
-   - 8 = מ (ספרת יסוד: 8 ים)
-   - 9 = פ, ב רפה (ספרת יסוד: 9 אף)
-   - חוק אותיות הקישור ("אני עונה" - א, ה, ו, י, נ, ע): אותיות שקופות ללא ערך מספרי, המשמשות חופשי כדבק לבניית מילים קצרות.
-4. שיטת השלשות PAO (Person-Action-Object):
-   - ראשי התיבות של הדמות לכל מספר (00-99) נקבעים לפי שתי ספרות ה-Major (למשל 14 = ל.ד. ליאונרדו דיקפריו, 23 = ב.ג. ביל גייטס, 83 = מ.ג. מייקל ג'ורדן).
-   - דחיסת 6 ספרות לתמונה יחידה: דמות (זוג 1) מבצעת פעולה (זוג 2) על חפץ (זוג 3).
-5. ארמונות זיכרון (Method of Loci): מסלול בכיוון השעון, 5 תחנות לחדר, ריווח, ומניעת Ghosting.
-6. שמות ופנים: עוגן מורפולוגי בפנים -> מילת תחליף פונטית -> התנגשות קינטית בעוגן.
+Role & Objective:
+אתה מומחה לפיתוח מיומנויות זיכרון (Mnemonics). תפקידך להמיר עובדות או משפטים מורכבים לתמונות אסוציאטיביות ויזואליות, פשוטות, חדות וקלות לדמיון מיידי.
 
-אתה בעל גישה מלאה לבסיס הנתונים של המשתמש. אם המשתמש מבקש ממך לקרוא, להוסיף, לערוך או למחוק נתונים (ארמון, תחנה, שלשת PAO, מילת Major, כרטיס אישי), בצע זאת בשמחה וצרף את הפעולה המתאימה.`;
+Critical Rules:
+1. תמונה אחת מאוחדת (Single Vivid Scene): אל תמציא עלילה מורכבת או סיפור בהמשכים. מקם את כל האלמנטים המרכזיים בתוך פריים ויזואלי אחד, סטטי או עם אינטראקציה פשוטה אחת בלבד.
+2. תמצות ולא תרגום מילה-במילה: אסור לייצר אסוציאציה נפרדת לכל מילה. התמקד רק ב-2 עד 3 עוגני התוכן המרכזיים של המשפט (הרעיון המרכזי).
+3. פשטות וחדות: הימנע מעומס תיאורים מיותר (טמפרטורת פלזמה, ריחות חרוכים מורכבים, פיצוצים מרובים). הדימוי צריך להיתפס בעיני רוחו של המשתמש תוך 2 שניות.
+4. אורך מרבי: עד 2–3 משפטים קצרים (מקסימום 40 מילים).
+
+Example:
+קלט: "התכנית 'קו כחול דק' הייתה הבסיס לתכניות משטרה בשנות ה-80"
+אסוציאציה נכונה: "קו כחול דק וזוהר מפריד בין שני חלקי המיטה; על צד אחד יושב שוטר, ועל הצד השני יושבת רקדנית דיסקו משנות ה-80 עם אפרו וגלגליות."
+הסבר קצר: הקו הכחול הדק מקשר לשוטר (תוכניות משטרה) ולרקדנית (שנות ה-80).
+
+Output Format (בכל יצירת דימוי או אסוציאציה):
+• אסוציאציה ויזואלית: [התיאור הפשוט והתמציתי]
+• עוגני זיכרון: [פירוט קצרצר של הקשרים: מה מייצג מה]
+
+עקרונות נוספים של אקדמיית ממנטו בעברית:
+1. שיטת ה-Major המותאמת בעברית:
+   - 0 = ס, ז, שׂ (סוס) | 1 = ל (לב) | 2 = ב, פ (פה) | 3 = כ, ק, ג (כוס) | 4 = ט, ת, ד (תה) | 5 = ח (חי) | 6 = שׁ, צ (אש) | 7 = ר (אור) | 8 = מ (ים) | 9 = פ, ב רפה (אף)
+   - אותיות הקישור ("אני עונה" - א, ה, ו, י, נ, ע): שקופות ללא ערך מספרי, משמשות כדבק חופשי.
+2. שיטת השלשות PAO (Person-Action-Object):
+   - ראשי התיבות של הדמות לכל מספר (00-99) נקבעים לפי שתי ספרות ה-Major (למשל 14 = ל.ד., 05 = ס.ח., 23 = ב.ג., 83 = מ.ג.).
+3. ארמונות זיכרון (Method of Loci): מסלול תחנות מרחבי ברור בהיפוקמפוס.
+4. שמות ופנים: עוגן מורפולוגי בפנים -> מילת תחליף פונטית -> אינטראקציה פשוטה.
+
+אתה בעל גישה מלאה לבסיס הנתונים של המשתמש. אם המשתמש מבקש ממך לקרוא, להוסיף, לערוך או למחוק נתונים (ארמון, תחנה, שלשת PAO, מילת Major, כרטיס אישי), בצע זאת וצרף את בלוק הפעולה המתאים.`;
 
 // API Endpoint: Smart Free-Text Association Evaluation
 app.post('/api/gemini/evaluate-association', async (req: Request, res: Response) => {
@@ -195,34 +198,82 @@ ${appContext ? JSON.stringify(appContext) : 'מאגר נתונים סטנדרט�
   }
 });
 
+// Helper to compute Hebrew Major & PAO constraints for prompts
+function getHebrewMajorConstraints(inputStr: string, extraStr: string): string {
+  const majorDigitsMap: Record<number, { letter: string; all: string }> = {
+    0: { letter: 'ס', all: 'ס, ז, שׂ' },
+    1: { letter: 'ל', all: 'ל' },
+    2: { letter: 'ב', all: 'ב, פ' },
+    3: { letter: 'כ', all: 'כ, ק, ג' },
+    4: { letter: 'ד', all: 'ט, ת, ד' },
+    5: { letter: 'ח', all: 'ח' },
+    6: { letter: 'ש', all: 'שׁ, צ' },
+    7: { letter: 'ר', all: 'ר' },
+    8: { letter: 'מ', all: 'מ' },
+    9: { letter: 'פ', all: 'פ, ב' },
+  };
+
+  // Check if there is a number in input or extra
+  const match = (inputStr + ' ' + extraStr).match(/\b(\d{1,2})\b/);
+  if (!match) return '';
+
+  const num = parseInt(match[1], 10);
+  if (isNaN(num) || num < 0 || num > 99) return '';
+
+  const tens = Math.floor(num / 10) % 10;
+  const units = num % 10;
+
+  const tensDef = majorDigitsMap[tens];
+  const unitsDef = majorDigitsMap[units];
+
+  if (num < 10) {
+    return `\nהנחיה חמורה למספר ${num}: ספרת היסוד ${num} מייצגת את האות "${tensDef.letter}" (עיצורים אפשריים: ${tensDef.all}). המילה או האסוציאציה חייבת להתבסס אך ורק על עיצורים אלו!`;
+  }
+
+  return `\nחוק חמור ובלתי מתפשר למספר ${num}:
+- לפי שיטת Major בעברית: ספרת העשרות ${tens} = ${tensDef.letter} (${tensDef.all}), ספרת היחידות ${units} = ${unitsDef.letter} (${unitsDef.all}).
+- עבור דמות PAO למספר ${num}: ראשי התיבות של השם הפרטי ושם המשפחה של הדמות חייבים להיות בולטים ולהתחיל בדיוק באותיות: ${tensDef.letter}.${unitsDef.letter}. (לדוגמה עבור 05 -> ראש תיבות ס.ח. כגון סרגיו חמו / סלבדור חביב; עבור 14 -> ל.ד. כגון לארי דייוויד).
+- עבור מילת Major למספר ${num}: העיצורים הראשונים במילה חייבים להיות בשילוב ${tensDef.letter} + ${unitsDef.letter}. אותיות הקישור (א, ה, ו, י, נ, ע) מותרות לשימוש כדבק חופשי.`;
+}
+
 // API Endpoint: Mnemonic Generation Tool (PAO, Major, Names, Academic concepts)
 app.post('/api/gemini/generate-mnemonic', async (req: Request, res: Response) => {
   const { type, input, extra } = req.body;
   const inputStr = String(input || '').trim();
   const extraStr = String(extra || '').trim();
 
+  const majorConstraints = getHebrewMajorConstraints(inputStr, extraStr);
+
   try {
-    const prompt = `כאלוף זיכרון עולמי, צור הצעה מנמונית מקצועית, סופר-יעילה, מוקצנת וקינטית עבור הנתון הבא בעברית.
+    const prompt = `אתה מומחה לפיתוח מיומנויות זיכרון (Mnemonics). תפקידך להמיר עובדות, מושגים, שמות או מספרים לתמונות אסוציאטיביות ויזואליות, פשוטות, חדות וקלות לדמיון מיידי.
+
 סוג המשימה: ${type} (דוגמאות: major_word, major_hint, pao_person, pao_action, pao_object, pao_element, name_face_anchor, name_face_substitute, name_face_scene, academic_concept, palace_scene, shape_association, body_peg, custom_association)
 קלט המשתמש: "${inputStr}"
-מידע נוסף / הקשר: "${extraStr}"
+מידע נוסף / כל שדות הטקסט הקיימים שנשלחו מהמשתמש: "${extraStr}"
+${majorConstraints}
 
-חוקי המנמוניקה האלופית:
-- תמונה ביזארית ולא הגיונית, גרוטסקית ובלתי נשכחת
-- אלמנט קינטי מתפרץ (התנגשות, שבירה, ניפוץ, שפיכה חמה, פיצוץ צבעים - לעולם לא דימוי סטטי קפוא!)
-- הפעלת חושים (ריח עז, קול צורם, טמפרטורה קיצונית)
-- שיוך פונטי ומדויק בעברית לפי השיטה
+חוקי ברזל קריטיים:
+1. תמונה אחת מאוחדת (Single Vivid Scene): אל תמציא עלילה מורכבת או סיפור בהמשכים. מקם את כל האלמנטים המרכזיים בתוך פריים ויזואלי אחד, סטטי או עם אינטראקציה פשוטה אחת בלבד.
+2. תמצות ולא תרגום מילה-במילה: אסור לייצר אסוציאציה נפרדת לכל מילה. התמקד רק ב-2 עד 3 עוגני התוכן המרכזיים של המשפט (הרעיון המרכזי).
+3. פשטות וחדות: הימנע מעומס תיאורים מיותר (טמפרטורת פלזמה, ריחות חרוכים מורכבים, פיצוצים מרובים). הדימוי צריך להיתפס בעיני רוחו של המשתמש תוך 2 שניות.
+4. אורך מרבי: עד 2–3 משפטים קצרים (מקסימום 40 מילים).
+5. גיוון וייחודיות: הקפד ליצור אסוציאציה יצירתית וחד פעמית המתחשבת בכל שדות הטקסט שנמסרו בקלט ("${extraStr}").
+
+דוגמה:
+קלט: "התכנית 'קו כחול דק' הייתה הבסיס לתכניות משטרה בשנות ה-80"
+אסוציאציה נכונה: "קו כחול דק וזוהר מפריד בין שני חלקי המיטה; על צד אחד יושב שוטר, ועל הצד השני יושבת רקדנית דיסקו משנות ה-80 עם אפרו וגלגליות."
+עוגני זיכרון: הקו הכחול הדק מקשר לשוטר (תוכניות משטרה) ולרקדנית (שנות ה-80).
 
 השב אך ורק בפורמט JSON:
 {
   "headline": string, // כותרת קצרה וקולעת
-  "visualScene": string, // תיאור מפורט ומלא של הסצנה המנטלית המוקצנת
-  "explanation": string, // כיצד הסצנה מקודדת את המידע צעד-אחר-צעד
-  "palacePlacementTip": string, // כיצד להציב את הסצנה בתחנה בארמון הזיכרון
+  "visualScene": string, // אסוציאציה ויזואלית: תיאור פשוט, חד וממוקד בפריים יחיד (עד 40 מילים)
+  "explanation": string, // עוגני זיכרון: פירוט קצרצר של הקשרים (מה מייצג מה)
+  "palacePlacementTip": string, // הנחיה קצרה להצבת התמונה בתחנה בארמון
   "hebrewKeyword": string, // מילת מפתח, מילת Major או ראשי תיבות בעברית
-  "paoPerson": string, // שם דמות (אם רלוונטי ל-PAO)
-  "paoAction": string, // פעולה קינטית (אם רלוונטי ל-PAO)
-  "paoObject": string // חפץ פסיבי (אם רלוונטי ל-PAO)
+  "paoPerson": string, // שם דמות (תואם בדיוק לראשי התיבות אם רלוונטי ל-PAO)
+  "paoAction": string, // פעולה פשוטה וברורה (אם רלוונטי ל-PAO)
+  "paoObject": string // חפץ פסיבי ברור (אם רלוונטי ל-PAO)
 }`;
 
     const response = await ai.models.generateContent({
@@ -261,34 +312,33 @@ app.post('/api/gemini/generate-mnemonic', async (req: Request, res: Response) =>
   } catch (error: any) {
     console.warn('Fallback mnemonic generator triggered:', error?.message || error);
 
-    // Dynamic Hebrew kinetic fallback based on input and type
+    // Clean, sharp, simple single-scene fallback based on the 4 Critical Rules
     let headline = `${inputStr || 'אסוציאציה'}`;
     let hebrewKeyword = inputStr;
     let paoPerson = `דמות מוכרת עבור ${inputStr}`;
-    let paoAction = `מנפץ בעוצמה ומרסק`;
-    let paoObject = `חפץ ענק וזוהר`;
-    let visualScene = `התנגשות קינטית עזה שבה ${inputStr} מתנפץ לרסיסי זהב לוהטים בריח עשן חריף.`;
-    let explanation = `שימוש בקידוד כפול והיפוקמפוס לקיבוע הזיכרון בעזרת הגזמה וריח עז.`;
-    let palacePlacementTip = `הנח את הסצנה צמוד למשקוף או לדלת כדי שהיא תבלוט מיד עם הכניסה לחדר.`;
+    let paoAction = `מחזיק בידו`;
+    let paoObject = `חפץ בולט`;
+    let visualScene = `במרכז הפריים מונח ${inputStr} זוהר וגדול, ולידו עוגן תוכן בולט בצבע ניגודי חד.`;
+    let explanation = `הפריים המרכזי מקשר ישירות בין ${inputStr} לבין עוגן הזיכרון בתמונה אחת חדה.`;
+    let palacePlacementTip = `הצב את התמונה היחידה על גבי התחנה באופן יציב וברור לעין.`;
 
     if (type?.includes('major') || !isNaN(Number(inputStr))) {
-      const num = parseInt(inputStr, 10);
       headline = `מילת Major למספר ${inputStr}`;
       hebrewKeyword = `קוד ${inputStr}`;
-      visualScene = `המספר ${inputStr} מותך בלהבה סגולה ענקית ומשמיע צליל פיצוץ צורם עם עשן ריחני.`;
+      visualScene = `המספר ${inputStr} זוהר באור לבן חם, ומעליו מונחת מילה מנמונית ברורה בעיצורים תואמים.`;
     } else if (type?.includes('pao')) {
-      paoPerson = `אלוף מוכר (${inputStr})`;
-      paoAction = `רוכב בדהרה ומנפץ`;
-      paoObject = `פסל קריסטל ענקי`;
+      paoPerson = `דמות מוכרת (${inputStr})`;
+      paoAction = `מניח בזהירות`;
+      paoObject = `קובייה זוהרת`;
       headline = `שלשת PAO למספר ${inputStr}`;
-      visualScene = `${paoPerson} שובר בבעיטה חדה ${paoObject} שנשבר לאלפי רסיסים.`;
+      visualScene = `${paoPerson} עומד במרכז החדר ומחזיק ${paoObject} גדול וברור.`;
     } else if (type?.includes('name') || type?.includes('face')) {
       headline = `עוגן וסצנה לשם ${inputStr}`;
       hebrewKeyword = inputStr;
-      visualScene = `על גבי ${extraStr || 'העוגן הבולט בפנים'}, מונח ${inputStr} ענקי שמשפריץ צבע זוהר ונוצץ.`;
+      visualScene = `על גבי ${extraStr || 'העוגן הבולט בפנים'}, מונח סמל ברור של ${inputStr} בצורה פשוטה וחדה.`;
     } else if (type?.includes('palace')) {
       headline = `סצנה לתחנה בארמון`;
-      visualScene = `בתוך התחנה (${inputStr}), מתפרץ הר געש מיניאטורי של ${extraStr || 'מידע'} שממלא את כל החדר באור בוהק וריח מנטה.`;
+      visualScene = `בתוך התחנה (${inputStr}), מוצב בבירור ${extraStr || 'עוגן התוכן'} בפריים סטטי וחד שקל לדמיין מיד.`;
     }
 
     return res.json({

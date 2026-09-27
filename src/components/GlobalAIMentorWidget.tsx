@@ -217,30 +217,30 @@ export const GlobalAIMentorWidget: React.FC<GlobalAIMentorWidgetProps> = ({
             onClick={() => setIsOpen(false)}
           />
           <div
-            className="fixed bottom-20 left-4 sm:left-6 z-50 w-[calc(100vw-32px)] sm:w-[460px] h-[580px] max-h-[85vh] bg-slate-900 border border-amber-500/30 rounded-3xl shadow-2xl flex flex-col overflow-hidden backdrop-blur-xl animate-fadeIn"
+            className="fixed bottom-20 left-4 sm:left-6 z-50 w-[calc(100vw-32px)] sm:w-[460px] h-[580px] max-h-[85vh] bg-white border-2 border-slate-200 border-b-6 border-b-slate-300 rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-fadeIn text-slate-900"
             onClick={(e) => e.stopPropagation()}
           >
           {/* Drawer Header */}
-          <div className="p-4 bg-gradient-to-r from-slate-950 via-slate-900 to-amber-950/40 border-b border-slate-800 flex items-center justify-between">
+          <div className="p-4 bg-slate-50 border-b-2 border-slate-200 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-500 to-yellow-400 flex items-center justify-center text-slate-950 font-black shadow-md shadow-amber-500/20">
-                <Bot className="w-5 h-5" />
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-400 to-amber-500 flex items-center justify-center text-slate-950 font-black shadow-sm">
+                <Bot className="w-5 h-5 text-slate-900" />
               </div>
               <div>
-                <h3 className="text-sm font-black text-white flex items-center gap-1.5">
+                <h3 className="text-sm font-black text-slate-900 flex items-center gap-1.5">
                   <span>מנטור הזיכרון של ממנטו</span>
-                  <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 rounded font-bold">
+                  <span className="text-[10px] bg-amber-100 text-amber-800 border border-amber-300 px-1.5 py-0.5 rounded-full font-bold">
                     AI Active
                   </span>
                 </h3>
-                <p className="text-[11px] text-slate-400 font-medium">
+                <p className="text-[11px] text-slate-500 font-medium">
                   תשובות תאורטיות, סצנות קינטיות ועריכת מסד נתונים (CRUD)
                 </p>
               </div>
             </div>
             <button
               onClick={() => setIsOpen(false)}
-              className="p-1.5 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-colors cursor-pointer"
+              className="p-1.5 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-200 transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -248,14 +248,14 @@ export const GlobalAIMentorWidget: React.FC<GlobalAIMentorWidgetProps> = ({
 
           {/* Action Notification Banner */}
           {lastActionExecuted && (
-            <div className="bg-emerald-950/60 border-b border-emerald-500/30 px-4 py-2 flex items-center justify-between text-xs text-emerald-300 font-semibold animate-fadeIn">
+            <div className="bg-emerald-50 border-b border-emerald-200 px-4 py-2 flex items-center justify-between text-xs text-emerald-800 font-semibold animate-fadeIn">
               <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
                 <span>{lastActionExecuted}</span>
               </div>
               <button
                 onClick={() => setLastActionExecuted(null)}
-                className="text-emerald-400 hover:text-white text-xs mr-2"
+                className="text-emerald-700 hover:text-emerald-950 text-xs mr-2 font-bold"
               >
                 ✕
               </button>
@@ -263,7 +263,7 @@ export const GlobalAIMentorWidget: React.FC<GlobalAIMentorWidgetProps> = ({
           )}
 
           {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-slate-950/50">
+          <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-slate-50/70">
             {messages.map((m) => {
               const isUser = m.role === 'user';
               return (
@@ -272,19 +272,19 @@ export const GlobalAIMentorWidget: React.FC<GlobalAIMentorWidgetProps> = ({
                   className={`flex gap-2.5 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}
                 >
                   <div
-                    className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-xs ${
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-xs shadow-2xs ${
                       isUser
-                        ? 'bg-indigo-600 text-white'
-                        : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                        ? 'bg-amber-500 text-white font-bold'
+                        : 'bg-indigo-100 text-indigo-700 border border-indigo-200'
                     }`}
                   >
                     {isUser ? <User className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
                   </div>
                   <div
-                    className={`max-w-[82%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed ${
+                    className={`max-w-[82%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed shadow-2xs ${
                       isUser
-                        ? 'bg-indigo-600 text-white rounded-tl-none font-medium'
-                        : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-tr-none whitespace-pre-wrap'
+                        ? 'bg-amber-500 text-white rounded-tl-none font-medium'
+                        : 'bg-white border-2 border-slate-200 text-slate-900 rounded-tr-none whitespace-pre-wrap'
                     }`}
                   >
                     {m.content}
@@ -293,8 +293,8 @@ export const GlobalAIMentorWidget: React.FC<GlobalAIMentorWidgetProps> = ({
               );
             })}
             {isLoading && (
-              <div className="flex gap-2.5 items-center text-xs text-amber-400 font-medium">
-                <Loader2 className="w-4 h-4 animate-spin text-amber-400" />
+              <div className="flex gap-2.5 items-center text-xs text-amber-700 font-medium">
+                <Loader2 className="w-4 h-4 animate-spin text-amber-600" />
                 <span>המנטור מנסח תשובה ומנתח את בסיס הנתונים...</span>
               </div>
             )}
@@ -302,13 +302,13 @@ export const GlobalAIMentorWidget: React.FC<GlobalAIMentorWidgetProps> = ({
           </div>
 
           {/* Quick Prompts */}
-          <div className="px-3 py-2 bg-slate-950 border-t border-slate-800/80 flex gap-1.5 overflow-x-auto no-scrollbar">
+          <div className="px-3 py-2 bg-white border-t border-slate-200 flex gap-1.5 overflow-x-auto no-scrollbar">
             {quickPrompts.map((q, idx) => (
               <button
                 key={idx}
                 onClick={() => handleSend(q)}
                 disabled={isLoading}
-                className="text-[10px] whitespace-nowrap bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800 hover:border-amber-500/30 px-2.5 py-1 rounded-lg transition-all cursor-pointer shrink-0"
+                className="text-[10px] whitespace-nowrap bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 hover:border-amber-400 px-2.5 py-1 rounded-lg transition-all cursor-pointer shrink-0 font-medium shadow-2xs"
               >
                 {q}
               </button>
@@ -321,19 +321,19 @@ export const GlobalAIMentorWidget: React.FC<GlobalAIMentorWidgetProps> = ({
               e.preventDefault();
               handleSend();
             }}
-            className="p-3 bg-slate-900 border-t border-slate-800 flex items-center gap-2"
+            className="p-3 bg-white border-t-2 border-slate-200 flex items-center gap-2"
           >
             <input
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="שאל כל שאלה או בקש להוסיף/לערוך ארמון, שלשה או מילה..."
-              className="flex-1 bg-slate-950 border border-slate-700 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-500 focus:outline-none transition-colors"
+              className="flex-1 bg-slate-50 border-2 border-slate-200 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none transition-colors"
             />
             <button
               type="submit"
               disabled={!input.trim() || isLoading}
-              className="p-2 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-40 text-slate-950 font-bold transition-all cursor-pointer"
+              className="p-2 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-slate-950 font-bold transition-all cursor-pointer shadow-xs active:scale-95"
             >
               <Send className="w-4 h-4 rotate-180" />
             </button>

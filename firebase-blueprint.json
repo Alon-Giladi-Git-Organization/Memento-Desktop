@@ -45,7 +45,8 @@
               "title": { "type": "string" },
               "positionDescription": { "type": "string" },
               "storedContent": { "type": "string" },
-              "mnemonicScene": { "type": "string" }
+              "mnemonicScene": { "type": "string" },
+              "is_ready_for_practice": { "type": "boolean" }
             }
           }
         },
@@ -64,6 +65,7 @@
         "storedNumberOrFact": { "type": "string" },
         "encodedMnemonic": { "type": "string" },
         "methodUsed": { "type": "string" },
+        "is_ready_for_practice": { "type": "boolean" },
         "successCount": { "type": "number" },
         "failCount": { "type": "number" },
         "createdAt": { "type": "number" }

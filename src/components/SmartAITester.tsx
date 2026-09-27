@@ -77,14 +77,34 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
     setUserResponse('');
 
     let effectiveCat = cat;
+    // Filter ready items for strict whitelist practice
+    const readyMajor = majorItems.filter((i) => Boolean(i.is_ready_for_practice));
+    const readyPAO = paoItems.filter((i) => Boolean(i.is_ready_for_practice));
+    const readyPeople = peopleCards.filter((p) => Boolean(p.is_ready_for_practice));
+    const readyPalaceLoci = palaces.flatMap((p) =>
+      p.loci
+        .filter((l) => l.is_ready_for_practice !== false)
+        .map((l) => ({ ...l, palaceName: p.name }))
+    );
+
     if (cat === 'random') {
-      const pool: TestCategory[] = ['personal', 'major', 'pao', 'names', 'palace'];
-      effectiveCat = pool[Math.floor(Math.random() * pool.length)];
+      const pool: TestCategory[] = [];
+      if (personalAssociations.length > 0) pool.push('personal');
+      if (readyMajor.length > 0) pool.push('major');
+      if (readyPAO.length > 0) pool.push('pao');
+      if (readyPeople.length > 0) pool.push('names');
+      if (readyPalaceLoci.length > 0) pool.push('palace');
+
+      if (pool.length === 0) {
+        // Default to major if nothing ready
+        effectiveCat = 'major';
+      } else {
+        effectiveCat = pool[Math.floor(Math.random() * pool.length)];
+      }
     }
 
     if (effectiveCat === 'personal') {
       if (personalAssociations.length === 0) {
-        // Fallback to major
         generateNewQuestion('major');
         return;
       }
@@ -98,7 +118,8 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
         context: `זיכרון אישי עבור ${item.targetSubject}`,
       });
     } else if (effectiveCat === 'major') {
-      const item = majorItems[Math.floor(Math.random() * majorItems.length)];
+      const pool = readyMajor.length > 0 ? readyMajor : majorItems;
+      const item = pool[Math.floor(Math.random() * pool.length)];
       const targetWord = item.userWord || item.defaultWord;
       setCurrentQuestion({
         id: `major-${item.number}`,
@@ -109,7 +130,8 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
         context: `ספרת Major ${item.numberStr}`,
       });
     } else if (effectiveCat === 'pao') {
-      const item = paoItems[Math.floor(Math.random() * paoItems.length)];
+      const pool = readyPAO.length > 0 ? readyPAO : paoItems;
+      const item = pool[Math.floor(Math.random() * pool.length)];
       const person = item.userPerson || item.person;
       const action = item.userAction || item.action;
       const obj = item.userObject || item.object;
@@ -122,7 +144,8 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
         context: `PAO למספר ${item.numberStr}`,
       });
     } else if (effectiveCat === 'names') {
-      const person = peopleCards[Math.floor(Math.random() * peopleCards.length)];
+      const pool = readyPeople.length > 0 ? readyPeople : peopleCards;
+      const person = pool[Math.floor(Math.random() * pool.length)];
       setCurrentQuestion({
         id: person.id,
         category: 'names',
@@ -133,16 +156,15 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
         context: `שם ופנים: ${person.name}`,
       });
     } else if (effectiveCat === 'palace') {
-      const palace = palaces[0] || palaces[Math.floor(Math.random() * palaces.length)];
-      if (!palace || palace.loci.length === 0) {
+      if (readyPalaceLoci.length === 0) {
         generateNewQuestion('major');
         return;
       }
-      const locus = palace.loci[Math.floor(Math.random() * palace.loci.length)];
+      const locus = readyPalaceLoci[Math.floor(Math.random() * readyPalaceLoci.length)];
       setCurrentQuestion({
         id: locus.id,
         category: 'palace',
-        question: `בארמון "${palace.name}", מה נמצא בתחנה מספר ${locus.stepNumber} (${locus.roomName} - ${locus.title})?`,
+        question: `בארמון "${locus.palaceName}", מה נמצא בתחנה מספר ${locus.stepNumber} (${locus.roomName} - ${locus.title})?`,
         hint: `מיקום: ${locus.positionDescription}`,
         targetAssociation: locus.storedContent || locus.title,
         context: `ארמון זיכרון תחנה ${locus.stepNumber}`,
@@ -206,20 +228,19 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-12">
+    <div className="max-w-4xl mx-auto space-y-6 pb-12 text-slate-900">
       {/* Hero Header */}
-      <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-emerald-950/40 border border-slate-800 rounded-2xl p-6 shadow-xl relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-72 h-72 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+      <div className="bg-white border-2 border-slate-200 border-b-6 border-b-slate-300 rounded-3xl p-6 sm:p-8 shadow-sm relative overflow-hidden">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">
           <div>
-            <div className="inline-flex items-center gap-2 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-3 py-1 rounded-full text-xs font-semibold mb-2">
+            <div className="inline-flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-800 px-3.5 py-1 rounded-full text-xs font-bold mb-2">
               <Sparkles className="w-3.5 h-3.5" />
               <span>שליפה פעילה (Active Recall) ובדיקת שפה חופשית</span>
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-white">
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900">
               בוחן האסוציאציות החכם ב-AI
             </h1>
-            <p className="text-slate-300 text-sm mt-1 max-w-xl">
+            <p className="text-slate-600 text-sm mt-1 max-w-xl font-medium">
               בדוק את זיכרון האסוציאציות האישיות שלך. ענה בשפה חופשית וטבעית — מנוע ה-AI ינתח את המהות
               הסמנטית והדימוי הוויזואלי ויקבע בדיוק אם השליפה המוטורית הצליחה!
             </p>
@@ -227,16 +248,16 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
 
           <button
             onClick={() => setShowHistory(!showHistory)}
-            className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 text-slate-300 px-4 py-2 rounded-xl text-sm font-medium border border-slate-700/60 transition-colors self-start md:self-auto cursor-pointer"
+            className="flex items-center gap-2 bg-slate-50 hover:bg-slate-100 text-slate-700 px-4 py-2 rounded-xl text-sm font-bold border-2 border-slate-200 transition-colors self-start md:self-auto cursor-pointer shadow-2xs"
           >
-            <History className="w-4 h-4 text-emerald-400" />
+            <History className="w-4 h-4 text-emerald-600" />
             <span>היסטוריית מבחנים ({testResults.length})</span>
           </button>
         </div>
 
         {/* Category Filter Pills */}
-        <div className="flex flex-wrap gap-2 mt-6 pt-4 border-t border-slate-800/80">
-          <span className="text-xs text-slate-400 self-center font-medium ml-1">בחר תחום לבחינה:</span>
+        <div className="flex flex-wrap gap-2 mt-6 pt-4 border-t border-slate-200">
+          <span className="text-xs text-slate-500 self-center font-bold ml-1">בחר תחום לבחינה:</span>
           {[
             { id: 'personal', label: 'האסוציאציות האישיות שלי', icon: <Phone className="w-3.5 h-3.5" /> },
             { id: 'major', label: 'שיטת Major (ספרות 00-99)', icon: <Hash className="w-3.5 h-3.5" /> },
@@ -253,8 +274,8 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
               }}
               className={`flex items-center gap-1.5 px-3.5 py-2 rounded-2xl text-xs font-black transition-all cursor-pointer active:translate-y-0.5 ${
                 selectedCategory === cat.id
-                  ? 'bg-[#58CC02]/20 text-[#58CC02] border-2 border-[#58CC02] border-b-4 border-b-[#46a302] shadow-sm'
-                  : 'bg-slate-950/80 text-slate-400 hover:text-white border-2 border-slate-800 border-b-4'
+                  ? 'bg-[#58CC02]/20 text-[#46a302] border-2 border-[#58CC02] border-b-4 border-b-[#46a302] shadow-sm'
+                  : 'bg-slate-50 text-slate-600 hover:text-slate-900 border-2 border-slate-200 border-b-4 hover:bg-white'
               }`}
             >
               {cat.icon}
@@ -266,9 +287,9 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
 
       {/* Main Testing Card */}
       {currentQuestion && (
-        <div className="bg-slate-900 border-2 border-slate-800 border-b-6 border-b-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
+        <div className="bg-white border-2 border-slate-200 border-b-6 border-b-slate-300 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
           {/* Question Banner */}
-          <div className="flex flex-col sm:flex-row items-start gap-4 pb-4 border-b-2 border-slate-800">
+          <div className="flex flex-col sm:flex-row items-start gap-4 pb-4 border-b-2 border-slate-200">
             {currentQuestion.avatarUrl ? (
               <div className="relative w-24 h-24 rounded-2xl overflow-hidden border-2 border-[#58CC02] shadow-md shrink-0">
                 <img
@@ -276,12 +297,12 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
                   alt="Target"
                   className="w-full h-full object-cover"
                 />
-                <span className="absolute bottom-1 right-1 bg-slate-900/90 text-[10px] text-[#58CC02] font-black px-1.5 py-0.5 rounded-lg border border-[#58CC02]/40">
+                <span className="absolute bottom-1 right-1 bg-white/95 text-[10px] text-[#46a302] font-black px-1.5 py-0.5 rounded-lg border border-[#58CC02]/40 shadow-xs">
                   עוגן מורפולוגי
                 </span>
               </div>
             ) : (
-              <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-[#58CC02]/15 border-2 border-[#58CC02]/40 text-[#58CC02] shrink-0">
+              <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-emerald-50 border-2 border-emerald-200 text-emerald-600 shrink-0">
                 <HelpCircle className="w-7 h-7" />
               </div>
             )}
@@ -301,12 +322,12 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
                 </button>
               </div>
 
-              <h2 className="text-lg sm:text-xl font-extrabold text-white leading-snug">
+              <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 leading-snug">
                 {currentQuestion.question}
               </h2>
 
               {currentQuestion.hint && (
-                <p className="text-xs text-slate-300 bg-slate-950/80 inline-block px-3 py-1 rounded-xl border-2 border-slate-800 font-medium">
+                <p className="text-xs text-slate-600 bg-slate-50 inline-block px-3 py-1 rounded-xl border border-slate-200 font-medium">
                   💡 {currentQuestion.hint}
                 </p>
               )}
@@ -316,7 +337,7 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
           {/* User Input Form */}
           <form onSubmit={handleSubmitAnswer} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold text-slate-300 mb-2">
+              <label className="block text-xs font-bold text-slate-700 mb-2">
                 התשובה שלך בשפה חופשית (תאר את הדימוי, התנועה, העוגן, האדם או הפעולה שנזכרת בהם):
               </label>
               <textarea
@@ -333,7 +354,7 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
                 placeholder="למשל: דמיינתי פיל ענק שמתנגש בטירה ומפוצץ אותה עם פטיש כבד..."
                 rows={3}
                 disabled={isLoading || evaluation !== null}
-                className="w-full bg-slate-950 border-2 border-slate-800 rounded-2xl px-4 py-3 text-slate-100 placeholder-slate-500 text-sm focus:outline-none focus:border-[#58CC02] transition-all disabled:opacity-60"
+                className="w-full bg-slate-50 border-2 border-slate-200 rounded-2xl px-4 py-3 text-slate-900 placeholder-slate-400 text-sm focus:outline-none focus:border-[#58CC02] transition-all disabled:opacity-60"
               />
             </div>
 
@@ -346,7 +367,7 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
                 <button
                   type="submit"
                   disabled={!userResponse.trim() || isLoading}
-                  className="btn-duo-green flex items-center gap-2 px-6 py-2.5 text-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="btn-duo-green flex items-center gap-2 px-6 py-2.5 text-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-xs"
                 >
                   {isLoading ? (
                     <>
@@ -366,7 +387,7 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
                 <button
                   type="button"
                   onClick={() => generateNewQuestion()}
-                  className="btn-duo-blue flex items-center gap-2 px-6 py-2.5 text-xs cursor-pointer"
+                  className="btn-duo-blue flex items-center gap-2 px-6 py-2.5 text-xs cursor-pointer shadow-xs"
                 >
                   <span>לשאלה הבאה</span>
                   <ArrowRight className="w-4 h-4 rotate-180" />
@@ -378,49 +399,49 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
           {/* AI Evaluation Box */}
           {evaluation && (
             <div
-              className={`rounded-2xl p-5 border transition-all animate-fadeIn ${
+              className={`rounded-2xl p-5 border-2 transition-all animate-fadeIn ${
                 evaluation.isCorrect
-                  ? 'bg-emerald-950/30 border-emerald-500/40'
-                  : 'bg-amber-950/20 border-amber-500/40'
+                  ? 'bg-emerald-50 border-emerald-300'
+                  : 'bg-amber-50 border-amber-300'
               }`}
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-3">
                   {evaluation.isCorrect ? (
-                    <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/50 flex items-center justify-center text-emerald-400">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-100 border border-emerald-300 flex items-center justify-center text-emerald-700">
                       <CheckCircle2 className="w-6 h-6" />
                     </div>
                   ) : (
-                    <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/50 flex items-center justify-center text-amber-400">
+                    <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-300 flex items-center justify-center text-amber-700">
                       <XCircle className="w-6 h-6" />
                     </div>
                   )}
 
                   <div>
-                    <h3 className="font-extrabold text-white text-base">
+                    <h3 className="font-extrabold text-slate-900 text-base">
                       {evaluation.verdictTitle}
                     </h3>
-                    <p className="text-xs text-slate-300 mt-0.5">{evaluation.explanation}</p>
+                    <p className="text-xs text-slate-700 mt-0.5 font-medium">{evaluation.explanation}</p>
                   </div>
                 </div>
 
                 {/* Score Ring */}
-                <div className="text-center px-3 py-1.5 rounded-xl bg-slate-900/80 border border-slate-700 shrink-0">
-                  <div className="text-xl font-black text-emerald-400">{evaluation.score}</div>
-                  <div className="text-[10px] text-slate-400">ציון שליפה</div>
+                <div className="text-center px-3 py-1.5 rounded-xl bg-white border border-slate-200 shrink-0 shadow-2xs">
+                  <div className="text-xl font-black text-emerald-600">{evaluation.score}</div>
+                  <div className="text-[10px] text-slate-500 font-bold">ציון שליפה</div>
                 </div>
               </div>
 
               {/* Reveal Reference Target */}
-              <div className="mt-4 pt-4 border-t border-slate-800/80 bg-slate-900/50 rounded-xl p-3 text-xs">
-                <span className="font-bold text-slate-400 ml-1">האסוציאציה השמורה במקור:</span>
-                <span className="text-amber-300 font-medium">{currentQuestion.targetAssociation}</span>
+              <div className="mt-4 pt-4 border-t border-slate-200 bg-white/70 rounded-xl p-3 text-xs">
+                <span className="font-bold text-slate-600 ml-1">האסוציאציה השמורה במקור:</span>
+                <span className="text-amber-800 font-bold">{currentQuestion.targetAssociation}</span>
               </div>
 
               {/* Cognitive Tip */}
               {evaluation.memoryTip && (
-                <div className="mt-3 flex items-start gap-2 text-xs text-cyan-300 bg-cyan-950/40 border border-cyan-800/40 rounded-xl p-3">
-                  <Lightbulb className="w-4 h-4 text-cyan-400 shrink-0 mt-0.5" />
+                <div className="mt-3 flex items-start gap-2 text-xs text-cyan-900 bg-cyan-50 border border-cyan-200 rounded-xl p-3 font-medium">
+                  <Lightbulb className="w-4 h-4 text-cyan-700 shrink-0 mt-0.5" />
                   <div>
                     <span className="font-bold">טיפ מנטור לחיזוק הסינפסות: </span>
                     {evaluation.memoryTip}
@@ -434,15 +455,15 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
 
       {/* History Modal / Drawer */}
       {showHistory && (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div className="bg-white border-2 border-slate-200 rounded-2xl p-6 shadow-xl space-y-4">
+          <div className="flex items-center justify-between pb-3 border-b border-slate-200">
             <div className="flex items-center gap-2">
-              <History className="w-5 h-5 text-emerald-400" />
-              <h3 className="font-bold text-white text-base">היסטוריית בדיקות הזיכרון שלך</h3>
+              <History className="w-5 h-5 text-emerald-600" />
+              <h3 className="font-bold text-slate-900 text-base">היסטוריית בדיקות הזיכרון שלך</h3>
             </div>
             <button
               onClick={() => setShowHistory(false)}
-              className="text-xs text-slate-400 hover:text-slate-200 cursor-pointer"
+              className="text-xs text-slate-400 hover:text-slate-700 cursor-pointer"
             >
               סגור
             </button>
@@ -457,25 +478,25 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
               {testResults.slice(0, 15).map((res) => (
                 <div
                   key={res.id}
-                  className="bg-slate-950 border border-slate-800 rounded-xl p-3.5 text-xs space-y-1.5"
+                  className="bg-slate-50 border border-slate-200 rounded-xl p-3.5 text-xs space-y-1.5 shadow-2xs"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-200">{res.question}</span>
+                    <span className="font-bold text-slate-800">{res.question}</span>
                     <span
                       className={`font-black px-2 py-0.5 rounded text-[11px] ${
                         res.score >= 70
-                          ? 'bg-emerald-500/20 text-emerald-300'
-                          : 'bg-amber-500/20 text-amber-300'
+                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                          : 'bg-amber-100 text-amber-800 border border-amber-300'
                       }`}
                     >
                       {res.score}/100
                     </span>
                   </div>
-                  <p className="text-slate-400">
+                  <p className="text-slate-600">
                     <span className="font-medium text-slate-500 ml-1">התשובה שלך:</span>
                     "{res.userResponse}"
                   </p>
-                  <p className="text-emerald-400/90 text-[11px]">{res.explanation}</p>
+                  <p className="text-emerald-700 text-[11px] font-medium">{res.explanation}</p>
                 </div>
               ))}
             </div>

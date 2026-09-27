@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Hash,
   Search,
@@ -16,6 +16,10 @@ import {
   Sliders,
   Sparkles,
   BookOpen,
+  CheckSquare,
+  Check,
+  ArrowLeft,
+  ListFilter,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { MajorItem } from '../../types/memory';
@@ -37,11 +41,14 @@ interface MajorModuleProps {
       userConsonants?: string;
       userImageHint?: string;
       customNotes?: string;
+      is_ready_for_practice?: boolean;
     }
   ) => void;
   onDeleteMajorItem?: (number: number) => void;
   onResetMajorItem: (number: number) => void;
   onOpenSummary?: (techniqueId: string) => void;
+  onToggleMajorReady?: (number: number, explicitState?: boolean) => void;
+  onSetAllMajorReady?: (ready: boolean, numbers?: number[]) => void;
 }
 
 export const MajorModule: React.FC<MajorModuleProps> = ({
@@ -57,11 +64,18 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
   onDeleteMajorItem,
   onResetMajorItem,
   onOpenSummary,
+  onToggleMajorReady,
+  onSetAllMajorReady,
 }) => {
   const [subView, setSubView] = useState<'digits' | 'table' | 'quiz'>('digits');
   const [search, setSearch] = useState('');
   const [decadeFilter, setDecadeFilter] = useState('all');
+  const [onlyReadyFilter, setOnlyReadyFilter] = useState(false);
   const [syncToast, setSyncToast] = useState<string | null>(null);
+
+  // Ready for practice items calculation (Strict Whitelist Filtering)
+  const readyItems = majorItems.filter((item) => Boolean(item.is_ready_for_practice));
+  const readyDigits = majorDigits.filter((d) => Boolean(d.is_ready_for_practice));
 
   // Editing Single Digit (0-9)
   const [editingDigit, setEditingDigit] = useState<number | null>(null);
@@ -94,6 +108,14 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
     setEditingNum(null);
   };
 
+  const handleToggleItemReady = (itemNumber: number, currentState?: boolean) => {
+    if (onToggleMajorReady) {
+      onToggleMajorReady(itemNumber, !currentState);
+    } else {
+      onUpdateMajorItem(itemNumber, { is_ready_for_practice: !currentState });
+    }
+  };
+
   const handleApplyToAll = () => {
     onRecalculateMajor00_99FromDigits(majorDigits);
     onEarnPoints(20, 'סנכרון אותיות ומילים חדשות לכל מספרי 0-99');
@@ -110,8 +132,8 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
   const [newConsonants, setNewConsonants] = useState('');
   const [newHint, setNewHint] = useState('');
 
-  // Quiz State
-  const [quizIndex, setQuizIndex] = useState(0);
+  // Quiz State (Strictly over readyItems - initialized to random ready index)
+  const [quizIndex, setQuizIndex] = useState(() => Math.floor(Math.random() * 100));
   const [userGuess, setUserGuess] = useState('');
   const [quizFeedback, setQuizFeedback] = useState<'idle' | 'correct' | 'incorrect'>('idle');
   const [revealHint, setRevealHint] = useState(false);
@@ -120,11 +142,26 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
   const [quizEditConsonants, setQuizEditConsonants] = useState('');
   const [quizEditHint, setQuizEditHint] = useState('');
 
+  // Randomize quiz question when switching to quiz subview
+  useEffect(() => {
+    if (subView === 'quiz' && readyItems.length > 0) {
+      setQuizIndex(Math.floor(Math.random() * readyItems.length));
+      setUserGuess('');
+      setQuizFeedback('idle');
+      setRevealHint(false);
+    }
+  }, [subView, readyItems.length]);
+
+  // Safe item for the quiz
+  const safeQuizIndex = readyItems.length > 0 ? quizIndex % readyItems.length : 0;
+  const currentQuizItem = readyItems.length > 0 ? readyItems[safeQuizIndex] : null;
+
   // Jump to specific number in table
   const [highlightedNum, setHighlightedNum] = useState<number | null>(null);
 
   const scrollToNumber = (num: number) => {
     setDecadeFilter('all');
+    setOnlyReadyFilter(false);
     setHighlightedNum(num);
     setTimeout(() => {
       const el = document.getElementById(`major-item-${num}`);
@@ -138,8 +175,8 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
   };
 
   const handleNextQuestion = () => {
-    if (majorItems.length === 0) return;
-    const nextIdx = Math.floor(Math.random() * majorItems.length);
+    if (readyItems.length === 0) return;
+    const nextIdx = Math.floor(Math.random() * readyItems.length);
     setQuizIndex(nextIdx);
     setUserGuess('');
     setQuizFeedback('idle');
@@ -148,13 +185,12 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
   };
 
   const handleCheckAnswer = () => {
-    const current = majorItems[quizIndex];
-    if (!current) return;
+    if (!currentQuizItem) return;
     const guess = userGuess.trim().toLowerCase();
     if (!guess) return;
 
-    const userWord = (current.userWord || '').trim().toLowerCase();
-    const defaultWord = (current.defaultWord || '').trim().toLowerCase();
+    const userWord = (currentQuizItem.userWord || '').trim().toLowerCase();
+    const defaultWord = (currentQuizItem.defaultWord || '').trim().toLowerCase();
 
     // STRICT 100% EQUALITY MATCH ONLY - no substring / partial match allowed
     const isExactMatch = (userWord && guess === userWord) || (defaultWord && guess === defaultWord);
@@ -170,9 +206,8 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
   };
 
   const handleSaveQuizEdit = () => {
-    const current = majorItems[quizIndex];
-    if (!current) return;
-    onUpdateMajorItem(current.number, {
+    if (!currentQuizItem) return;
+    onUpdateMajorItem(currentQuizItem.number, {
       userWord: quizEditWord.trim(),
       userConsonants: quizEditConsonants.trim(),
       userImageHint: quizEditHint.trim(),
@@ -197,6 +232,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
         userConsonants: newConsonants.trim(),
         imageHint: newHint.trim(),
         userImageHint: newHint.trim(),
+        is_ready_for_practice: true, // Newly manually created item defaults to ready for practice
       });
     }
 
@@ -208,6 +244,8 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
   };
 
   const filteredItems = majorItems.filter((item) => {
+    if (onlyReadyFilter && !item.is_ready_for_practice) return false;
+
     const matchesSearch =
       item.numberStr.includes(search) ||
       (item.userWord || item.defaultWord).toLowerCase().includes(search.toLowerCase()) ||
@@ -277,7 +315,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
             }`}
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span>מבחן שליפה</span>
+            <span>מבחן שליפה ({readyItems.length} מוכנים)</span>
           </button>
         </div>
       </div>
@@ -515,6 +553,27 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                             {activeHint}
                           </p>
                         </div>
+
+                        {/* Ready for practice checkbox */}
+                        <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
+                          <label className="inline-flex items-center gap-1.5 cursor-pointer select-none py-0.5 px-2 rounded-lg bg-slate-900/80 hover:bg-slate-800 border border-slate-700">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(item.is_ready_for_practice)}
+                              onChange={() => handleToggleItemReady(item.number, item.is_ready_for_practice)}
+                              className="w-3.5 h-3.5 text-emerald-500 rounded focus:ring-emerald-500 cursor-pointer accent-emerald-500"
+                            />
+                            <span className={`text-[10px] font-bold ${item.is_ready_for_practice ? 'text-emerald-400' : 'text-slate-400'}`}>
+                              מוכן לתרגול
+                            </span>
+                          </label>
+                          {item.is_ready_for_practice && (
+                            <span className="text-[9px] bg-emerald-500/20 text-emerald-300 font-bold px-1.5 py-0.5 rounded border border-emerald-500/30 flex items-center gap-0.5">
+                              <Check className="w-2.5 h-2.5" />
+                              <span>מוכן</span>
+                            </span>
+                          )}
+                        </div>
                       </>
                     )}
                   </div>
@@ -530,7 +589,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
-              <div className="relative flex-1 sm:w-64">
+              <div className="relative flex-1 sm:w-60">
                 <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-500" />
                 <input
                   type="text"
@@ -540,6 +599,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
                 />
               </div>
+
               <div className="flex items-center gap-1 bg-slate-950 border border-slate-800 rounded-xl px-2 py-1">
                 <Filter className="w-3.5 h-3.5 text-slate-400" />
                 <select
@@ -555,15 +615,70 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                   ))}
                 </select>
               </div>
+
+              {/* Ready for Practice Filter Button */}
+              <button
+                onClick={() => setOnlyReadyFilter(!onlyReadyFilter)}
+                className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
+                  onlyReadyFilter
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
+                    : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
+                }`}
+                title="סנן והצג רק פריטים שסומנו כמוכנים לתרגול"
+              >
+                <CheckCircle2 className={`w-3.5 h-3.5 ${onlyReadyFilter ? 'text-emerald-400' : 'text-slate-400'}`} />
+                <span>מוכנים בלבד ({readyItems.length})</span>
+              </button>
             </div>
 
-            <button
-              onClick={() => setShowAddForm(!showAddForm)}
-              className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs px-3.5 py-1.5 rounded-xl transition-all cursor-pointer shrink-0"
-            >
-              <Plus className="w-4 h-4" />
-              <span>הוסף מספר ואסוציאציה חדשה</span>
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              {/* Batch Actions */}
+              {onSetAllMajorReady && (
+                <div className="flex items-center gap-1.5 text-xs">
+                  {decadeFilter !== 'all' ? (
+                    <button
+                      onClick={() => {
+                        const d = parseInt(decadeFilter, 10);
+                        const nums = Array.from({ length: 10 }, (_, i) => d + i);
+                        onSetAllMajorReady(true, nums);
+                        onEarnPoints(10, `סימון עשור ${d} כמוכן לתרגול`);
+                      }}
+                      className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-1.5 rounded-xl transition-all cursor-pointer"
+                      title="סמן את כל 10 המספרים בעשור זה כמוכנים לתרגול"
+                    >
+                      ✓ סמן עשור {decadeFilter}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        onSetAllMajorReady(true);
+                        onEarnPoints(20, 'סימון כל 100 מספרי Major כמוכנים');
+                      }}
+                      className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-1.5 rounded-xl transition-all cursor-pointer"
+                    >
+                      ✓ סמן הכל
+                    </button>
+                  )}
+                  {readyItems.length > 0 && (
+                    <button
+                      onClick={() => onSetAllMajorReady(false)}
+                      className="text-[11px] font-medium text-slate-400 hover:text-rose-400 px-2 py-1.5 rounded-xl transition-all cursor-pointer"
+                      title="בטל את כל סימוני התרגול"
+                    >
+                      נקה סימונים
+                    </button>
+                  )}
+                </div>
+              )}
+
+              <button
+                onClick={() => setShowAddForm(!showAddForm)}
+                className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs px-3.5 py-1.5 rounded-xl transition-all cursor-pointer shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+                <span>הוסף מספר ואסוציאציה</span>
+              </button>
+            </div>
           </div>
 
           {/* Quick Number Navigator Bar */}
@@ -731,7 +846,9 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                     id={`major-item-${item.number}`}
                     key={item.number}
                     className={`bg-slate-950 border rounded-2xl p-3.5 transition-all duration-300 flex flex-col justify-between ${
-                      isHighlighted
+                      item.is_ready_for_practice
+                        ? 'border-emerald-500/60 ring-2 ring-emerald-500/20 bg-emerald-950/10'
+                        : isHighlighted
                         ? 'border-amber-400 ring-4 ring-amber-400/30 scale-[1.02] shadow-xl shadow-amber-500/20 bg-amber-950/20'
                         : isCustom
                         ? 'border-amber-500/50 shadow-sm shadow-amber-500/10'
@@ -900,6 +1017,27 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                         )}
                       </>
                     )}
+
+                    {/* Ready for Practice Checkbox */}
+                    <div className="pt-2 mt-2 border-t border-slate-800/80 flex items-center justify-between">
+                      <label className="inline-flex items-center gap-1.5 cursor-pointer select-none py-1 px-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 transition-all">
+                        <input
+                          type="checkbox"
+                          checked={Boolean(item.is_ready_for_practice)}
+                          onChange={() => handleToggleItemReady(item.number, item.is_ready_for_practice)}
+                          className="w-3.5 h-3.5 rounded text-emerald-500 focus:ring-emerald-500 cursor-pointer accent-emerald-500"
+                        />
+                        <span className={`text-[11px] font-bold ${item.is_ready_for_practice ? 'text-emerald-400' : 'text-slate-400'}`}>
+                          מוכן לתרגול
+                        </span>
+                      </label>
+                      {item.is_ready_for_practice && (
+                        <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1">
+                          <Check className="w-3 h-3 text-emerald-400" />
+                          <span>מוכן</span>
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -931,223 +1069,266 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
       {/* SUB-VIEW 3: QUIZ */}
       {subView === 'quiz' && (
         <div className="space-y-6">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-            <div className="text-xs text-slate-400 font-medium">
-              💡 טיפ: לחץ <kbd className="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-amber-300 font-mono text-[10px]">Ctrl + Enter</kbd> לחשיפת התשובה והסצנה בכל שלב
-            </div>
-            <button
-              onClick={handleNextQuestion}
-              className="flex items-center gap-1.5 text-xs text-amber-400 hover:text-amber-300 bg-slate-800 px-3.5 py-1.5 rounded-xl cursor-pointer hover:bg-slate-700 transition-colors"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>מספר אקראי חדש</span>
-            </button>
-          </div>
-
-          {majorItems[quizIndex] && (
-            <div className="max-w-xl mx-auto space-y-6 text-center">
-              <div className="p-8 rounded-3xl bg-slate-950 border border-slate-800 shadow-inner space-y-3 relative overflow-hidden">
-                <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">
-                  מה המילה המנמונית של המספר:
-                </span>
-                <div className="text-6xl font-black text-white tracking-wider">
-                  {majorItems[quizIndex].numberStr}
-                </div>
-                <div className="text-xs text-slate-400">
-                  עיצורים מנחים:{' '}
-                  <strong className="text-slate-200">
-                    {majorItems[quizIndex].userConsonants || majorItems[quizIndex].consonants}
-                  </strong>
-                </div>
+          {readyItems.length === 0 ? (
+            <div className="bg-amber-50 border-2 border-dashed border-amber-300 rounded-3xl p-8 sm:p-12 text-center space-y-4 max-w-xl mx-auto my-6 text-slate-900 animate-fadeIn">
+              <div className="w-16 h-16 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center mx-auto shadow-sm">
+                <CheckCircle2 className="w-8 h-8" />
               </div>
-
-              <div className="space-y-4">
-                <div className="flex gap-2 max-w-sm mx-auto">
-                  <input
-                    type="text"
-                    value={userGuess}
-                    onChange={(e) => setUserGuess(e.target.value)}
-                    onKeyDown={(e) => {
-                      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                        e.preventDefault();
-                        setRevealHint(true);
-                        return;
-                      }
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        if (quizFeedback === 'correct') {
-                          handleNextQuestion();
-                        } else {
-                          handleCheckAnswer();
-                        }
-                      }
-                    }}
-                    placeholder="הקלד את המילה המנמונית..."
-                    className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-center text-sm font-bold text-white focus:outline-none focus:border-amber-500"
-                  />
+              <div className="space-y-2">
+                <h3 className="text-base sm:text-lg font-black text-slate-900">
+                  טרם סימנת פריטים כמוכנים לתרגול במודולה זו. סמן מספר אסוציאציות כדי להתחיל.
+                </h3>
+                <p className="text-xs text-slate-600 leading-relaxed max-w-md mx-auto">
+                  כדי שתוכל לשלוט באופן מלא בעקומת הלמידה, מנגנון השליפה האקראי מתרגל אך ורק פריטים שסומנו בתיבת "מוכן לתרגול". סמן את המספרים ששיננת כדי להתחיל במבחן.
+                </p>
+              </div>
+              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-3">
+                <button
+                  onClick={() => setSubView('table')}
+                  className="btn-duo-primary px-5 py-2.5 text-xs font-bold inline-flex items-center gap-2 cursor-pointer"
+                >
+                  <span>מעבר לטבלת 00-99 לסימון פריטים</span>
+                  <ArrowLeft className="w-4 h-4" />
+                </button>
+                {onSetAllMajorReady && (
                   <button
                     onClick={() => {
-                      if (quizFeedback === 'correct') {
-                        handleNextQuestion();
-                      } else {
-                        handleCheckAnswer();
-                      }
+                      onSetAllMajorReady(true, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+                      onEarnPoints(10, 'סימון עשר ספרות ראשונות כמוכנות');
                     }}
-                    className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-5 py-2.5 rounded-xl text-xs transition-all cursor-pointer"
+                    className="btn-duo-neutral px-4 py-2.5 text-xs font-bold cursor-pointer"
                   >
-                    {quizFeedback === 'correct' ? 'הבא ↵' : 'בדוק'}
+                    <span>סמן ספרות 0-9 כמוכנות והתחל</span>
                   </button>
-                </div>
-
-                <div className="flex items-center justify-center gap-3">
-                  <button
-                    onClick={handleNextQuestion}
-                    className="text-xs text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700 px-3 py-1.5 rounded-xl transition-all cursor-pointer inline-flex items-center gap-1"
-                  >
-                    <span>דלג למספר הבא ⏭️</span>
-                  </button>
-                  {!revealHint && quizFeedback !== 'correct' && (
-                    <button
-                      onClick={() => setRevealHint(true)}
-                      className="text-xs text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-3 py-1.5 rounded-xl transition-all cursor-pointer inline-flex items-center gap-1"
-                    >
-                      <HelpCircle className="w-3.5 h-3.5" />
-                      <span>חשוף תשובה (Ctrl+Enter)</span>
-                    </button>
-                  )}
-                </div>
-
-                {quizFeedback === 'correct' && (
-                  <div className="p-4 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 flex flex-col items-center justify-center gap-1.5 animate-fadeIn">
-                    <div className="flex items-center gap-2">
-                      <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                      <span className="font-bold text-sm">מעולה! תשובה מדויקת ב-100% (+15 XP)</span>
-                    </div>
-                    <span className="text-[11px] text-emerald-400/90 font-medium">
-                      לחץ Enter כדי לעבור ישר למספר האקראי הבא ↵
-                    </span>
-                  </div>
-                )}
-
-                {quizFeedback === 'incorrect' && (
-                  <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center gap-2 animate-fadeIn">
-                    <XCircle className="w-5 h-5" />
-                    <span className="font-bold text-sm">לא מדויק. לחץ Ctrl+Enter לחשיפת התשובה או דלג הלאה</span>
-                  </div>
-                )}
-
-                {/* Always show full association and kinetic scene on correct answer OR when revealing */}
-                {(quizFeedback === 'correct' || revealHint) && (
-                  <div className="bg-slate-950/90 border border-amber-500/40 rounded-2xl p-5 text-xs space-y-3 text-right animate-fadeIn shadow-xl shadow-amber-500/5">
-                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                      <span className="text-amber-400 font-bold flex items-center gap-1.5">
-                        <Sparkles className="w-4 h-4 text-amber-400" />
-                        האסוציאציה המלאה שנקבעה:
-                      </span>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => {
-                            const cur = majorItems[quizIndex];
-                            if (cur) {
-                              setQuizEditWord(cur.userWord || cur.defaultWord);
-                              setQuizEditConsonants(cur.userConsonants || cur.consonants);
-                              setQuizEditHint(cur.userImageHint || cur.imageHint || '');
-                              setIsQuizEditing(!isQuizEditing);
-                            }
-                          }}
-                          className="text-[11px] text-amber-300 hover:text-white bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 cursor-pointer"
-                        >
-                          <Edit3 className="w-3 h-3" />
-                          <span>{isQuizEditing ? 'סגור עריכה' : 'שנה אסוציאציה'}</span>
-                        </button>
-                        <span className="text-[11px] font-mono text-slate-400">
-                          #{majorItems[quizIndex].numberStr}
-                        </span>
-                      </div>
-                    </div>
-
-                    {isQuizEditing ? (
-                      <div className="space-y-3 bg-slate-900 p-3.5 rounded-xl border border-amber-500/30 animate-fadeIn">
-                        <div className="text-xs font-bold text-amber-300">עריכת האסוציאציה למספר {majorItems[quizIndex].numberStr}:</div>
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <label className="text-[10px] text-slate-400 font-bold">מילה מנמונית:</label>
-                            <AIFieldGeneratorButton
-                              promptType="major_word"
-                              inputContext={majorItems[quizIndex].number.toString()}
-                              extraContext={quizEditConsonants}
-                              onGenerated={(val) => setQuizEditWord(val)}
-                              label="מילה עם AI"
-                              compact
-                            />
-                          </div>
-                          <input
-                            type="text"
-                            value={quizEditWord}
-                            onChange={(e) => setQuizEditWord(e.target.value)}
-                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white"
-                          />
-                        </div>
-                        <div>
-                          <div className="flex items-center justify-between mb-1">
-                            <label className="text-[10px] text-slate-400 font-bold">סצנה קינטית:</label>
-                            <AIFieldGeneratorButton
-                              promptType="major_hint"
-                              inputContext={majorItems[quizIndex].number.toString()}
-                              extraContext={quizEditWord}
-                              onGenerated={(val) => setQuizEditHint(val)}
-                              label="סצנה עם AI"
-                              compact
-                            />
-                          </div>
-                          <input
-                            type="text"
-                            value={quizEditHint}
-                            onChange={(e) => setQuizEditHint(e.target.value)}
-                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white"
-                          />
-                        </div>
-                        <div className="flex justify-end gap-2 pt-1">
-                          <button
-                            type="button"
-                            onClick={() => setIsQuizEditing(false)}
-                            className="text-xs text-slate-400 px-3 py-1"
-                          >
-                            ביטול
-                          </button>
-                          <button
-                            type="button"
-                            onClick={handleSaveQuizEdit}
-                            className="text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-4 py-1 rounded-lg cursor-pointer"
-                          >
-                            שמור שינויים
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="text-amber-300 font-bold text-sm">
-                          מילה מנמונית: <span className="text-white text-base font-black">{majorItems[quizIndex].userWord || majorItems[quizIndex].defaultWord}</span>
-                        </div>
-                        <div className="text-slate-200 bg-slate-900/90 p-3 rounded-xl border border-slate-800 text-xs leading-relaxed">
-                          ⚡ <strong className="text-amber-400">סצנה קינטית מוקצנת:</strong>{' '}
-                          {majorItems[quizIndex].userImageHint || majorItems[quizIndex].imageHint || 'התנגשות קינטית עזה שצרובה בהיפוקמפוס.'}
-                        </div>
-                      </>
-                    )}
-
-                    <div className="flex justify-center pt-1">
-                      <button
-                        onClick={handleNextQuestion}
-                        className="text-xs text-amber-400 hover:text-amber-300 font-bold inline-flex items-center gap-1 bg-slate-900 px-4 py-2 rounded-xl border border-amber-500/30 cursor-pointer hover:bg-slate-800 transition-colors"
-                      >
-                        <span>למספר האקראי הבא (Enter ↵)</span>
-                      </button>
-                    </div>
-                  </div>
                 )}
               </div>
             </div>
+          ) : (
+            <>
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-3 py-1.5 rounded-xl border border-emerald-300 flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>מתרגל {readyItems.length} פריטים שסומנו כמוכנים (מתוך {majorItems.length})</span>
+                  </span>
+                  <div className="text-xs text-slate-400 font-medium hidden sm:block">
+                    💡 לחץ <kbd className="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-amber-300 font-mono text-[10px]">Ctrl + Enter</kbd> לחשיפת תשובה
+                  </div>
+                </div>
+                <button
+                  onClick={handleNextQuestion}
+                  className="flex items-center gap-1.5 text-xs text-amber-400 hover:text-amber-300 bg-slate-800 px-3.5 py-1.5 rounded-xl cursor-pointer hover:bg-slate-700 transition-colors"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>מספר אקראי חדש</span>
+                </button>
+              </div>
+
+              {currentQuizItem && (
+                <div className="max-w-xl mx-auto space-y-6 text-center">
+                  <div className="p-8 rounded-3xl bg-slate-950 border border-slate-800 shadow-inner space-y-3 relative overflow-hidden">
+                    <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">
+                      מה המילה המנמונית של המספר:
+                    </span>
+                    <div className="text-6xl font-black text-white tracking-wider">
+                      {currentQuizItem.numberStr}
+                    </div>
+                    <div className="text-xs text-slate-400">
+                      עיצורים מנחים:{' '}
+                      <strong className="text-slate-200">
+                        {currentQuizItem.userConsonants || currentQuizItem.consonants}
+                      </strong>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="flex gap-2 max-w-sm mx-auto">
+                      <input
+                        type="text"
+                        value={userGuess}
+                        onChange={(e) => setUserGuess(e.target.value)}
+                        onKeyDown={(e) => {
+                          if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                            e.preventDefault();
+                            setRevealHint(true);
+                            return;
+                          }
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (quizFeedback === 'correct') {
+                              handleNextQuestion();
+                            } else {
+                              handleCheckAnswer();
+                            }
+                          }
+                        }}
+                        placeholder="הקלד את המילה המנמונית..."
+                        className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-center text-sm font-bold text-white focus:outline-none focus:border-amber-500"
+                      />
+                      <button
+                        onClick={() => {
+                          if (quizFeedback === 'correct') {
+                            handleNextQuestion();
+                          } else {
+                            handleCheckAnswer();
+                          }
+                        }}
+                        className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-5 py-2.5 rounded-xl text-xs transition-all cursor-pointer"
+                      >
+                        {quizFeedback === 'correct' ? 'הבא ↵' : 'בדוק'}
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-center gap-3">
+                      <button
+                        onClick={handleNextQuestion}
+                        className="text-xs text-slate-400 hover:text-white bg-slate-800/80 hover:bg-slate-700 px-3 py-1.5 rounded-xl transition-all cursor-pointer inline-flex items-center gap-1"
+                      >
+                        <span>דלג למספר הבא ⏭️</span>
+                      </button>
+                      {!revealHint && quizFeedback !== 'correct' && (
+                        <button
+                          onClick={() => setRevealHint(true)}
+                          className="text-xs text-amber-400 hover:text-amber-300 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 px-3 py-1.5 rounded-xl transition-all cursor-pointer inline-flex items-center gap-1"
+                        >
+                          <HelpCircle className="w-3.5 h-3.5" />
+                          <span>חשוף תשובה (Ctrl+Enter)</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {quizFeedback === 'correct' && (
+                      <div className="p-4 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 flex flex-col items-center justify-center gap-1.5 animate-fadeIn">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                          <span className="font-bold text-sm">מעולה! תשובה מדויקת ב-100% (+15 XP)</span>
+                        </div>
+                        <span className="text-[11px] text-emerald-400/90 font-medium">
+                          לחץ Enter כדי לעבור ישר למספר האקראי הבא ↵
+                        </span>
+                      </div>
+                    )}
+
+                    {quizFeedback === 'incorrect' && (
+                      <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center gap-2 animate-fadeIn">
+                        <XCircle className="w-5 h-5" />
+                        <span className="font-bold text-sm">לא מדויק. לחץ Ctrl+Enter לחשיפת התשובה או דלג הלאה</span>
+                      </div>
+                    )}
+
+                    {/* Always show full association and kinetic scene on correct answer OR when revealing */}
+                    {(quizFeedback === 'correct' || revealHint) && (
+                      <div className="bg-slate-950/90 border border-amber-500/40 rounded-2xl p-5 text-xs space-y-3 text-right animate-fadeIn shadow-xl shadow-amber-500/5">
+                        <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                          <span className="text-amber-400 font-bold flex items-center gap-1.5">
+                            <Sparkles className="w-4 h-4 text-amber-400" />
+                            האסוציאציה המלאה שנקבעה:
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => {
+                                if (currentQuizItem) {
+                                  setQuizEditWord(currentQuizItem.userWord || currentQuizItem.defaultWord);
+                                  setQuizEditConsonants(currentQuizItem.userConsonants || currentQuizItem.consonants);
+                                  setQuizEditHint(currentQuizItem.userImageHint || currentQuizItem.imageHint || '');
+                                  setIsQuizEditing(!isQuizEditing);
+                                }
+                              }}
+                              className="text-[11px] text-amber-300 hover:text-white bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 cursor-pointer"
+                            >
+                              <Edit3 className="w-3 h-3" />
+                              <span>{isQuizEditing ? 'סגור עריכה' : 'שנה אסוציאציה'}</span>
+                            </button>
+                            <span className="text-[11px] font-mono text-slate-400">
+                              #{currentQuizItem.numberStr}
+                            </span>
+                          </div>
+                        </div>
+
+                        {isQuizEditing ? (
+                          <div className="space-y-3 bg-slate-900 p-3.5 rounded-xl border border-amber-500/30 animate-fadeIn">
+                            <div className="text-xs font-bold text-amber-300">עריכת האסוציאציה למספר {currentQuizItem.numberStr}:</div>
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="text-[10px] text-slate-400 font-bold">מילה מנמונית:</label>
+                                <AIFieldGeneratorButton
+                                  promptType="major_word"
+                                  inputContext={currentQuizItem.number.toString()}
+                                  extraContext={quizEditConsonants}
+                                  onGenerated={(val) => setQuizEditWord(val)}
+                                  label="מילה עם AI"
+                                  compact
+                                />
+                              </div>
+                              <input
+                                type="text"
+                                value={quizEditWord}
+                                onChange={(e) => setQuizEditWord(e.target.value)}
+                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white"
+                              />
+                            </div>
+                            <div>
+                              <div className="flex items-center justify-between mb-1">
+                                <label className="text-[10px] text-slate-400 font-bold">סצנה קינטית:</label>
+                                <AIFieldGeneratorButton
+                                  promptType="major_hint"
+                                  inputContext={currentQuizItem.number.toString()}
+                                  extraContext={quizEditWord}
+                                  onGenerated={(val) => setQuizEditHint(val)}
+                                  label="סצנה עם AI"
+                                  compact
+                                />
+                              </div>
+                              <input
+                                type="text"
+                                value={quizEditHint}
+                                onChange={(e) => setQuizEditHint(e.target.value)}
+                                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white"
+                              />
+                            </div>
+                            <div className="flex justify-end gap-2 pt-1">
+                              <button
+                                type="button"
+                                onClick={() => setIsQuizEditing(false)}
+                                className="text-xs text-slate-400 px-3 py-1"
+                              >
+                                ביטול
+                              </button>
+                              <button
+                                type="button"
+                                onClick={handleSaveQuizEdit}
+                                className="text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-4 py-1 rounded-lg cursor-pointer"
+                              >
+                                שמור שינויים
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="text-amber-300 font-bold text-sm">
+                              מילה מנמונית: <span className="text-white text-base font-black">{currentQuizItem.userWord || currentQuizItem.defaultWord}</span>
+                            </div>
+                            <div className="text-slate-200 bg-slate-900/90 p-3 rounded-xl border border-slate-800 text-xs leading-relaxed">
+                              ⚡ <strong className="text-amber-400">סצנה קינטית מוקצנת:</strong>{' '}
+                              {currentQuizItem.userImageHint || currentQuizItem.imageHint || 'התנגשות קינטית עזה שצרובה בהיפוקמפוס.'}
+                            </div>
+                          </>
+                        )}
+
+                        <div className="flex justify-center pt-1">
+                          <button
+                            onClick={handleNextQuestion}
+                            className="text-xs text-amber-400 hover:text-amber-300 font-bold inline-flex items-center gap-1 bg-slate-900 px-4 py-2 rounded-xl border border-amber-500/30 cursor-pointer hover:bg-slate-800 transition-colors"
+                          >
+                            <span>למספר האקראי הבא (Enter ↵)</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

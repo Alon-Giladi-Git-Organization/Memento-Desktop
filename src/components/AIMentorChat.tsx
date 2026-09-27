@@ -64,35 +64,38 @@ export const AIMentorChat: React.FC<AIMentorChatProps> = ({
   };
 
   const quickPrompts = [
-    'איך אני בונה את ארמון הזיכרון הראשון שלי צעד-אחר-צעד?',
-    'תן לי סצנה מנמונית מוקצנת עבור מספר תעודת זהות של 9 ספרות',
-    'איך לזכור שמות של 20 אנשים במפגש נטוורקינג מבלי לשכוח אף אחד?',
-    'מה ההבדל בין שיטת ה-Major לשיטת PAO ומתי להשתמש בכל אחת?',
+    'המר למנמוניקה ויזואלית: "התכנית \'קו כחול דק\' הייתה הבסיס לתכניות משטרה בשנות ה-80"',
+    'המר לי לתמונה אחת חדה: "אלברט איינשטיין פרסם את תורת היחסות הכללית בשנת 1915"',
+    'איך להמיר עובדה היסטורית לתמונה אסוציאטיבית פשוטה עם 2-3 עוגנים?',
+    'תן לי סצנה מנמונית ממוקדת עבור מספר תעודת זהות בת 9 ספרות',
   ];
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-16">
       {/* Header Banner */}
-      <div className="bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950/40 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl relative overflow-hidden">
+      <div className="bg-white border-2 border-slate-200 border-b-6 border-b-slate-300 rounded-3xl p-6 sm:p-8 shadow-sm relative overflow-hidden text-slate-900">
         <div className="flex items-center gap-4 relative z-10">
-          <div className="w-14 h-14 rounded-2xl bg-indigo-500/20 border-2 border-indigo-500/50 flex items-center justify-center text-indigo-400">
+          <div className="w-14 h-14 rounded-2xl bg-indigo-50 border-2 border-indigo-200 flex items-center justify-center text-indigo-600 shadow-xs">
             <Sparkles className="w-7 h-7" />
           </div>
           <div>
-            <h1 className="text-2xl sm:text-3xl font-black text-white">מנטור הזיכרון החי ב-AI</h1>
-            <p className="text-xs sm:text-sm text-slate-300 mt-1">
-              מומחה עולמי בטכניקות מנמוניקה, פירוק מספרים, ארמונות זיכרון והצמדות קינטיות.
+            <div className="inline-flex items-center gap-1.5 bg-indigo-50 text-indigo-700 text-xs font-bold px-2.5 py-0.5 rounded-full border border-indigo-200 mb-1">
+              <span>מומחה מנמוניקה ויזואלית</span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-black text-slate-900">מנטור הזיכרון החי ב-AI</h1>
+            <p className="text-xs sm:text-sm text-slate-600 mt-1 font-medium">
+              המרה מקצועית של עובדות ומשפטים מורכבים לתמונות אסוציאטיביות ויזואליות, פשוטות, חדות וקלות לדמיון מיידי בפריים יחיד.
             </p>
           </div>
         </div>
 
         {/* Quick Prompts */}
-        <div className="flex flex-wrap gap-2 mt-5 pt-4 border-t border-slate-800">
+        <div className="flex flex-wrap gap-2 mt-5 pt-4 border-t border-slate-200">
           {quickPrompts.map((q, idx) => (
             <button
               key={idx}
               onClick={() => handleSend(q)}
-              className="text-xs bg-slate-800/80 hover:bg-slate-700 text-slate-300 px-3 py-1.5 rounded-xl border border-slate-700 transition-colors cursor-pointer text-right"
+              className="text-xs bg-slate-50 hover:bg-slate-100 text-slate-700 font-semibold px-3 py-1.5 rounded-xl border border-slate-200 hover:border-indigo-300 transition-colors cursor-pointer text-right shadow-2xs"
             >
               💬 {q}
             </button>
@@ -101,7 +104,7 @@ export const AIMentorChat: React.FC<AIMentorChatProps> = ({
       </div>
 
       {/* Messages Box */}
-      <div className="bg-slate-900 border border-slate-800 rounded-3xl p-4 sm:p-6 shadow-xl space-y-4 max-h-[550px] overflow-y-auto">
+      <div className="bg-white border-2 border-slate-200 rounded-3xl p-4 sm:p-6 shadow-sm space-y-4 max-h-[550px] overflow-y-auto">
         {messages.map((m) => {
           const isUser = m.role === 'user';
           return (
@@ -110,20 +113,20 @@ export const AIMentorChat: React.FC<AIMentorChatProps> = ({
               className={`flex items-start gap-3 ${isUser ? 'flex-row-reverse' : ''}`}
             >
               <div
-                className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-2xs ${
                   isUser
-                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
-                    : 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/40'
+                    ? 'bg-amber-100 text-amber-800 border-2 border-amber-300'
+                    : 'bg-indigo-100 text-indigo-800 border-2 border-indigo-300'
                 }`}
               >
                 {isUser ? <User className="w-5 h-5" /> : <Bot className="w-5 h-5" />}
               </div>
 
               <div
-                className={`rounded-2xl p-4 max-w-[85%] text-xs sm:text-sm leading-relaxed ${
+                className={`rounded-2xl p-4 max-w-[85%] text-xs sm:text-sm leading-relaxed shadow-2xs ${
                   isUser
-                    ? 'bg-amber-500/15 text-white border border-amber-500/30'
-                    : 'bg-slate-950 text-slate-200 border border-slate-800/80'
+                    ? 'bg-amber-500 text-white font-medium shadow-amber-500/20'
+                    : 'bg-slate-50 text-slate-900 border-2 border-slate-200'
                 }`}
               >
                 <p className="whitespace-pre-wrap">{m.content}</p>
@@ -134,11 +137,11 @@ export const AIMentorChat: React.FC<AIMentorChatProps> = ({
 
         {isLoading && (
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/40 flex items-center justify-center">
+            <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 border border-indigo-200 flex items-center justify-center">
               <Loader2 className="w-5 h-5 animate-spin" />
             </div>
-            <div className="bg-slate-950 p-3 rounded-2xl border border-slate-800 text-xs text-slate-400">
-              מנטור הזיכרון חושב ובונה סצנה מנמונית...
+            <div className="bg-slate-50 p-3 rounded-2xl border border-slate-200 text-xs text-slate-600 font-medium">
+              מנטור הזיכרון יוצר תמונה אסוציאטיבית פשוטה וחדה...
             </div>
           </div>
         )}
@@ -157,13 +160,13 @@ export const AIMentorChat: React.FC<AIMentorChatProps> = ({
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="שאל כל דבר: איך לזכור נוסחה מורכבת, מספר טלפון, או תחנה בארמון..."
-          className="flex-1 bg-slate-900 border border-slate-800 rounded-2xl px-5 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+          placeholder="הזן משפט או עובדה להמרה לתמונה אסוציאטיבית, או שאל כל שאלה במנמוניקה..."
+          className="flex-1 bg-white border-2 border-slate-200 rounded-2xl px-5 py-3 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:border-indigo-500 shadow-2xs"
         />
         <button
           type="submit"
           disabled={!input.trim() || isLoading}
-          className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-bold px-6 py-3 rounded-2xl shadow-lg shadow-indigo-600/20 text-sm flex items-center gap-2 cursor-pointer"
+          className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-black px-6 py-3 rounded-2xl shadow-sm text-sm flex items-center gap-2 cursor-pointer transition-all active:scale-95"
         >
           <Send className="w-4 h-4" />
           <span>שלח</span>

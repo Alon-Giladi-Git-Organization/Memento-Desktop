@@ -604,6 +604,54 @@ export function useMemoryStore() {
     );
   };
 
+  const togglePalaceLocusReady = (palaceId: string, locusId: string, explicitState?: boolean) => {
+    setPalaces((prev) =>
+      prev.map((palace) => {
+        if (palace.id !== palaceId) return palace;
+        const updatedPalace = {
+          ...palace,
+          loci: palace.loci.map((loc) => {
+            if (loc.id !== locusId) return loc;
+            const nextState = explicitState !== undefined ? explicitState : !loc.is_ready_for_practice;
+            return { ...loc, is_ready_for_practice: nextState };
+          }),
+        };
+
+        if (currentUser) {
+          setDoc(
+            doc(db, 'palaces', `${currentUser.uid}_${palaceId}`),
+            { ...updatedPalace, userId: currentUser.uid, updatedAt: Date.now() },
+            { merge: true }
+          );
+        }
+
+        return updatedPalace;
+      })
+    );
+  };
+
+  const setAllPalaceLociReady = (palaceId: string, ready: boolean) => {
+    setPalaces((prev) =>
+      prev.map((palace) => {
+        if (palace.id !== palaceId) return palace;
+        const updatedPalace = {
+          ...palace,
+          loci: palace.loci.map((loc) => ({ ...loc, is_ready_for_practice: ready })),
+        };
+
+        if (currentUser) {
+          setDoc(
+            doc(db, 'palaces', `${currentUser.uid}_${palaceId}`),
+            { ...updatedPalace, userId: currentUser.uid, updatedAt: Date.now() },
+            { merge: true }
+          );
+        }
+
+        return updatedPalace;
+      })
+    );
+  };
+
   const deletePalaceLocus = (palaceId: string, locusId: string) => {
     setPalaces((prev) =>
       prev.map((palace) => {
@@ -908,12 +956,36 @@ export function useMemoryStore() {
       userConsonants?: string;
       userImageHint?: string;
       customNotes?: string;
+      is_ready_for_practice?: boolean;
     }
   ) => {
     setMajorItems((prev) =>
       prev.map((item) => (item.number === number ? { ...item, ...updates } : item))
     );
-    earnPoints(10, 'התאמת אסוציאציית Major אישית');
+    if (updates.userWord || updates.userImageHint) {
+      earnPoints(10, 'התאמת אסוציאציית Major אישית');
+    }
+  };
+
+  const toggleMajorReady = (number: number, explicitState?: boolean) => {
+    setMajorItems((prev) =>
+      prev.map((item) => {
+        if (item.number !== number) return item;
+        const nextState = explicitState !== undefined ? explicitState : !item.is_ready_for_practice;
+        return { ...item, is_ready_for_practice: nextState };
+      })
+    );
+  };
+
+  const setAllMajorReady = (ready: boolean, numbers?: number[]) => {
+    setMajorItems((prev) =>
+      prev.map((item) => {
+        if (!numbers || numbers.includes(item.number)) {
+          return { ...item, is_ready_for_practice: ready };
+        }
+        return item;
+      })
+    );
   };
 
   const resetMajorItem = (number: number) => {
@@ -924,7 +996,7 @@ export function useMemoryStore() {
 
   const updatePAOItem = (
     number: number,
-    updates: { userPerson?: string; userAction?: string; userObject?: string }
+    updates: { userPerson?: string; userAction?: string; userObject?: string; is_ready_for_practice?: boolean }
   ) => {
     setPaoItems((prev) => {
       const exists = prev.some((p) => p.number === number);
@@ -945,7 +1017,30 @@ export function useMemoryStore() {
         ].sort((a, b) => a.number - b.number);
       }
     });
-    earnPoints(15, 'התאמת שלשת PAO אישית');
+    if (updates.userPerson || updates.userAction || updates.userObject) {
+      earnPoints(15, 'התאמת שלשת PAO אישית');
+    }
+  };
+
+  const togglePAOReady = (number: number, explicitState?: boolean) => {
+    setPaoItems((prev) =>
+      prev.map((item) => {
+        if (item.number !== number) return item;
+        const nextState = explicitState !== undefined ? explicitState : !item.is_ready_for_practice;
+        return { ...item, is_ready_for_practice: nextState };
+      })
+    );
+  };
+
+  const setAllPAOReady = (ready: boolean, numbers?: number[]) => {
+    setPaoItems((prev) =>
+      prev.map((item) => {
+        if (!numbers || numbers.includes(item.number)) {
+          return { ...item, is_ready_for_practice: ready };
+        }
+        return item;
+      })
+    );
   };
 
   const resetPAOItem = (number: number) => {
@@ -1058,7 +1153,53 @@ export function useMemoryStore() {
 
   const updatePersonFaceCard = (id: string, updates: Partial<PersonFaceCard>) => {
     setPeopleCards((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
-    earnPoints(10, 'עדכון כרטיס שם ופנים');
+    if (updates.name || updates.morphologicalAnchor || updates.mnemonicScene) {
+      earnPoints(10, 'עדכון כרטיס שם ופנים');
+    }
+  };
+
+  const togglePersonReady = (id: string, explicitState?: boolean) => {
+    setPeopleCards((prev) =>
+      prev.map((p) => {
+        if (p.id !== id) return p;
+        const nextState = explicitState !== undefined ? explicitState : !p.is_ready_for_practice;
+        return { ...p, is_ready_for_practice: nextState };
+      })
+    );
+  };
+
+  const setAllPeopleReady = (ready: boolean) => {
+    setPeopleCards((prev) => prev.map((p) => ({ ...p, is_ready_for_practice: ready })));
+  };
+
+  const togglePersonalAssociationReady = (id: string, explicitState?: boolean) => {
+    setPersonalAssociations((prev) =>
+      prev.map((a) => {
+        if (a.id !== id) return a;
+        const nextState = explicitState !== undefined ? explicitState : !a.is_ready_for_practice;
+        return { ...a, is_ready_for_practice: nextState };
+      })
+    );
+  };
+
+  const toggleShapePegReady = (number: number, explicitState?: boolean) => {
+    setShapePegs((prev) =>
+      prev.map((sp) => {
+        if (sp.number !== number) return sp;
+        const nextState = explicitState !== undefined ? explicitState : !sp.is_ready_for_practice;
+        return { ...sp, is_ready_for_practice: nextState };
+      })
+    );
+  };
+
+  const toggleBodyPegReady = (index: number, explicitState?: boolean) => {
+    setBodyPegs((prev) =>
+      prev.map((bp) => {
+        if (bp.index !== index) return bp;
+        const nextState = explicitState !== undefined ? explicitState : !bp.is_ready_for_practice;
+        return { ...bp, is_ready_for_practice: nextState };
+      })
+    );
   };
 
   const deletePersonFaceCard = (id: string) => {
@@ -1183,30 +1324,41 @@ export function useMemoryStore() {
     updateMajorItem,
     deleteMajorItem,
     resetMajorItem,
+    toggleMajorReady,
+    setAllMajorReady,
     addPAOItem,
     updatePAOItem,
     deletePAOItem,
     resetPAOItem,
+    togglePAOReady,
+    setAllPAOReady,
     addBodyPeg,
     updateBodyPeg,
     deleteBodyPeg,
     resetBodyPeg,
+    toggleBodyPegReady,
     addShapePeg,
     updateShapePeg,
     deleteShapePeg,
     resetShapePeg,
+    toggleShapePegReady,
     addPersonalAssociation,
     updatePersonalAssociation,
     deletePersonalAssociation,
+    togglePersonalAssociationReady,
     addMemoryPalace,
     deletePalace,
     addPalaceLocus,
     updatePalaceLocus,
     deletePalaceLocus,
+    togglePalaceLocusReady,
+    setAllPalaceLociReady,
     addPersonFaceCard,
     updatePersonFaceCard,
     deletePersonFaceCard,
     resetPersonFaceCards,
+    togglePersonReady,
+    setAllPeopleReady,
     addAbstractShape,
     updateAbstractShape,
     deleteAbstractShape,
