@@ -64,6 +64,7 @@ export default function App() {
     isAnalyzingFeedback,
     loginWithGoogle,
     logout,
+    syncAllToFirestore,
     earnPoints,
     unlockBadge,
     completeDailyChallenge,
@@ -146,6 +147,7 @@ export default function App() {
         onLogout={logout}
         onResetDefaults={resetToDefaults}
         onOpenSearch={() => setIsSearchOpen(true)}
+        onSyncCloud={syncAllToFirestore}
       />
 
       {/* Main Content Area */}

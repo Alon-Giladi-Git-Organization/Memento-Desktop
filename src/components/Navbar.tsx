@@ -14,6 +14,7 @@ import {
   LogOut,
   RotateCcw,
   Search,
+  Cloud,
 } from 'lucide-react';
 import { UserProfileData } from '../lib/firebase';
 import { User as FirebaseUser } from 'firebase/auth';
@@ -40,6 +41,7 @@ interface NavbarProps {
   onLogout: () => Promise<void>;
   onResetDefaults: () => void;
   onOpenSearch?: () => void;
+  onSyncCloud?: () => Promise<{ success: boolean; message: string }>;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -52,7 +54,17 @@ export const Navbar: React.FC<NavbarProps> = ({
   onLogout,
   onResetDefaults,
   onOpenSearch,
+  onSyncCloud,
 }) => {
+  const [syncStatus, setSyncStatus] = React.useState<string | null>(null);
+
+  const handleManualSync = async () => {
+    if (!onSyncCloud) return;
+    setSyncStatus('מסנכרן...');
+    const res = await onSyncCloud();
+    setSyncStatus(res.success ? '✓ סונכרן!' : 'שגיאה');
+    setTimeout(() => setSyncStatus(null), 3000);
+  };
   const tabs: { id: TabType; label: string; icon: React.ReactNode; color: string; badge?: string }[] = [
     {
       id: 'workouts',
@@ -187,6 +199,19 @@ export const Navbar: React.FC<NavbarProps> = ({
               <Zap className="w-4 h-4 fill-[#FFC800]" />
               <span>{profile.points} XP</span>
             </div>
+
+            {/* Cloud Sync Button */}
+            {currentUser && onSyncCloud && (
+              <button
+                onClick={handleManualSync}
+                title="סנכרן נתונים עכשיו ל-Firestore בענן"
+                className="flex items-center gap-1 bg-sky-50 hover:bg-sky-100 text-sky-700 border-2 border-sky-300 px-2.5 py-1.5 rounded-2xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
+              >
+                <Cloud className="w-3.5 h-3.5 text-sky-600" />
+                <span className="hidden md:inline">{syncStatus || 'סנכרון ענן'}</span>
+                {syncStatus && <span className="md:hidden">{syncStatus}</span>}
+              </button>
+            )}
 
             {/* Auth Button */}
             {currentUser ? (

@@ -47,6 +47,7 @@ import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import {
   collection,
   doc,
+  getDoc,
   setDoc,
   getDocs,
   deleteDoc,
@@ -360,6 +361,35 @@ export function useMemoryStore() {
             const userAssocs: PersonalContactAssociation[] = [];
             aSnap.forEach((doc) => userAssocs.push(doc.data() as PersonalContactAssociation));
             setPersonalAssociations(userAssocs);
+          }
+
+          // Fetch or initialize user custom data (Major 00-99, PAO, Pegs, Cards, Academic)
+          const customDataRef = doc(db, 'user_custom_data', user.uid);
+          const customSnap = await getDoc(customDataRef);
+          if (customSnap.exists()) {
+            const cd = customSnap.data();
+            if (cd.majorItems) setMajorItems(cd.majorItems);
+            if (cd.paoItems) setPaoItems(cd.paoItems);
+            if (cd.shapePegs) setShapePegs(cd.shapePegs);
+            if (cd.bodyPegs) setBodyPegs(cd.bodyPegs);
+            if (cd.peopleCards) setPeopleCards(cd.peopleCards);
+            if (cd.abstractShapes) setAbstractShapes(cd.abstractShapes);
+            if (cd.academicPoints) setAcademicPoints(cd.academicPoints);
+            if (cd.majorDigits) setMajorDigits(cd.majorDigits);
+          } else {
+            // First time: upload local memory database to Firestore
+            await setDoc(customDataRef, {
+              userId: user.uid,
+              majorItems,
+              paoItems,
+              shapePegs,
+              bodyPegs,
+              peopleCards,
+              abstractShapes,
+              academicPoints,
+              majorDigits,
+              updatedAt: Date.now(),
+            });
           }
 
           // Refresh leaderboard
@@ -1286,6 +1316,52 @@ export function useMemoryStore() {
     }
   };
 
+  const syncAllToFirestore = async (): Promise<{ success: boolean; message: string }> => {
+    if (!currentUser) {
+      return { success: false, message: 'עליך להתחבר עם חשבון Google כדי לסנכרן נתונים לענן' };
+    }
+    try {
+      // 1. Sync User Profile
+      await saveUserProfile(profile);
+
+      // 2. Sync Palaces
+      for (const p of palaces) {
+        await setDoc(doc(db, 'palaces', `${currentUser.uid}_${p.id}`), {
+          ...p,
+          userId: currentUser.uid,
+          updatedAt: Date.now(),
+        });
+      }
+
+      // 3. Sync Personal Associations
+      for (const a of personalAssociations) {
+        await setDoc(doc(db, 'personal_associations', `${currentUser.uid}_${a.id}`), {
+          ...a,
+          userId: currentUser.uid,
+        });
+      }
+
+      // 4. Sync Custom Memory Data (Major, PAO, Pegs, Cards, Academic)
+      await setDoc(doc(db, 'user_custom_data', currentUser.uid), {
+        userId: currentUser.uid,
+        majorItems,
+        paoItems,
+        shapePegs,
+        bodyPegs,
+        peopleCards,
+        abstractShapes,
+        academicPoints,
+        majorDigits,
+        updatedAt: Date.now(),
+      });
+
+      return { success: true, message: 'כל הנתונים, הארמונות והשלשות סונכרנו בהצלחה לענן Firestore!' };
+    } catch (err: any) {
+      console.error('Manual sync error:', err);
+      return { success: false, message: `שגיאה בסנכרון: ${err?.message || err}` };
+    }
+  };
+
   return {
     // Auth & Profile
     currentUser,
@@ -1297,6 +1373,7 @@ export function useMemoryStore() {
     isAnalyzingFeedback,
     loginWithGoogle,
     logout,
+    syncAllToFirestore,
     earnPoints,
     unlockBadge,
     completeDailyChallenge,

@@ -49,5 +49,9 @@ service cloud.firestore {
     match /ai_feedbacks/{feedbackId} {
       allow read, write: if isAuthenticated() && (request.resource.data.userId == request.auth.uid || resource.data.userId == request.auth.uid);
     }
+
+    match /user_custom_data/{userId} {
+      allow read, write: if isOwner(userId);
+    }
   }
 }

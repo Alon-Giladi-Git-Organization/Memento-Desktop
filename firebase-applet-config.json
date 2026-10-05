@@ -1,12 +1,12 @@
 {
   "projectId": "mementoapp-510709",
-  "appId": "1:830180077970:web:07b96e1f86034c6f56514b",
+  "appId": "1:830180077970:web:828eb8f334b19de256514b",
   "apiKey": "AIzaSyD1RTJWePVll2Rfcbuw9fAFnOJUcKRanXE",
   "authDomain": "mementoapp-510709.firebaseapp.com",
-  "firestoreDatabaseId": "(default)",
+  "firestoreDatabaseId": "ai-studio-mementodesktop-1493cf39-b257-430d-83ea-58bf9f2b227f",
   "storageBucket": "mementoapp-510709.firebasestorage.app",
   "messagingSenderId": "830180077970",
-  "measurementId": "G-00EF700E68",
-  "oAuthClientId": "",
+  "measurementId": "",
+  "oAuthClientId": "830180077970-a7i7q8eeooi0f5r6pd4smv4sc6eji1bs.apps.googleusercontent.com",
   "recaptchaSiteKey": ""
 }
