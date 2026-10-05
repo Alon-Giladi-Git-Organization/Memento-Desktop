@@ -21,24 +21,18 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 
+import firebaseAppletConfig from '../../firebase-applet-config.json';
+
 // Client Firebase configuration from provisioning
-export const firebaseConfig = {
-  projectId: "alonttsgemini",
-  appId: "1:9826139997:web:73807cd49de5303f99f2b4",
-  apiKey: "AIzaSyDQl8UvIv7uhwl4iQjWNuGOwsqaJa80B5A",
-  authDomain: "alonttsgemini.firebaseapp.com",
-  firestoreDatabaseId: "ai-studio-170d8d0e-9782-4dda-8851-a50875919447",
-  storageBucket: "alonttsgemini.firebasestorage.app",
-  messagingSenderId: "9826139997",
-  measurementId: "",
-  oAuthClientId: "9826139997-duka51529ghj7s0frd5pc67abf235a3p.apps.googleusercontent.com",
-  recaptchaSiteKey: ""
-};
+export const firebaseConfig = firebaseAppletConfig;
 
 // Initialize Firebase
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db =
+  firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)'
+    ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+    : getFirestore(app);
 
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
