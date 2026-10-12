@@ -15,6 +15,9 @@ import {
   RotateCcw,
   Search,
   Cloud,
+  CloudOff,
+  RefreshCw,
+  Database,
 } from 'lucide-react';
 import { UserProfileData } from '../lib/firebase';
 import { User as FirebaseUser } from 'firebase/auth';
@@ -37,11 +40,16 @@ interface NavbarProps {
   averageScore: number;
   profile: UserProfileData;
   currentUser: FirebaseUser | null;
+  isOnline?: boolean;
+  isSyncing?: boolean;
+  lastSyncTime?: number | null;
+  syncStatusMessage?: string | null;
   onLogin: () => Promise<void>;
   onLogout: () => Promise<void>;
   onResetDefaults: () => void;
   onOpenSearch?: () => void;
   onSyncCloud?: () => Promise<{ success: boolean; message: string }>;
+  onSeedCloudTables?: () => Promise<{ success: boolean; message: string }>;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -50,20 +58,38 @@ export const Navbar: React.FC<NavbarProps> = ({
   savedAssociationsCount,
   profile,
   currentUser,
+  isOnline = true,
+  isSyncing = false,
+  lastSyncTime,
+  syncStatusMessage,
   onLogin,
   onLogout,
   onResetDefaults,
   onOpenSearch,
   onSyncCloud,
+  onSeedCloudTables,
 }) => {
   const [syncStatus, setSyncStatus] = React.useState<string | null>(null);
+  const [showSyncMenu, setShowSyncMenu] = React.useState<boolean>(false);
 
   const handleManualSync = async () => {
-    if (!onSyncCloud) return;
+    if (!onSyncCloud || isSyncing) return;
     setSyncStatus('מסנכרן...');
     const res = await onSyncCloud();
     setSyncStatus(res.success ? '✓ סונכרן!' : 'שגיאה');
-    setTimeout(() => setSyncStatus(null), 3000);
+    setTimeout(() => setSyncStatus(null), 3500);
+  };
+
+  const handleSeedTables = async () => {
+    if (!onSeedCloudTables || isSyncing) return;
+    if (!window.confirm('האם לאכלס כעת את כל הטבלאות בענן Firestore (100 מספרי מז\'ור, PAO, מתלי גוף וכו\') עבור Rowy?')) {
+      return;
+    }
+    setSyncStatus('מאכלס ענן...');
+    setShowSyncMenu(false);
+    const res = await onSeedCloudTables();
+    setSyncStatus(res.success ? '✓ טבלאות אותחלו!' : 'שגיאה');
+    setTimeout(() => setSyncStatus(null), 4000);
   };
   const tabs: { id: TabType; label: string; icon: React.ReactNode; color: string; badge?: string }[] = [
     {
@@ -200,18 +226,95 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span>{profile.points} XP</span>
             </div>
 
-            {/* Cloud Sync Button */}
-            {currentUser && onSyncCloud && (
-              <button
-                onClick={handleManualSync}
-                title="סנכרן נתונים עכשיו ל-Firestore בענן"
-                className="flex items-center gap-1 bg-sky-50 hover:bg-sky-100 text-sky-700 border-2 border-sky-300 px-2.5 py-1.5 rounded-2xl text-xs font-bold transition-all cursor-pointer shadow-2xs"
-              >
-                <Cloud className="w-3.5 h-3.5 text-sky-600" />
-                <span className="hidden md:inline">{syncStatus || 'סנכרון ענן'}</span>
-                {syncStatus && <span className="md:hidden">{syncStatus}</span>}
-              </button>
-            )}
+            {/* Network & Cloud Sync Hub */}
+            <div className="relative">
+              <div className="flex items-center gap-1.5">
+                {/* Online / Offline badge */}
+                {!isOnline ? (
+                  <div
+                    title="מצב אופליין: כל השינויים נשמרים במכשיר ויסונכרנו אוטומטית כשתתחבר לאינטרנט"
+                    className="flex items-center gap-1.5 bg-amber-100 border-2 border-amber-300 text-amber-900 px-2.5 py-1.5 rounded-2xl text-[11px] font-black shadow-xs"
+                  >
+                    <CloudOff className="w-3.5 h-3.5 text-amber-700 animate-pulse" />
+                    <span className="hidden sm:inline">אופליין (נשמר מקומית)</span>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setShowSyncMenu(!showSyncMenu)}
+                    title={syncStatusMessage || 'ניהול סנכרון ענן ו-Rowy'}
+                    className={`flex items-center gap-1.5 border-2 px-2.5 py-1.5 rounded-2xl text-xs font-bold transition-all cursor-pointer shadow-xs ${
+                      isSyncing
+                        ? 'bg-amber-50 border-amber-300 text-amber-800'
+                        : 'bg-sky-50 hover:bg-sky-100 border-sky-300 text-sky-800'
+                    }`}
+                  >
+                    {isSyncing ? (
+                      <RefreshCw className="w-3.5 h-3.5 text-amber-600 animate-spin" />
+                    ) : (
+                      <Cloud className="w-3.5 h-3.5 text-sky-600" />
+                    )}
+                    <span className="hidden md:inline">
+                      {syncStatus || (isSyncing ? 'מסנכרן...' : 'ענן מסונכרן')}
+                    </span>
+                    {syncStatus && <span className="md:hidden">{syncStatus}</span>}
+                  </button>
+                )}
+              </div>
+
+              {/* Sync Actions Dropdown */}
+              {showSyncMenu && isOnline && (
+                <div
+                  className="absolute left-0 mt-2 w-72 bg-white rounded-2xl border-2 border-slate-200 shadow-xl p-3 z-50 animate-in fade-in zoom-in-95"
+                  onMouseLeave={() => setShowSyncMenu(false)}
+                >
+                  <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                    <div className="flex items-center gap-1.5 text-xs font-black text-slate-800">
+                      <Cloud className="w-4 h-4 text-sky-600" />
+                      <span>סנכרון ענן ו-Rowy</span>
+                    </div>
+                    <span className="inline-block w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                  </div>
+
+                  <p className="text-[11px] text-slate-500 mb-3 leading-relaxed">
+                    המערכת פועלת בארכיטקטורת Offline-First. כל שינוי נשמר במכשיר ומסתנכרן אוטומטית לשני הכיוונים מול Firestore.
+                  </p>
+
+                  <div className="space-y-1.5">
+                    <button
+                      onClick={handleManualSync}
+                      disabled={isSyncing}
+                      className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-800 font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      <div className="flex items-center gap-2">
+                        <RefreshCw className={`w-3.5 h-3.5 text-sky-600 ${isSyncing ? 'animate-spin' : ''}`} />
+                        <span>סנכרן דו-כיווני עכשיו</span>
+                      </div>
+                      <span className="text-[10px] text-sky-600 font-mono">ענן ↔ מכשיר</span>
+                    </button>
+
+                    {onSeedCloudTables && (
+                      <button
+                        onClick={handleSeedTables}
+                        disabled={isSyncing}
+                        className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs transition-colors cursor-pointer disabled:opacity-50"
+                      >
+                        <div className="flex items-center gap-2">
+                          <Database className="w-3.5 h-3.5 text-emerald-600" />
+                          <span>אתחל טבלאות ענן (ל-Rowy)</span>
+                        </div>
+                        <span className="text-[10px] text-emerald-600 font-mono">100+ שורות</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {lastSyncTime && (
+                    <div className="mt-2.5 pt-2 border-t border-slate-100 text-[10px] text-slate-400 text-center font-medium">
+                      סנכרון אחרון: {new Date(lastSyncTime).toLocaleTimeString('he-IL')}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* Auth Button */}
             {currentUser ? (

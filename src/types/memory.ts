@@ -1,4 +1,5 @@
 export interface MajorItem {
+  id?: string;
   number: number; // 0 - 99 or 0 - 9
   numberStr: string; // "00" - "99" or "0" - "9"
   consonants: string; // e.g. "ס/ז + מ"
@@ -9,9 +10,11 @@ export interface MajorItem {
   userImageHint?: string; // personal kinetic hint override
   customNotes?: string;
   is_ready_for_practice?: boolean; // Flag: ready for testing & practice
+  updatedAt?: number;
 }
 
 export interface PAOItem {
+  id?: string;
   number: number;
   numberStr: string; // "00" - "99"
   person: string; // Person
@@ -21,9 +24,11 @@ export interface PAOItem {
   userAction?: string;
   userObject?: string;
   is_ready_for_practice?: boolean; // Flag: ready for testing & practice
+  updatedAt?: number;
 }
 
 export interface PegShapeItem {
+  id?: string;
   number: number;
   shapeName: string;
   userShapeName?: string;
@@ -33,10 +38,12 @@ export interface PegShapeItem {
   kineticTip: string;
   userKineticTip?: string;
   is_ready_for_practice?: boolean;
+  updatedAt?: number;
 }
 
 export interface BodyPegItem {
-  index: number; // 1 - 10
+  id?: string;
+  index: number; // 1 - 10 or 1-20
   bodyPartHebrew: string;
   userBodyPart?: string;
   defaultObject: string;
@@ -44,6 +51,7 @@ export interface BodyPegItem {
   kineticTip: string;
   userKineticTip?: string;
   is_ready_for_practice?: boolean;
+  updatedAt?: number;
 }
 
 export interface PalaceLocus {
@@ -56,6 +64,7 @@ export interface PalaceLocus {
   mnemonicScene?: string;
   lastReviewed?: number;
   is_ready_for_practice?: boolean; // Flag: locus is memorized and ready for walkthrough recall
+  updatedAt?: number;
 }
 
 export interface MemoryPalace {
@@ -67,6 +76,7 @@ export interface MemoryPalace {
   loci: PalaceLocus[];
   isPermanent: boolean;
   is_ready_for_practice?: boolean;
+  updatedAt?: number;
 }
 
 export interface PersonFaceCard {
@@ -80,6 +90,7 @@ export interface PersonFaceCard {
   mnemonicScene: string; // e.g. "מונית צהובה דוהרת ומתנגשת ישירות באף הנשרי שלה"
   userCustomScene?: string;
   is_ready_for_practice?: boolean; // Flag: ready for face recognition quiz
+  updatedAt?: number;
 }
 
 export interface AbstractShapeCard {
@@ -91,6 +102,7 @@ export interface AbstractShapeCard {
   pareidoliaHint: string; // "אוזן שפן הפוכה", "מקור נשר", "מפתח שבור"
   mnemonicCode: string;
   is_ready_for_practice?: boolean;
+  updatedAt?: number;
 }
 
 export interface PersonalContactAssociation {
@@ -104,6 +116,7 @@ export interface PersonalContactAssociation {
   successCount: number;
   failCount: number;
   is_ready_for_practice?: boolean;
+  updatedAt?: number;
 }
 
 export interface AcademicKeyPoint {
@@ -116,6 +129,7 @@ export interface AcademicKeyPoint {
   palaceLocusInfo: string;
   mnemonicScene: string;
   is_ready_for_practice?: boolean;
+  updatedAt?: number;
 }
 
 export interface TestResult {

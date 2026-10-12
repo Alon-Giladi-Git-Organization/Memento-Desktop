@@ -19,12 +19,39 @@ import {
   orderBy,
   limit,
   serverTimestamp,
+  writeBatch,
+  deleteDoc,
+  updateDoc,
+  onSnapshot,
 } from 'firebase/firestore';
 
+export {
+  doc,
+  getDoc,
+  setDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  limit,
+  serverTimestamp,
+  writeBatch,
+  deleteDoc,
+  updateDoc,
+  onSnapshot,
+  onAuthStateChanged,
+};
+export type { FirebaseUser };
+
+import customFirebaseConfig from './firebaseConfig';
 import firebaseAppletConfig from '../../firebase-applet-config.json';
 
-// Client Firebase configuration from provisioning
-export const firebaseConfig = firebaseAppletConfig;
+// Use explicit configuration with fallback
+export const firebaseConfig = {
+  ...firebaseAppletConfig,
+  ...customFirebaseConfig,
+};
 
 // Initialize Firebase
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
@@ -98,8 +125,13 @@ export const getOrInitUserProfile = async (user: FirebaseUser): Promise<UserProf
 };
 
 export const saveUserProfile = async (profile: UserProfileData) => {
-  const userRef = doc(db, 'users', profile.uid);
-  await setDoc(userRef, { ...profile, updatedAt: serverTimestamp() }, { merge: true });
+  const targetUid = (auth.currentUser && auth.currentUser.uid) || (profile.uid !== 'offline-local-user' ? profile.uid : null);
+  if (!targetUid) {
+    console.warn('saveUserProfile skipped: No authenticated user.');
+    return;
+  }
+  const userRef = doc(db, 'users', targetUid);
+  await setDoc(userRef, { ...profile, uid: targetUid, updatedAt: serverTimestamp() }, { merge: true });
 };
 
 export const fetchLeaderboard = async (limitCount = 10): Promise<UserProfileData[]> => {

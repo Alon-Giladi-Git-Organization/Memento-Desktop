@@ -90,13 +90,99 @@
         "memoryTip": { "type": "string" },
         "timestamp": { "type": "number" }
       },
-      "required": ["id", "userId", "score", "isCorrect"]
+      "required": ["id", "score", "isCorrect"]
+    },
+    "MajorItem": {
+      "title": "Major Item 00-99",
+      "description": "Hebrew phonetic major system word and mental picture for a number",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "number": { "type": "number" },
+        "numberStr": { "type": "string" },
+        "consonants": { "type": "string" },
+        "defaultWord": { "type": "string" },
+        "userWord": { "type": "string" },
+        "imageHint": { "type": "string" },
+        "userImageHint": { "type": "string" },
+        "is_ready_for_practice": { "type": "boolean" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["number", "numberStr", "consonants", "defaultWord"]
+    },
+    "PAOItem": {
+      "title": "PAO Item",
+      "description": "Person Action Object triple for 00-99",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "number": { "type": "number" },
+        "numberStr": { "type": "string" },
+        "person": { "type": "string" },
+        "action": { "type": "string" },
+        "object": { "type": "string" },
+        "userPerson": { "type": "string" },
+        "userAction": { "type": "string" },
+        "userObject": { "type": "string" },
+        "is_ready_for_practice": { "type": "boolean" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["number", "numberStr", "person", "action", "object"]
+    },
+    "BodyPegItem": {
+      "title": "Body Peg Item",
+      "description": "Anatomical anchor peg 1-20",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "index": { "type": "number" },
+        "bodyPartHebrew": { "type": "string" },
+        "userBodyPart": { "type": "string" },
+        "defaultObject": { "type": "string" },
+        "userObject": { "type": "string" },
+        "kineticTip": { "type": "string" },
+        "is_ready_for_practice": { "type": "boolean" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["index", "bodyPartHebrew", "defaultObject"]
+    },
+    "ShapePegItem": {
+      "title": "Shape Peg Item",
+      "description": "Number shape visual peg 0-9",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "number": { "type": "number" },
+        "shapeName": { "type": "string" },
+        "userShapeName": { "type": "string" },
+        "visualMetaphor": { "type": "string" },
+        "defaultObject": { "type": "string" },
+        "is_ready_for_practice": { "type": "boolean" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["number", "shapeName", "defaultObject"]
     }
   },
   "firestore": {
     "/users/{userId}": {
       "schema": "User",
       "description": "User profile with points, badges and streak"
+    },
+    "/major_items/{itemId}": {
+      "schema": "MajorItem",
+      "description": "Hebrew major system numbers 00 to 99"
+    },
+    "/pao_items/{itemId}": {
+      "schema": "PAOItem",
+      "description": "PAO triples 00 to 99"
+    },
+    "/body_pegs/{pegId}": {
+      "schema": "BodyPegItem",
+      "description": "Body peg anchors"
+    },
+    "/shape_pegs/{pegId}": {
+      "schema": "ShapePegItem",
+      "description": "Shape peg numbers"
     },
     "/palaces/{palaceId}": {
       "schema": "MemoryPalace",

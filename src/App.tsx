@@ -56,6 +56,12 @@ export default function App() {
   };
 
   const {
+    isOnline,
+    isSyncing,
+    lastSyncTime,
+    syncStatusMessage,
+    seedCloudTables,
+    syncAllToFirestore,
     currentUser,
     profile,
     leaderboard,
@@ -64,7 +70,6 @@ export default function App() {
     isAnalyzingFeedback,
     loginWithGoogle,
     logout,
-    syncAllToFirestore,
     earnPoints,
     unlockBadge,
     completeDailyChallenge,
@@ -143,11 +148,16 @@ export default function App() {
         averageScore={averageScore}
         profile={profile}
         currentUser={currentUser}
+        isOnline={isOnline}
+        isSyncing={isSyncing}
+        lastSyncTime={lastSyncTime}
+        syncStatusMessage={syncStatusMessage}
         onLogin={loginWithGoogle}
         onLogout={logout}
         onResetDefaults={resetToDefaults}
         onOpenSearch={() => setIsSearchOpen(true)}
         onSyncCloud={syncAllToFirestore}
+        onSeedCloudTables={seedCloudTables}
       />
 
       {/* Main Content Area */}

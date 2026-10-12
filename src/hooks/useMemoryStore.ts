@@ -42,9 +42,6 @@ import {
   saveUserProfile,
   UserProfileData,
   fetchLeaderboard,
-} from '../lib/firebase';
-import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
-import {
   collection,
   doc,
   getDoc,
@@ -55,7 +52,14 @@ import {
   where,
   orderBy,
   serverTimestamp,
-} from 'firebase/firestore';
+  onAuthStateChanged,
+  FirebaseUser,
+} from '../lib/firebase';
+import {
+  isNetworkOnline,
+  performFullBidirectionalSync,
+  seedAllDefaultsToFirestore,
+} from '../lib/cloudDbSync';
 
 const STORAGE_KEYS = {
   MAJOR_DIGITS: 'mem_major_digits_0_9_v3',
@@ -73,6 +77,7 @@ const STORAGE_KEYS = {
   FEEDBACK: 'mem_ai_feedbacks',
   PROFILE: 'mem_offline_profile',
   DAILY_CHALLENGE: 'mem_daily_challenge',
+  LAST_SYNC: 'mem_last_cloud_sync_v1',
 };
 
 const DEFAULT_OFFLINE_PROFILE: UserProfileData = {
@@ -93,6 +98,19 @@ export function useMemoryStore() {
   // Auth state
   const [currentUser, setCurrentUser] = useState<FirebaseUser | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(true);
+
+  // Network & Sync State (Local-first & Cloud Sync)
+  const [isOnline, setIsOnline] = useState<boolean>(() => isNetworkOnline());
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [lastSyncTime, setLastSyncTime] = useState<number | null>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.LAST_SYNC);
+      return saved ? Number(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [syncStatusMessage, setSyncStatusMessage] = useState<string | null>(null);
 
   // User Profile & Gamification
   const [profile, setProfile] = useState<UserProfileData>(() => {
@@ -323,6 +341,39 @@ export function useMemoryStore() {
     localStorage.setItem(STORAGE_KEYS.MENTOR_CHAT, JSON.stringify(chatMessages));
   }, [chatMessages]);
 
+  // Network State Listener (Offline / Online detection)
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      setSyncStatusMessage('חיבור לאינטרנט זוהה - מבצע סנכרון דו-כיווני...');
+      syncAllToFirestore(false);
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      setSyncStatusMessage('מצב אופליין: עובד ללא אינטרנט. כל הנתונים נשמרים במכשיר.');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    // Initial background sync check on startup if online
+    if (isNetworkOnline()) {
+      const timer = setTimeout(() => {
+        syncAllToFirestore(false);
+      }, 1200);
+      return () => {
+        clearTimeout(timer);
+        window.removeEventListener('online', handleOnline);
+        window.removeEventListener('offline', handleOffline);
+      };
+    }
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
   // Auth Listener and Firestore Sync
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -333,69 +384,11 @@ export function useMemoryStore() {
         try {
           const userProf = await getOrInitUserProfile(user);
           setProfile(userProf);
-
-          // Fetch palaces for user from Firestore
-          const palacesCol = collection(db, 'palaces');
-          const pq = query(palacesCol, where('userId', '==', user.uid));
-          const pSnap = await getDocs(pq);
-          if (!pSnap.empty) {
-            const userPalaces: MemoryPalace[] = [];
-            pSnap.forEach((doc) => userPalaces.push(doc.data() as MemoryPalace));
-            setPalaces(userPalaces);
-          } else {
-            // First time: sync default palaces to Firestore for this user
-            DEFAULT_PALACES.forEach(async (dp) => {
-              await setDoc(doc(db, 'palaces', `${user.uid}_${dp.id}`), {
-                ...dp,
-                userId: user.uid,
-                createdAt: Date.now(),
-              });
-            });
-          }
-
-          // Fetch personal associations for user
-          const assocCol = collection(db, 'personal_associations');
-          const aq = query(assocCol, where('userId', '==', user.uid));
-          const aSnap = await getDocs(aq);
-          if (!aSnap.empty) {
-            const userAssocs: PersonalContactAssociation[] = [];
-            aSnap.forEach((doc) => userAssocs.push(doc.data() as PersonalContactAssociation));
-            setPersonalAssociations(userAssocs);
-          }
-
-          // Fetch or initialize user custom data (Major 00-99, PAO, Pegs, Cards, Academic)
-          const customDataRef = doc(db, 'user_custom_data', user.uid);
-          const customSnap = await getDoc(customDataRef);
-          if (customSnap.exists()) {
-            const cd = customSnap.data();
-            if (cd.majorItems) setMajorItems(cd.majorItems);
-            if (cd.paoItems) setPaoItems(cd.paoItems);
-            if (cd.shapePegs) setShapePegs(cd.shapePegs);
-            if (cd.bodyPegs) setBodyPegs(cd.bodyPegs);
-            if (cd.peopleCards) setPeopleCards(cd.peopleCards);
-            if (cd.abstractShapes) setAbstractShapes(cd.abstractShapes);
-            if (cd.academicPoints) setAcademicPoints(cd.academicPoints);
-            if (cd.majorDigits) setMajorDigits(cd.majorDigits);
-          } else {
-            // First time: upload local memory database to Firestore
-            await setDoc(customDataRef, {
-              userId: user.uid,
-              majorItems,
-              paoItems,
-              shapePegs,
-              bodyPegs,
-              peopleCards,
-              abstractShapes,
-              academicPoints,
-              majorDigits,
-              updatedAt: Date.now(),
-            });
-          }
-
-          // Refresh leaderboard
+          // Sync changes
+          syncAllToFirestore(false);
           loadLeaderboard();
         } catch (err) {
-          console.error('Error loading user Firestore data:', err);
+          console.error('Error in auth user profile initialization:', err);
         }
       }
     });
@@ -534,33 +527,25 @@ export function useMemoryStore() {
       category,
       isPermanent: true,
       loci: [],
+      updatedAt: Date.now(),
     };
 
     setPalaces((prev) => [...prev, newPalace]);
     earnPoints(30, 'יצירת ארמון זיכרון');
 
-    if (currentUser) {
-      try {
-        await setDoc(doc(db, 'palaces', `${currentUser.uid}_${palaceId}`), {
-          ...newPalace,
-          userId: currentUser.uid,
-          createdAt: Date.now(),
-        });
-      } catch (err) {
-        console.error('Error saving palace to Firestore:', err);
-      }
+    if (isNetworkOnline()) {
+      setDoc(doc(db, 'palaces', palaceId), {
+        ...newPalace,
+        userId: currentUser?.uid || null,
+      }, { merge: true }).catch(() => {});
     }
     return newPalace;
   };
 
   const deletePalace = async (palaceId: string) => {
     setPalaces((prev) => prev.filter((p) => p.id !== palaceId));
-    if (currentUser) {
-      try {
-        await deleteDoc(doc(db, 'palaces', `${currentUser.uid}_${palaceId}`));
-      } catch (e) {
-        console.error(e);
-      }
+    if (isNetworkOnline()) {
+      deleteDoc(doc(db, 'palaces', palaceId)).catch(() => {});
     }
   };
 
@@ -572,7 +557,7 @@ export function useMemoryStore() {
     storedContent?: string,
     mnemonicScene?: string
   ) => {
-    let updatedLociCount = 0;
+    const now = Date.now();
     setPalaces((prev) =>
       prev.map((palace) => {
         if (palace.id !== palaceId) return palace;
@@ -585,24 +570,24 @@ export function useMemoryStore() {
           positionDescription,
           storedContent,
           mnemonicScene,
+          updatedAt: now,
         };
         const nextLoci = [...palace.loci, newLocus];
-        updatedLociCount = nextLoci.length;
 
         // Check palace architect badge
         if (nextLoci.length >= 5) {
           unlockBadge('ארכיטקט ארמונות');
         }
 
-        const updatedPalace = { ...palace, loci: nextLoci };
+        const updatedPalace = { ...palace, loci: nextLoci, updatedAt: now };
 
         // Save to Firestore
-        if (currentUser) {
+        if (isNetworkOnline()) {
           setDoc(
-            doc(db, 'palaces', `${currentUser.uid}_${palaceId}`),
-            { ...updatedPalace, userId: currentUser.uid, updatedAt: Date.now() },
+            doc(db, 'palaces', palaceId),
+            { ...updatedPalace, userId: currentUser?.uid || null },
             { merge: true }
-          );
+          ).catch(() => {});
         }
 
         return updatedPalace;
@@ -613,20 +598,22 @@ export function useMemoryStore() {
   };
 
   const updatePalaceLocus = (palaceId: string, locusId: string, updates: any) => {
+    const now = Date.now();
     setPalaces((prev) =>
       prev.map((palace) => {
         if (palace.id !== palaceId) return palace;
         const updatedPalace = {
           ...palace,
-          loci: palace.loci.map((loc) => (loc.id === locusId ? { ...loc, ...updates } : loc)),
+          loci: palace.loci.map((loc) => (loc.id === locusId ? { ...loc, ...updates, updatedAt: now } : loc)),
+          updatedAt: now,
         };
 
-        if (currentUser) {
+        if (isNetworkOnline()) {
           setDoc(
-            doc(db, 'palaces', `${currentUser.uid}_${palaceId}`),
-            { ...updatedPalace, userId: currentUser.uid, updatedAt: Date.now() },
+            doc(db, 'palaces', palaceId),
+            { ...updatedPalace, userId: currentUser?.uid || null },
             { merge: true }
-          );
+          ).catch(() => {});
         }
 
         return updatedPalace;
@@ -635,6 +622,7 @@ export function useMemoryStore() {
   };
 
   const togglePalaceLocusReady = (palaceId: string, locusId: string, explicitState?: boolean) => {
+    const now = Date.now();
     setPalaces((prev) =>
       prev.map((palace) => {
         if (palace.id !== palaceId) return palace;
@@ -643,16 +631,17 @@ export function useMemoryStore() {
           loci: palace.loci.map((loc) => {
             if (loc.id !== locusId) return loc;
             const nextState = explicitState !== undefined ? explicitState : !loc.is_ready_for_practice;
-            return { ...loc, is_ready_for_practice: nextState };
+            return { ...loc, is_ready_for_practice: nextState, updatedAt: now };
           }),
+          updatedAt: now,
         };
 
-        if (currentUser) {
+        if (isNetworkOnline()) {
           setDoc(
-            doc(db, 'palaces', `${currentUser.uid}_${palaceId}`),
-            { ...updatedPalace, userId: currentUser.uid, updatedAt: Date.now() },
+            doc(db, 'palaces', palaceId),
+            { ...updatedPalace, userId: currentUser?.uid || null },
             { merge: true }
-          );
+          ).catch(() => {});
         }
 
         return updatedPalace;
@@ -661,20 +650,22 @@ export function useMemoryStore() {
   };
 
   const setAllPalaceLociReady = (palaceId: string, ready: boolean) => {
+    const now = Date.now();
     setPalaces((prev) =>
       prev.map((palace) => {
         if (palace.id !== palaceId) return palace;
         const updatedPalace = {
           ...palace,
-          loci: palace.loci.map((loc) => ({ ...loc, is_ready_for_practice: ready })),
+          loci: palace.loci.map((loc) => ({ ...loc, is_ready_for_practice: ready, updatedAt: now })),
+          updatedAt: now,
         };
 
-        if (currentUser) {
+        if (isNetworkOnline()) {
           setDoc(
-            doc(db, 'palaces', `${currentUser.uid}_${palaceId}`),
-            { ...updatedPalace, userId: currentUser.uid, updatedAt: Date.now() },
+            doc(db, 'palaces', palaceId),
+            { ...updatedPalace, userId: currentUser?.uid || null },
             { merge: true }
-          );
+          ).catch(() => {});
         }
 
         return updatedPalace;
@@ -683,6 +674,7 @@ export function useMemoryStore() {
   };
 
   const deletePalaceLocus = (palaceId: string, locusId: string) => {
+    const now = Date.now();
     setPalaces((prev) =>
       prev.map((palace) => {
         if (palace.id !== palaceId) return palace;
@@ -690,14 +682,14 @@ export function useMemoryStore() {
           .filter((loc) => loc.id !== locusId)
           .map((loc, idx) => ({ ...loc, stepNumber: idx + 1 }));
 
-        const updatedPalace = { ...palace, loci: nextLoci };
+        const updatedPalace = { ...palace, loci: nextLoci, updatedAt: now };
 
-        if (currentUser) {
+        if (isNetworkOnline()) {
           setDoc(
-            doc(db, 'palaces', `${currentUser.uid}_${palaceId}`),
-            { ...updatedPalace, userId: currentUser.uid, updatedAt: Date.now() },
+            doc(db, 'palaces', palaceId),
+            { ...updatedPalace, userId: currentUser?.uid || null },
             { merge: true }
-          );
+          ).catch(() => {});
         }
 
         return updatedPalace;
@@ -713,13 +705,15 @@ export function useMemoryStore() {
     methodUsed: 'major' | 'pao' | 'palace' | 'pegs' | 'link'
   ) => {
     const id = `pca-${Date.now()}`;
+    const now = Date.now();
     const newItem: PersonalContactAssociation = {
       id,
       targetSubject,
       storedNumberOrFact,
       encodedMnemonic,
       methodUsed,
-      createdAt: Date.now(),
+      createdAt: now,
+      updatedAt: now,
       successCount: 0,
       failCount: 0,
     };
@@ -733,34 +727,37 @@ export function useMemoryStore() {
 
     earnPoints(25, 'קידוד אסוציאציה אישית');
 
-    if (currentUser) {
-      try {
-        await setDoc(doc(db, 'personal_associations', `${currentUser.uid}_${id}`), {
-          ...newItem,
-          userId: currentUser.uid,
-        });
-      } catch (err) {
-        console.error('Error saving association to Firestore:', err);
-      }
+    if (isNetworkOnline()) {
+      setDoc(doc(db, 'personal_associations', id), {
+        ...newItem,
+        userId: currentUser?.uid || null,
+      }, { merge: true }).catch(() => {});
     }
     return newItem;
   };
 
   const deletePersonalAssociation = async (id: string) => {
     setPersonalAssociations((prev) => prev.filter((item) => item.id !== id));
-    if (currentUser) {
-      try {
-        await deleteDoc(doc(db, 'personal_associations', `${currentUser.uid}_${id}`));
-      } catch (err) {
-        console.error(err);
-      }
+    if (isNetworkOnline()) {
+      deleteDoc(doc(db, 'personal_associations', id)).catch(() => {});
     }
   };
 
   const updatePersonalAssociation = (id: string, updates: Partial<PersonalContactAssociation>) => {
+    const now = Date.now();
+    let updatedItem: PersonalContactAssociation | null = null;
     setPersonalAssociations((prev) =>
-      prev.map((item) => (item.id === id ? { ...item, ...updates } : item))
+      prev.map((item) => {
+        if (item.id === id) {
+          updatedItem = { ...item, ...updates, updatedAt: now };
+          return updatedItem;
+        }
+        return item;
+      })
     );
+    if (updatedItem && isNetworkOnline()) {
+      setDoc(doc(db, 'personal_associations', id), updatedItem, { merge: true }).catch(() => {});
+    }
   };
 
   // Test Results
@@ -865,28 +862,41 @@ export function useMemoryStore() {
     defaultWord: string,
     imageHint: string
   ) => {
+    const now = Date.now();
+    let updatedItem: MajorItem | null = null;
     setMajorDigits((prev) =>
-      prev.map((d) =>
-        d.number === digit
-          ? {
-              ...d,
-              consonants,
-              userConsonants: consonants,
-              defaultWord,
-              userWord: defaultWord,
-              imageHint,
-              userImageHint: imageHint,
-            }
-          : d
-      )
+      prev.map((d) => {
+        if (d.number === digit) {
+          updatedItem = {
+            ...d,
+            consonants,
+            userConsonants: consonants,
+            defaultWord,
+            userWord: defaultWord,
+            imageHint,
+            userImageHint: imageHint,
+            updatedAt: now,
+          };
+          return updatedItem;
+        }
+        return d;
+      })
     );
     earnPoints(15, `התאמת ספרת יסוד ${digit} ועיצוריה`);
+    if (updatedItem && isNetworkOnline()) {
+      setDoc(doc(db, 'major_digits', String(digit)), updatedItem, { merge: true }).catch(() => {});
+    }
   };
 
   const resetMajorDigit = (digit: number) => {
     const original = DEFAULT_MAJOR_DIGITS.find((d) => d.number === digit);
     if (!original) return;
-    setMajorDigits((prev) => prev.map((d) => (d.number === digit ? { ...original } : d)));
+    const now = Date.now();
+    const updated = { ...original, updatedAt: now };
+    setMajorDigits((prev) => prev.map((d) => (d.number === digit ? updated : d)));
+    if (isNetworkOnline()) {
+      setDoc(doc(db, 'major_digits', String(digit)), updated, { merge: true }).catch(() => {});
+    }
   };
 
   const recalculateMajor00_99FromDigits = (customDigits?: MajorItem[]) => {
@@ -989,29 +999,49 @@ export function useMemoryStore() {
       is_ready_for_practice?: boolean;
     }
   ) => {
+    const now = Date.now();
+    let updatedItem: MajorItem | null = null;
     setMajorItems((prev) =>
-      prev.map((item) => (item.number === number ? { ...item, ...updates } : item))
+      prev.map((item) => {
+        if (item.number === number) {
+          updatedItem = { ...item, ...updates, updatedAt: now };
+          return updatedItem;
+        }
+        return item;
+      })
     );
     if (updates.userWord || updates.userImageHint) {
       earnPoints(10, 'התאמת אסוציאציית Major אישית');
     }
+    if (updatedItem && isNetworkOnline()) {
+      const docId = String(number).padStart(2, '0');
+      setDoc(doc(db, 'major_items', docId), updatedItem, { merge: true }).catch(() => {});
+    }
   };
 
   const toggleMajorReady = (number: number, explicitState?: boolean) => {
+    const now = Date.now();
+    let updatedItem: MajorItem | null = null;
     setMajorItems((prev) =>
       prev.map((item) => {
         if (item.number !== number) return item;
         const nextState = explicitState !== undefined ? explicitState : !item.is_ready_for_practice;
-        return { ...item, is_ready_for_practice: nextState };
+        updatedItem = { ...item, is_ready_for_practice: nextState, updatedAt: now };
+        return updatedItem;
       })
     );
+    if (updatedItem && isNetworkOnline()) {
+      const docId = String(number).padStart(2, '0');
+      setDoc(doc(db, 'major_items', docId), updatedItem, { merge: true }).catch(() => {});
+    }
   };
 
   const setAllMajorReady = (ready: boolean, numbers?: number[]) => {
+    const now = Date.now();
     setMajorItems((prev) =>
       prev.map((item) => {
         if (!numbers || numbers.includes(item.number)) {
-          return { ...item, is_ready_for_practice: ready };
+          return { ...item, is_ready_for_practice: ready, updatedAt: now };
         }
         return item;
       })
@@ -1021,45 +1051,69 @@ export function useMemoryStore() {
   const resetMajorItem = (number: number) => {
     const original = DEFAULT_MAJOR_00_99.find((item) => item.number === number);
     if (!original) return;
-    setMajorItems((prev) => prev.map((item) => (item.number === number ? { ...original } : item)));
+    const now = Date.now();
+    const updated = { ...original, updatedAt: now };
+    setMajorItems((prev) => prev.map((item) => (item.number === number ? updated : item)));
+    if (isNetworkOnline()) {
+      const docId = String(number).padStart(2, '0');
+      setDoc(doc(db, 'major_items', docId), updated, { merge: true }).catch(() => {});
+    }
   };
 
   const updatePAOItem = (
     number: number,
     updates: { userPerson?: string; userAction?: string; userObject?: string; is_ready_for_practice?: boolean }
   ) => {
+    const now = Date.now();
+    let updatedItem: PAOItem | null = null;
     setPaoItems((prev) => {
       const exists = prev.some((p) => p.number === number);
       if (exists) {
-        return prev.map((p) => (p.number === number ? { ...p, ...updates } : p));
+        return prev.map((p) => {
+          if (p.number === number) {
+            updatedItem = { ...p, ...updates, updatedAt: now };
+            return updatedItem;
+          }
+          return p;
+        });
       } else {
         const numStr = number < 10 ? `0${number}` : `${number}`;
-        return [
-          ...prev,
-          {
-            number,
-            numberStr: numStr,
-            person: updates.userPerson || '',
-            action: updates.userAction || '',
-            object: updates.userObject || '',
-            ...updates,
-          },
-        ].sort((a, b) => a.number - b.number);
+        updatedItem = {
+          number,
+          numberStr: numStr,
+          person: updates.userPerson || '',
+          action: updates.userAction || '',
+          object: updates.userObject || '',
+          ...updates,
+          updatedAt: now,
+        };
+        return [...prev, updatedItem].sort((a, b) => a.number - b.number);
       }
     });
     if (updates.userPerson || updates.userAction || updates.userObject) {
       earnPoints(15, 'התאמת שלשת PAO אישית');
     }
+    if (updatedItem && isNetworkOnline()) {
+      const docId = String(number).padStart(2, '0');
+      setDoc(doc(db, 'pao_items', docId), updatedItem, { merge: true }).catch(() => {});
+    }
   };
 
   const togglePAOReady = (number: number, explicitState?: boolean) => {
+    const now = Date.now();
+    let updatedItem: PAOItem | null = null;
     setPaoItems((prev) =>
       prev.map((item) => {
         if (item.number !== number) return item;
         const nextState = explicitState !== undefined ? explicitState : !item.is_ready_for_practice;
-        return { ...item, is_ready_for_practice: nextState };
+        updatedItem = { ...item, is_ready_for_practice: nextState, updatedAt: now };
+        return updatedItem;
       })
     );
+    if (updatedItem && isNetworkOnline()) {
+      const docId = String(number).padStart(2, '0');
+      setDoc(doc(db, 'pao_items', docId), updatedItem, { merge: true }).catch(() => {});
+    }
   };
 
   const setAllPAOReady = (ready: boolean, numbers?: number[]) => {
@@ -1083,32 +1137,64 @@ export function useMemoryStore() {
     index: number,
     updates: { userObject?: string; userBodyPart?: string; userKineticTip?: string }
   ) => {
+    const now = Date.now();
+    let updatedItem: BodyPegItem | null = null;
     setBodyPegs((prev) =>
-      prev.map((bp) => (bp.index === index ? { ...bp, ...updates } : bp))
+      prev.map((bp) => {
+        if (bp.index === index) {
+          updatedItem = { ...bp, ...updates, updatedAt: now };
+          return updatedItem;
+        }
+        return bp;
+      })
     );
     earnPoints(5, 'התאמת מתלה גוף אישי');
+    if (updatedItem && isNetworkOnline()) {
+      setDoc(doc(db, 'body_pegs', String(index)), updatedItem, { merge: true }).catch(() => {});
+    }
   };
 
   const resetBodyPeg = (index: number) => {
     const original = DEFAULT_BODY_PEGS.find((p) => p.index === index);
     if (!original) return;
-    setBodyPegs((prev) => prev.map((bp) => (bp.index === index ? { ...original } : bp)));
+    const now = Date.now();
+    const updated = { ...original, updatedAt: now };
+    setBodyPegs((prev) => prev.map((bp) => (bp.index === index ? updated : bp)));
+    if (isNetworkOnline()) {
+      setDoc(doc(db, 'body_pegs', String(index)), updated, { merge: true }).catch(() => {});
+    }
   };
 
   const updateShapePeg = (
     number: number,
     updates: { userObject?: string; userShapeName?: string; userKineticTip?: string }
   ) => {
+    const now = Date.now();
+    let updatedItem: PegShapeItem | null = null;
     setShapePegs((prev) =>
-      prev.map((sp) => (sp.number === number ? { ...sp, ...updates } : sp))
+      prev.map((sp) => {
+        if (sp.number === number) {
+          updatedItem = { ...sp, ...updates, updatedAt: now };
+          return updatedItem;
+        }
+        return sp;
+      })
     );
     earnPoints(5, 'התאמת מתלה צורה אישי');
+    if (updatedItem && isNetworkOnline()) {
+      setDoc(doc(db, 'shape_pegs', String(number)), updatedItem, { merge: true }).catch(() => {});
+    }
   };
 
   const resetShapePeg = (number: number) => {
     const original = DEFAULT_NUMBER_SHAPE_PEGS.find((p) => p.number === number);
     if (!original) return;
-    setShapePegs((prev) => prev.map((sp) => (sp.number === number ? { ...original } : sp)));
+    const now = Date.now();
+    const updated = { ...original, updatedAt: now };
+    setShapePegs((prev) => prev.map((sp) => (sp.number === number ? updated : sp)));
+    if (isNetworkOnline()) {
+      setDoc(doc(db, 'shape_pegs', String(number)), updated, { merge: true }).catch(() => {});
+    }
   };
 
   const addMajorItem = (item: MajorItem) => {
@@ -1316,53 +1402,95 @@ export function useMemoryStore() {
     }
   };
 
-  const syncAllToFirestore = async (): Promise<{ success: boolean; message: string }> => {
-    if (!currentUser) {
-      return { success: false, message: 'עליך להתחבר עם חשבון Google כדי לסנכרן נתונים לענן' };
+  const syncAllToFirestore = async (isManual = true): Promise<{ success: boolean; message: string }> => {
+    if (!isNetworkOnline()) {
+      const msg = 'מצב אופליין: כל השינויים נשמרים במכשיר ויסונכרנו אוטומטית כשתתחבר לרשת.';
+      setSyncStatusMessage(msg);
+      return { success: true, message: msg };
     }
+
+    setIsSyncing(true);
+    setSyncStatusMessage('מבצע סנכרון דו-כיווני מול Firestore...');
     try {
-      // 1. Sync User Profile
-      await saveUserProfile(profile);
-
-      // 2. Sync Palaces
-      for (const p of palaces) {
-        await setDoc(doc(db, 'palaces', `${currentUser.uid}_${p.id}`), {
-          ...p,
-          userId: currentUser.uid,
-          updatedAt: Date.now(),
+      // 1. Sync User Profile if authenticated
+      if (currentUser) {
+        await saveUserProfile({
+          ...profile,
+          uid: currentUser.uid,
+          email: currentUser.email || profile.email,
+          displayName: currentUser.displayName || profile.displayName,
         });
       }
 
-      // 3. Sync Personal Associations
-      for (const a of personalAssociations) {
-        await setDoc(doc(db, 'personal_associations', `${currentUser.uid}_${a.id}`), {
-          ...a,
-          userId: currentUser.uid,
-        });
-      }
-
-      // 4. Sync Custom Memory Data (Major, PAO, Pegs, Cards, Academic)
-      await setDoc(doc(db, 'user_custom_data', currentUser.uid), {
-        userId: currentUser.uid,
+      // 2. Perform Full Bidirectional Sync with Last-Write-Wins
+      const res = await performFullBidirectionalSync({
+        majorDigits,
         majorItems,
         paoItems,
         shapePegs,
         bodyPegs,
+        palaces,
         peopleCards,
         abstractShapes,
         academicPoints,
-        majorDigits,
-        updatedAt: Date.now(),
+        personalAssociations,
       });
 
-      return { success: true, message: 'כל הנתונים, הארמונות והשלשות סונכרנו בהצלחה לענן Firestore!' };
+      if (res.success && res.mergedData) {
+        setMajorDigits(res.mergedData.majorDigits);
+        setMajorItems(res.mergedData.majorItems);
+        setPaoItems(res.mergedData.paoItems);
+        setShapePegs(res.mergedData.shapePegs);
+        setBodyPegs(res.mergedData.bodyPegs);
+        setPalaces(res.mergedData.palaces);
+        setPeopleCards(res.mergedData.peopleCards);
+        setAbstractShapes(res.mergedData.abstractShapes);
+        setAcademicPoints(res.mergedData.academicPoints);
+        setPersonalAssociations(res.mergedData.personalAssociations);
+
+        const now = Date.now();
+        setLastSyncTime(now);
+        localStorage.setItem(STORAGE_KEYS.LAST_SYNC, String(now));
+      }
+
+      setSyncStatusMessage(res.message);
+      return { success: res.success, message: res.message };
     } catch (err: any) {
-      console.error('Manual sync error:', err);
-      return { success: false, message: `שגיאה בסנכרון: ${err?.message || err}` };
+      console.error('Bidirectional sync error:', err);
+      const errMsg = `שגיאה בסנכרון לענן: ${err?.message || err}`;
+      setSyncStatusMessage(errMsg);
+      return { success: false, message: errMsg };
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const seedCloudTables = async (): Promise<{ success: boolean; message: string }> => {
+    if (!isNetworkOnline()) {
+      return { success: false, message: 'אין חיבור לרשת לצורך אכלוס טבלאות ענן.' };
+    }
+    setIsSyncing(true);
+    setSyncStatusMessage('מאתחל ומאכלס טבלאות ב-Firestore...');
+    try {
+      const res = await seedAllDefaultsToFirestore();
+      if (res.success) {
+        await syncAllToFirestore(false);
+      }
+      return res;
+    } finally {
+      setIsSyncing(false);
     }
   };
 
   return {
+    // Network & Sync
+    isOnline,
+    isSyncing,
+    lastSyncTime,
+    syncStatusMessage,
+    syncAllToFirestore,
+    seedCloudTables,
+
     // Auth & Profile
     currentUser,
     isAuthLoading,
@@ -1373,7 +1501,6 @@ export function useMemoryStore() {
     isAnalyzingFeedback,
     loginWithGoogle,
     logout,
-    syncAllToFirestore,
     earnPoints,
     unlockBadge,
     completeDailyChallenge,
