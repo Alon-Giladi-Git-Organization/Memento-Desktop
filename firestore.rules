@@ -6,17 +6,18 @@ service cloud.firestore {
       return request.auth != null;
     }
     
+    // Rowy Dashboard & Admin collections
+    match /_rowy_/{document=**} {
+      allow read, write: if true;
+    }
+
     // User profile & gamification
     match /users/{userId} {
       allow read, write: if true;
     }
 
-    // Tabular Collections: Major System 00-99 & Digits
+    // Tabular Collections: Major System 00-99
     match /major_items/{itemId} {
-      allow read, write: if true;
-    }
-
-    match /major_digits/{digitId} {
       allow read, write: if true;
     }
 
@@ -68,8 +69,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
-    // User custom data fallback
-    match /user_custom_data/{userId} {
+    match /major_digits/{digitId} {
+      allow read, write: if true;
+    }
+
+    match /user_custom_data/{customId} {
       allow read, write: if true;
     }
   }

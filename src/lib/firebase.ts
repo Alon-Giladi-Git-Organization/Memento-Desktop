@@ -8,6 +8,7 @@ import {
   User as FirebaseUser,
 } from 'firebase/auth';
 import {
+  initializeFirestore,
   getFirestore,
   doc,
   getDoc,
@@ -56,10 +57,39 @@ export const firebaseConfig = {
 // Initialize Firebase
 const app = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db =
-  firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)'
-    ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
-    : getFirestore(app);
+
+// Initialize Firestore with ignoreUndefinedProperties to prevent write failures
+export function initFirestore() {
+  const dbId =
+    firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)'
+      ? firebaseConfig.firestoreDatabaseId
+      : '(default)';
+  try {
+    return initializeFirestore(app, { ignoreUndefinedProperties: true }, dbId);
+  } catch (_e) {
+    return dbId && dbId !== '(default)' ? getFirestore(app, dbId) : getFirestore(app);
+  }
+}
+
+export const db = initFirestore();
+
+/**
+ * Strips undefined properties and converts nested undefined fields to null/omitted
+ * so that Firestore writes succeed seamlessly across all environments.
+ */
+export function cleanForFirestore<T extends Record<string, any>>(obj: T): any {
+  if (!obj || typeof obj !== 'object') return obj;
+  const result: any = Array.isArray(obj) ? [] : {};
+  for (const [key, val] of Object.entries(obj)) {
+    if (val === undefined) continue;
+    if (val !== null && typeof val === 'object' && !(val instanceof Date)) {
+      result[key] = cleanForFirestore(val);
+    } else {
+      result[key] = val;
+    }
+  }
+  return result;
+}
 
 const googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });

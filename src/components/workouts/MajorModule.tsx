@@ -561,10 +561,10 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
             <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-[580px] overflow-y-auto pr-1 scroll-smooth">
               {filteredItems.map((item) => {
                 const isEditing = editingNum === item.number;
-                const activeWord = item.userWord || item.defaultWord;
-                const activeConsonants = item.userConsonants || item.consonants;
-                const activeHint = item.userImageHint || item.imageHint;
-                const isCustom = !!item.userWord || !!item.userConsonants;
+                const activeWord = item.defaultWord || item.userWord || '';
+                const activeConsonants = item.consonants || item.userConsonants || '';
+                const activeHint = item.imageHint || item.userImageHint || '';
+                const isCustom = Boolean(item.userWord && item.userWord !== item.defaultWord);
                 const isHighlighted = highlightedNum === item.number;
 
                 return (
@@ -1032,11 +1032,11 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                         ) : (
                           <>
                             <div className="text-amber-300 font-bold text-sm">
-                              מילה מנמונית: <span className="text-white text-base font-black">{currentQuizItem.userWord || currentQuizItem.defaultWord}</span>
+                              מילה מנמונית: <span className="text-white text-base font-black">{currentQuizItem.defaultWord || currentQuizItem.userWord}</span>
                             </div>
                             <div className="text-slate-200 bg-slate-900/90 p-3 rounded-xl border border-slate-800 text-xs leading-relaxed">
                               ⚡ <strong className="text-amber-400">סצנה קינטית מוקצנת:</strong>{' '}
-                              {currentQuizItem.userImageHint || currentQuizItem.imageHint || 'התנגשות קינטית עזה שצרובה בהיפוקמפוס.'}
+                              {currentQuizItem.imageHint || currentQuizItem.userImageHint || 'התנגשות קינטית עזה שצרובה בהיפוקמפוס.'}
                             </div>
                           </>
                         )}

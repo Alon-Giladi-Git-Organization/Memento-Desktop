@@ -54,6 +54,7 @@ import {
   serverTimestamp,
   onAuthStateChanged,
   FirebaseUser,
+  cleanForFirestore,
 } from '../lib/firebase';
 import {
   isNetworkOnline,
@@ -381,10 +382,10 @@ export function useMemoryStore() {
   useEffect(() => {
     const unsubscribeRealtime = startRealtimeCloudSync({
       onMajorItems: (items) => {
-        setMajorItems((prev) => mergeWithRemoteItems(prev, items, (i) => i.numberStr.padStart(2, '0')));
+        setMajorItems((prev) => mergeWithRemoteItems(prev, items, (i) => String(i.numberStr ?? i.number).padStart(2, '0')));
       },
       onPaoItems: (items) => {
-        setPaoItems((prev) => mergeWithRemoteItems(prev, items, (i) => i.numberStr.padStart(2, '0')));
+        setPaoItems((prev) => mergeWithRemoteItems(prev, items, (i) => String(i.numberStr ?? i.number).padStart(2, '0')));
       },
       onBodyPegs: (items) => {
         setBodyPegs((prev) => mergeWithRemoteItems(prev, items, (i) => String(i.index)));
@@ -406,9 +407,6 @@ export function useMemoryStore() {
       },
       onAcademicPoints: (items) => {
         setAcademicPoints((prev) => mergeWithRemoteItems(prev, items, (i) => i.id));
-      },
-      onMajorDigits: (items) => {
-        setMajorDigits((prev) => mergeWithRemoteItems(prev, items, (i) => String(i.number)));
       },
     });
 
@@ -577,10 +575,14 @@ export function useMemoryStore() {
     earnPoints(30, 'יצירת ארמון זיכרון');
 
     if (isNetworkOnline()) {
-      setDoc(doc(db, 'palaces', palaceId), {
-        ...newPalace,
-        userId: currentUser?.uid || null,
-      }, { merge: true }).catch(() => {});
+      setDoc(
+        doc(db, 'palaces', palaceId),
+        cleanForFirestore({
+          ...newPalace,
+          userId: currentUser?.uid || null,
+        }),
+        { merge: true }
+      ).catch((err) => console.error('Error adding palace:', err));
     }
     return newPalace;
   };
@@ -628,9 +630,9 @@ export function useMemoryStore() {
         if (isNetworkOnline()) {
           setDoc(
             doc(db, 'palaces', palaceId),
-            { ...updatedPalace, userId: currentUser?.uid || null },
+            cleanForFirestore({ ...updatedPalace, userId: currentUser?.uid || null }),
             { merge: true }
-          ).catch(() => {});
+          ).catch((err) => console.error('Error adding palace locus:', err));
         }
 
         return updatedPalace;
@@ -654,9 +656,9 @@ export function useMemoryStore() {
         if (isNetworkOnline()) {
           setDoc(
             doc(db, 'palaces', palaceId),
-            { ...updatedPalace, userId: currentUser?.uid || null },
+            cleanForFirestore({ ...updatedPalace, userId: currentUser?.uid || null }),
             { merge: true }
-          ).catch(() => {});
+          ).catch((err) => console.error('Error updating palace locus:', err));
         }
 
         return updatedPalace;
@@ -682,9 +684,9 @@ export function useMemoryStore() {
         if (isNetworkOnline()) {
           setDoc(
             doc(db, 'palaces', palaceId),
-            { ...updatedPalace, userId: currentUser?.uid || null },
+            cleanForFirestore({ ...updatedPalace, userId: currentUser?.uid || null }),
             { merge: true }
-          ).catch(() => {});
+          ).catch((err) => console.error('Error toggling palace locus ready:', err));
         }
 
         return updatedPalace;
@@ -706,9 +708,9 @@ export function useMemoryStore() {
         if (isNetworkOnline()) {
           setDoc(
             doc(db, 'palaces', palaceId),
-            { ...updatedPalace, userId: currentUser?.uid || null },
+            cleanForFirestore({ ...updatedPalace, userId: currentUser?.uid || null }),
             { merge: true }
-          ).catch(() => {});
+          ).catch((err) => console.error('Error batch setting palace loci ready:', err));
         }
 
         return updatedPalace;
@@ -730,9 +732,9 @@ export function useMemoryStore() {
         if (isNetworkOnline()) {
           setDoc(
             doc(db, 'palaces', palaceId),
-            { ...updatedPalace, userId: currentUser?.uid || null },
+            cleanForFirestore({ ...updatedPalace, userId: currentUser?.uid || null }),
             { merge: true }
-          ).catch(() => {});
+          ).catch((err) => console.error('Error deleting palace locus:', err));
         }
 
         return updatedPalace;
@@ -771,10 +773,14 @@ export function useMemoryStore() {
     earnPoints(25, 'קידוד אסוציאציה אישית');
 
     if (isNetworkOnline()) {
-      setDoc(doc(db, 'personal_associations', id), {
-        ...newItem,
-        userId: currentUser?.uid || null,
-      }, { merge: true }).catch(() => {});
+      setDoc(
+        doc(db, 'personal_associations', id),
+        cleanForFirestore({
+          ...newItem,
+          userId: currentUser?.uid || null,
+        }),
+        { merge: true }
+      ).catch((err) => console.error('Error adding personal_association:', err));
     }
     return newItem;
   };
@@ -782,7 +788,8 @@ export function useMemoryStore() {
   const deletePersonalAssociation = async (id: string) => {
     setPersonalAssociations((prev) => prev.filter((item) => item.id !== id));
     if (isNetworkOnline()) {
-      deleteDoc(doc(db, 'personal_associations', id)).catch(() => {});
+      deleteDoc(doc(db, 'personal_associations', id))
+        .catch((err) => console.error('Error deleting personal_association:', err));
     }
   };
 
@@ -799,7 +806,8 @@ export function useMemoryStore() {
       })
     );
     if (updatedItem && isNetworkOnline()) {
-      setDoc(doc(db, 'personal_associations', id), updatedItem, { merge: true }).catch(() => {});
+      setDoc(doc(db, 'personal_associations', id), cleanForFirestore(updatedItem), { merge: true })
+        .catch((err) => console.error('Error updating personal_association:', err));
     }
   };
 
@@ -1043,40 +1051,44 @@ export function useMemoryStore() {
     }
   ) => {
     const now = Date.now();
-    let updatedItem: MajorItem | null = null;
-    setMajorItems((prev) =>
-      prev.map((item) => {
-        if (item.number === number) {
-          updatedItem = { ...item, ...updates, updatedAt: now };
-          return updatedItem;
-        }
-        return item;
-      })
-    );
+    const existing = majorItems.find((item) => item.number === number);
+    const numStr = number < 10 ? `0${number}` : `${number}`;
+    const updatedItem: MajorItem = {
+      ...(existing || { number, numberStr: numStr, consonants: '', defaultWord: '', imageHint: '' }),
+      ...updates,
+      ...(updates.userWord !== undefined ? { defaultWord: updates.userWord, userWord: updates.userWord } : {}),
+      ...(updates.userConsonants !== undefined ? { consonants: updates.userConsonants, userConsonants: updates.userConsonants } : {}),
+      ...(updates.userImageHint !== undefined ? { imageHint: updates.userImageHint, userImageHint: updates.userImageHint } : {}),
+      updatedAt: now,
+    };
+
+    setMajorItems((prev) => prev.map((item) => (item.number === number ? updatedItem : item)));
+
     if (updates.userWord || updates.userImageHint) {
       earnPoints(10, 'התאמת אסוציאציית Major אישית');
     }
-    if (updatedItem && isNetworkOnline()) {
-      const docId = String(number).padStart(2, '0');
-      setDoc(doc(db, 'major_items', docId), updatedItem, { merge: true }).catch(() => {});
-    }
+
+    const docId = numStr.padStart(2, '0');
+    setDoc(doc(db, 'major_items', docId), cleanForFirestore(updatedItem), { merge: true })
+      .catch((err) => console.error('Error saving major_item to Firestore:', err));
   };
 
   const toggleMajorReady = (number: number, explicitState?: boolean) => {
     const now = Date.now();
-    let updatedItem: MajorItem | null = null;
-    setMajorItems((prev) =>
-      prev.map((item) => {
-        if (item.number !== number) return item;
-        const nextState = explicitState !== undefined ? explicitState : !item.is_ready_for_practice;
-        updatedItem = { ...item, is_ready_for_practice: nextState, updatedAt: now };
-        return updatedItem;
-      })
-    );
-    if (updatedItem && isNetworkOnline()) {
-      const docId = String(number).padStart(2, '0');
-      setDoc(doc(db, 'major_items', docId), updatedItem, { merge: true }).catch(() => {});
-    }
+    const existing = majorItems.find((item) => item.number === number);
+    const numStr = number < 10 ? `0${number}` : `${number}`;
+    const nextState = explicitState !== undefined ? explicitState : !(existing?.is_ready_for_practice);
+    const updatedItem: MajorItem = {
+      ...(existing || { number, numberStr: numStr, consonants: '', defaultWord: '', imageHint: '' }),
+      is_ready_for_practice: nextState,
+      updatedAt: now,
+    };
+
+    setMajorItems((prev) => prev.map((item) => (item.number === number ? updatedItem : item)));
+
+    const docId = numStr.padStart(2, '0');
+    setDoc(doc(db, 'major_items', docId), cleanForFirestore(updatedItem), { merge: true })
+      .catch((err) => console.error('Error toggling major_item ready:', err));
   };
 
   const setAllMajorReady = (ready: boolean, numbers?: number[]) => {
@@ -1084,7 +1096,11 @@ export function useMemoryStore() {
     setMajorItems((prev) =>
       prev.map((item) => {
         if (!numbers || numbers.includes(item.number)) {
-          return { ...item, is_ready_for_practice: ready, updatedAt: now };
+          const updated = { ...item, is_ready_for_practice: ready, updatedAt: now };
+          const docId = String(item.number).padStart(2, '0');
+          setDoc(doc(db, 'major_items', docId), cleanForFirestore(updated), { merge: true })
+            .catch((err) => console.error('Error batch setting major_item ready:', err));
+          return updated;
         }
         return item;
       })
@@ -1097,10 +1113,9 @@ export function useMemoryStore() {
     const now = Date.now();
     const updated = { ...original, updatedAt: now };
     setMajorItems((prev) => prev.map((item) => (item.number === number ? updated : item)));
-    if (isNetworkOnline()) {
-      const docId = String(number).padStart(2, '0');
-      setDoc(doc(db, 'major_items', docId), updated, { merge: true }).catch(() => {});
-    }
+    const docId = String(number).padStart(2, '0');
+    setDoc(doc(db, 'major_items', docId), cleanForFirestore(updated), { merge: true })
+      .catch((err) => console.error('Error resetting major_item:', err));
   };
 
   const updatePAOItem = (
@@ -1108,62 +1123,62 @@ export function useMemoryStore() {
     updates: { userPerson?: string; userAction?: string; userObject?: string; is_ready_for_practice?: boolean }
   ) => {
     const now = Date.now();
-    let updatedItem: PAOItem | null = null;
+    const existing = paoItems.find((p) => p.number === number);
+    const numStr = number < 10 ? `0${number}` : `${number}`;
+    const updatedItem: PAOItem = {
+      ...(existing || { number, numberStr: numStr, person: '', action: '', object: '' }),
+      ...updates,
+      ...(updates.userPerson !== undefined ? { person: updates.userPerson, userPerson: updates.userPerson } : {}),
+      ...(updates.userAction !== undefined ? { action: updates.userAction, userAction: updates.userAction } : {}),
+      ...(updates.userObject !== undefined ? { object: updates.userObject, userObject: updates.userObject } : {}),
+      updatedAt: now,
+    };
+
     setPaoItems((prev) => {
       const exists = prev.some((p) => p.number === number);
       if (exists) {
-        return prev.map((p) => {
-          if (p.number === number) {
-            updatedItem = { ...p, ...updates, updatedAt: now };
-            return updatedItem;
-          }
-          return p;
-        });
-      } else {
-        const numStr = number < 10 ? `0${number}` : `${number}`;
-        updatedItem = {
-          number,
-          numberStr: numStr,
-          person: updates.userPerson || '',
-          action: updates.userAction || '',
-          object: updates.userObject || '',
-          ...updates,
-          updatedAt: now,
-        };
-        return [...prev, updatedItem].sort((a, b) => a.number - b.number);
+        return prev.map((p) => (p.number === number ? updatedItem : p));
       }
+      return [...prev, updatedItem].sort((a, b) => a.number - b.number);
     });
+
     if (updates.userPerson || updates.userAction || updates.userObject) {
       earnPoints(15, 'התאמת שלשת PAO אישית');
     }
-    if (updatedItem && isNetworkOnline()) {
-      const docId = String(number).padStart(2, '0');
-      setDoc(doc(db, 'pao_items', docId), updatedItem, { merge: true }).catch(() => {});
-    }
+
+    const docId = numStr.padStart(2, '0');
+    setDoc(doc(db, 'pao_items', docId), cleanForFirestore(updatedItem), { merge: true })
+      .catch((err) => console.error('Error saving pao_item to Firestore:', err));
   };
 
   const togglePAOReady = (number: number, explicitState?: boolean) => {
     const now = Date.now();
-    let updatedItem: PAOItem | null = null;
-    setPaoItems((prev) =>
-      prev.map((item) => {
-        if (item.number !== number) return item;
-        const nextState = explicitState !== undefined ? explicitState : !item.is_ready_for_practice;
-        updatedItem = { ...item, is_ready_for_practice: nextState, updatedAt: now };
-        return updatedItem;
-      })
-    );
-    if (updatedItem && isNetworkOnline()) {
-      const docId = String(number).padStart(2, '0');
-      setDoc(doc(db, 'pao_items', docId), updatedItem, { merge: true }).catch(() => {});
-    }
+    const existing = paoItems.find((p) => p.number === number);
+    const numStr = number < 10 ? `0${number}` : `${number}`;
+    const nextState = explicitState !== undefined ? explicitState : !(existing?.is_ready_for_practice);
+    const updatedItem: PAOItem = {
+      ...(existing || { number, numberStr: numStr, person: '', action: '', object: '' }),
+      is_ready_for_practice: nextState,
+      updatedAt: now,
+    };
+
+    setPaoItems((prev) => prev.map((item) => (item.number === number ? updatedItem : item)));
+
+    const docId = numStr.padStart(2, '0');
+    setDoc(doc(db, 'pao_items', docId), cleanForFirestore(updatedItem), { merge: true })
+      .catch((err) => console.error('Error toggling pao_item ready:', err));
   };
 
   const setAllPAOReady = (ready: boolean, numbers?: number[]) => {
+    const now = Date.now();
     setPaoItems((prev) =>
       prev.map((item) => {
         if (!numbers || numbers.includes(item.number)) {
-          return { ...item, is_ready_for_practice: ready };
+          const updated = { ...item, is_ready_for_practice: ready, updatedAt: now };
+          const docId = String(item.number).padStart(2, '0');
+          setDoc(doc(db, 'pao_items', docId), cleanForFirestore(updated), { merge: true })
+            .catch((err) => console.error('Error batch setting pao_item ready:', err));
+          return updated;
         }
         return item;
       })
@@ -1175,20 +1190,21 @@ export function useMemoryStore() {
     updates: { userObject?: string; userBodyPart?: string; userKineticTip?: string }
   ) => {
     const now = Date.now();
-    let updatedItem: BodyPegItem | null = null;
-    setBodyPegs((prev) =>
-      prev.map((bp) => {
-        if (bp.index === index) {
-          updatedItem = { ...bp, ...updates, updatedAt: now };
-          return updatedItem;
-        }
-        return bp;
-      })
-    );
+    const existing = bodyPegs.find((bp) => bp.index === index);
+    const updatedItem: BodyPegItem = {
+      ...(existing || { index, bodyPartHebrew: '', defaultObject: '', kineticTip: '' }),
+      ...updates,
+      ...(updates.userObject !== undefined ? { defaultObject: updates.userObject, userObject: updates.userObject } : {}),
+      ...(updates.userBodyPart !== undefined ? { bodyPartHebrew: updates.userBodyPart, userBodyPart: updates.userBodyPart } : {}),
+      ...(updates.userKineticTip !== undefined ? { kineticTip: updates.userKineticTip, userKineticTip: updates.userKineticTip } : {}),
+      updatedAt: now,
+    };
+
+    setBodyPegs((prev) => prev.map((bp) => (bp.index === index ? updatedItem : bp)));
     earnPoints(5, 'התאמת מתלה גוף אישי');
-    if (updatedItem && isNetworkOnline()) {
-      setDoc(doc(db, 'body_pegs', String(index)), updatedItem, { merge: true }).catch(() => {});
-    }
+
+    setDoc(doc(db, 'body_pegs', String(index)), cleanForFirestore(updatedItem), { merge: true })
+      .catch((err) => console.error('Error saving body_peg:', err));
   };
 
   const resetBodyPeg = (index: number) => {
@@ -1197,9 +1213,8 @@ export function useMemoryStore() {
     const now = Date.now();
     const updated = { ...original, updatedAt: now };
     setBodyPegs((prev) => prev.map((bp) => (bp.index === index ? updated : bp)));
-    if (isNetworkOnline()) {
-      setDoc(doc(db, 'body_pegs', String(index)), updated, { merge: true }).catch(() => {});
-    }
+    setDoc(doc(db, 'body_pegs', String(index)), cleanForFirestore(updated), { merge: true })
+      .catch((err) => console.error('Error resetting body_peg:', err));
   };
 
   const updateShapePeg = (
@@ -1207,20 +1222,21 @@ export function useMemoryStore() {
     updates: { userObject?: string; userShapeName?: string; userKineticTip?: string }
   ) => {
     const now = Date.now();
-    let updatedItem: PegShapeItem | null = null;
-    setShapePegs((prev) =>
-      prev.map((sp) => {
-        if (sp.number === number) {
-          updatedItem = { ...sp, ...updates, updatedAt: now };
-          return updatedItem;
-        }
-        return sp;
-      })
-    );
+    const existing = shapePegs.find((sp) => sp.number === number);
+    const updatedItem: PegShapeItem = {
+      ...(existing || { number, shapeName: '', defaultObject: '', visualMetaphor: '', kineticTip: '' }),
+      ...updates,
+      ...(updates.userObject !== undefined ? { defaultObject: updates.userObject, userObject: updates.userObject } : {}),
+      ...(updates.userShapeName !== undefined ? { shapeName: updates.userShapeName, userShapeName: updates.userShapeName } : {}),
+      ...(updates.userKineticTip !== undefined ? { kineticTip: updates.userKineticTip, userKineticTip: updates.userKineticTip } : {}),
+      updatedAt: now,
+    };
+
+    setShapePegs((prev) => prev.map((sp) => (sp.number === number ? updatedItem : sp)));
     earnPoints(5, 'התאמת מתלה צורה אישי');
-    if (updatedItem && isNetworkOnline()) {
-      setDoc(doc(db, 'shape_pegs', String(number)), updatedItem, { merge: true }).catch(() => {});
-    }
+
+    setDoc(doc(db, 'shape_pegs', String(number)), cleanForFirestore(updatedItem), { merge: true })
+      .catch((err) => console.error('Error saving shape_peg:', err));
   };
 
   const resetShapePeg = (number: number) => {
@@ -1229,9 +1245,8 @@ export function useMemoryStore() {
     const now = Date.now();
     const updated = { ...original, updatedAt: now };
     setShapePegs((prev) => prev.map((sp) => (sp.number === number ? updated : sp)));
-    if (isNetworkOnline()) {
-      setDoc(doc(db, 'shape_pegs', String(number)), updated, { merge: true }).catch(() => {});
-    }
+    setDoc(doc(db, 'shape_pegs', String(number)), cleanForFirestore(updated), { merge: true })
+      .catch((err) => console.error('Error resetting shape_peg:', err));
   };
 
   const addMajorItem = (item: MajorItem) => {
@@ -1246,14 +1261,16 @@ export function useMemoryStore() {
     });
     earnPoints(15, `הוספת מספר Major חדש (${item.numberStr})`);
     if (isNetworkOnline()) {
-      setDoc(doc(db, 'major_items', item.numberStr.padStart(2, '0')), withTime, { merge: true }).catch(() => {});
+      setDoc(doc(db, 'major_items', item.numberStr.padStart(2, '0')), cleanForFirestore(withTime), { merge: true })
+        .catch((err) => console.error('Error adding major_item:', err));
     }
   };
 
   const deleteMajorItem = (number: number) => {
     setMajorItems((prev) => prev.filter((item) => item.number !== number));
     if (isNetworkOnline()) {
-      deleteDoc(doc(db, 'major_items', String(number).padStart(2, '0'))).catch(() => {});
+      deleteDoc(doc(db, 'major_items', String(number).padStart(2, '0')))
+        .catch((err) => console.error('Error deleting major_item:', err));
     }
   };
 
@@ -1269,14 +1286,16 @@ export function useMemoryStore() {
     });
     earnPoints(15, `הוספת שלשת PAO (${item.numberStr})`);
     if (isNetworkOnline()) {
-      setDoc(doc(db, 'pao_items', item.numberStr.padStart(2, '0')), withTime, { merge: true }).catch(() => {});
+      setDoc(doc(db, 'pao_items', item.numberStr.padStart(2, '0')), cleanForFirestore(withTime), { merge: true })
+        .catch((err) => console.error('Error adding pao_item:', err));
     }
   };
 
   const deletePAOItem = (number: number) => {
     setPaoItems((prev) => prev.filter((item) => item.number !== number));
     if (isNetworkOnline()) {
-      deleteDoc(doc(db, 'pao_items', String(number).padStart(2, '0'))).catch(() => {});
+      deleteDoc(doc(db, 'pao_items', String(number).padStart(2, '0')))
+        .catch((err) => console.error('Error deleting pao_item:', err));
     }
   };
 
@@ -1287,7 +1306,8 @@ export function useMemoryStore() {
     const withTime = { ...original, updatedAt: now };
     setPaoItems((prev) => prev.map((p) => (p.number === number ? withTime : p)));
     if (isNetworkOnline()) {
-      setDoc(doc(db, 'pao_items', String(number).padStart(2, '0')), withTime, { merge: true }).catch(() => {});
+      setDoc(doc(db, 'pao_items', String(number).padStart(2, '0')), cleanForFirestore(withTime), { merge: true })
+        .catch((err) => console.error('Error resetting pao_item:', err));
     }
   };
 
@@ -1303,14 +1323,16 @@ export function useMemoryStore() {
     });
     earnPoints(10, `הוספת מתלה צורה (${item.number})`);
     if (isNetworkOnline()) {
-      setDoc(doc(db, 'shape_pegs', String(item.number)), withTime, { merge: true }).catch(() => {});
+      setDoc(doc(db, 'shape_pegs', String(item.number)), cleanForFirestore(withTime), { merge: true })
+        .catch((err) => console.error('Error adding shape_peg:', err));
     }
   };
 
   const deleteShapePeg = (number: number) => {
     setShapePegs((prev) => prev.filter((item) => item.number !== number));
     if (isNetworkOnline()) {
-      deleteDoc(doc(db, 'shape_pegs', String(number))).catch(() => {});
+      deleteDoc(doc(db, 'shape_pegs', String(number)))
+        .catch((err) => console.error('Error deleting shape_peg:', err));
     }
   };
 
@@ -1326,14 +1348,16 @@ export function useMemoryStore() {
     });
     earnPoints(10, `הוספת מתלה גוף (${item.index})`);
     if (isNetworkOnline()) {
-      setDoc(doc(db, 'body_pegs', String(item.index)), withTime, { merge: true }).catch(() => {});
+      setDoc(doc(db, 'body_pegs', String(item.index)), cleanForFirestore(withTime), { merge: true })
+        .catch((err) => console.error('Error adding body_peg:', err));
     }
   };
 
   const deleteBodyPeg = (index: number) => {
     setBodyPegs((prev) => prev.filter((item) => item.index !== index));
     if (isNetworkOnline()) {
-      deleteDoc(doc(db, 'body_pegs', String(index))).catch(() => {});
+      deleteDoc(doc(db, 'body_pegs', String(index)))
+        .catch((err) => console.error('Error deleting body_peg:', err));
     }
   };
 
@@ -1347,7 +1371,8 @@ export function useMemoryStore() {
     setPeopleCards((prev) => [newPerson, ...prev]);
     earnPoints(20, 'הוספת שם ופנים');
     if (isNetworkOnline()) {
-      setDoc(doc(db, 'people_cards', newPerson.id), newPerson, { merge: true }).catch(() => {});
+      setDoc(doc(db, 'people_cards', newPerson.id), cleanForFirestore(newPerson), { merge: true })
+        .catch((err) => console.error('Error adding person_card:', err));
     }
     return newPerson;
   };
@@ -1359,7 +1384,8 @@ export function useMemoryStore() {
       earnPoints(10, 'עדכון כרטיס שם ופנים');
     }
     if (isNetworkOnline()) {
-      setDoc(doc(db, 'people_cards', id), { ...updates, updatedAt: now }, { merge: true }).catch(() => {});
+      setDoc(doc(db, 'people_cards', id), cleanForFirestore({ ...updates, updatedAt: now }), { merge: true })
+        .catch((err) => console.error('Error updating person_card:', err));
     }
   };
 
@@ -1374,7 +1400,8 @@ export function useMemoryStore() {
       })
     );
     if (isNetworkOnline()) {
-      setDoc(doc(db, 'people_cards', id), { is_ready_for_practice: nextState, updatedAt: now }, { merge: true }).catch(() => {});
+      setDoc(doc(db, 'people_cards', id), cleanForFirestore({ is_ready_for_practice: nextState, updatedAt: now }), { merge: true })
+        .catch((err) => console.error('Error toggling person_card ready:', err));
     }
   };
 
@@ -1394,7 +1421,8 @@ export function useMemoryStore() {
       })
     );
     if (isNetworkOnline()) {
-      setDoc(doc(db, 'personal_associations', id), { is_ready_for_practice: nextState, updatedAt: now }, { merge: true }).catch(() => {});
+      setDoc(doc(db, 'personal_associations', id), cleanForFirestore({ is_ready_for_practice: nextState, updatedAt: now }), { merge: true })
+        .catch((err) => console.error('Error toggling personal_association ready:', err));
     }
   };
 
@@ -1409,7 +1437,8 @@ export function useMemoryStore() {
       })
     );
     if (isNetworkOnline()) {
-      setDoc(doc(db, 'shape_pegs', String(number)), { is_ready_for_practice: nextState, updatedAt: now }, { merge: true }).catch(() => {});
+      setDoc(doc(db, 'shape_pegs', String(number)), cleanForFirestore({ is_ready_for_practice: nextState, updatedAt: now }), { merge: true })
+        .catch((err) => console.error('Error toggling shape_peg ready:', err));
     }
   };
 
@@ -1424,14 +1453,16 @@ export function useMemoryStore() {
       })
     );
     if (isNetworkOnline()) {
-      setDoc(doc(db, 'body_pegs', String(index)), { is_ready_for_practice: nextState, updatedAt: now }, { merge: true }).catch(() => {});
+      setDoc(doc(db, 'body_pegs', String(index)), cleanForFirestore({ is_ready_for_practice: nextState, updatedAt: now }), { merge: true })
+        .catch((err) => console.error('Error toggling body_peg ready:', err));
     }
   };
 
   const deletePersonFaceCard = (id: string) => {
     setPeopleCards((prev) => prev.filter((p) => p.id !== id));
     if (isNetworkOnline()) {
-      deleteDoc(doc(db, 'people_cards', id)).catch(() => {});
+      deleteDoc(doc(db, 'people_cards', id))
+        .catch((err) => console.error('Error deleting person_card:', err));
     }
   };
 
@@ -1449,7 +1480,8 @@ export function useMemoryStore() {
     setAbstractShapes((prev) => [newShape, ...prev]);
     earnPoints(20, 'הוספת צורה/מרקם');
     if (isNetworkOnline()) {
-      setDoc(doc(db, 'abstract_shapes', newShape.id), newShape, { merge: true }).catch(() => {});
+      setDoc(doc(db, 'abstract_shapes', newShape.id), cleanForFirestore(newShape), { merge: true })
+        .catch((err) => console.error('Error adding abstract_shape:', err));
     }
     return newShape;
   };
@@ -1459,14 +1491,16 @@ export function useMemoryStore() {
     setAbstractShapes((prev) => prev.map((s) => (s.id === id ? { ...s, ...updates, updatedAt: now } : s)));
     earnPoints(10, 'עדכון צורה ומרקם');
     if (isNetworkOnline()) {
-      setDoc(doc(db, 'abstract_shapes', id), { ...updates, updatedAt: now }, { merge: true }).catch(() => {});
+      setDoc(doc(db, 'abstract_shapes', id), cleanForFirestore({ ...updates, updatedAt: now }), { merge: true })
+        .catch((err) => console.error('Error updating abstract_shape:', err));
     }
   };
 
   const deleteAbstractShape = (id: string) => {
     setAbstractShapes((prev) => prev.filter((s) => s.id !== id));
     if (isNetworkOnline()) {
-      deleteDoc(doc(db, 'abstract_shapes', id)).catch(() => {});
+      deleteDoc(doc(db, 'abstract_shapes', id))
+        .catch((err) => console.error('Error deleting abstract_shape:', err));
     }
   };
 
@@ -1484,7 +1518,8 @@ export function useMemoryStore() {
     setAcademicPoints((prev) => [newPoint, ...prev]);
     earnPoints(25, 'הוספת מושג אקדמי');
     if (isNetworkOnline()) {
-      setDoc(doc(db, 'academic_points', newPoint.id), newPoint, { merge: true }).catch(() => {});
+      setDoc(doc(db, 'academic_points', newPoint.id), cleanForFirestore(newPoint), { merge: true })
+        .catch((err) => console.error('Error adding academic_point:', err));
     }
     return newPoint;
   };
@@ -1494,7 +1529,8 @@ export function useMemoryStore() {
     setAcademicPoints((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates, updatedAt: now } : p)));
     earnPoints(10, 'עדכון מושג אקדמי');
     if (isNetworkOnline()) {
-      setDoc(doc(db, 'academic_points', id), { ...updates, updatedAt: now }, { merge: true }).catch(() => {});
+      setDoc(doc(db, 'academic_points', id), cleanForFirestore({ ...updates, updatedAt: now }), { merge: true })
+        .catch((err) => console.error('Error updating academic_point:', err));
     }
   };
 

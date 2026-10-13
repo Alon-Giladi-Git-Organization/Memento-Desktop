@@ -8,6 +8,7 @@ import {
   deleteDoc,
   serverTimestamp,
   onSnapshot,
+  cleanForFirestore,
 } from './firebase';
 import {
   MajorItem,
@@ -119,23 +120,6 @@ export async function seedAllDefaultsToFirestore(): Promise<{ success: boolean; 
 
     // 3. Pegs & Palaces in a single batch
     const itemsBatch = writeBatch(db);
-
-    // Major Digits 0-9
-    for (const d of DEFAULT_MAJOR_DIGITS) {
-      const docId = String(d.number);
-      const docRef = doc(db, 'major_digits', docId);
-      itemsBatch.set(docRef, {
-        id: docId,
-        number: d.number,
-        numberStr: d.numberStr,
-        consonants: d.consonants,
-        defaultWord: d.defaultWord,
-        userWord: d.userWord || null,
-        imageHint: d.imageHint,
-        updatedAt: now,
-      }, { merge: true });
-      totalCount++;
-    }
 
     // Body Pegs 1-20
     for (const b of DEFAULT_BODY_PEGS) {
@@ -319,14 +303,14 @@ export function mergeWithRemoteItems<T extends { updatedAt?: number }>(
       const different = isItemDifferent(prevItem, remoteItem);
 
       if (different) {
-        if (remoteTime >= prevTime || prevTime === 0) {
-          // Remote is newer or contains modifications from Rowy
-          merged.push({ ...prevItem, ...remoteItem });
-          hasAnyChanges = true;
-        } else {
-          // Local has newer offline timestamp pending upload
-          merged.push(prevItem);
-        }
+        // Any difference arriving from Firestore (Rowy, Firebase Console, or other tabs)
+        // must be accepted immediately without requiring updatedAt to be artificially higher.
+        merged.push({
+          ...prevItem,
+          ...remoteItem,
+          updatedAt: Math.max(prevTime, remoteTime, Date.now()),
+        });
+        hasAnyChanges = true;
       } else {
         merged.push(prevItem);
       }
@@ -370,7 +354,7 @@ async function syncCollectionBidirectional<T extends { id?: string | number; num
       for (const item of localItems) {
         const id = getId(item);
         const docRef = doc(db, collectionName, id);
-        batch.set(docRef, { ...item, id, updatedAt: item.updatedAt || Date.now() }, { merge: true });
+        batch.set(docRef, cleanForFirestore({ ...item, id, updatedAt: item.updatedAt || Date.now() }), { merge: true });
         uploadedCount++;
       }
       await batch.commit();
@@ -417,7 +401,7 @@ async function syncCollectionBidirectional<T extends { id?: string | number; num
         } else if (localTime > remoteTime) {
           // Local is newer (e.g. edited locally in app while offline): upload to remote
           const docRef = doc(db, collectionName, id);
-          uploadBatch.set(docRef, { ...localItem, id, updatedAt: localTime }, { merge: true });
+          uploadBatch.set(docRef, cleanForFirestore({ ...localItem, id, updatedAt: localTime }), { merge: true });
           batchHasOperations = true;
           uploadedCount++;
           mergedList.push(localItem);
@@ -432,7 +416,7 @@ async function syncCollectionBidirectional<T extends { id?: string | number; num
     for (const [id, localItem] of localMap.entries()) {
       if (!remoteMap.has(id)) {
         const docRef = doc(db, collectionName, id);
-        uploadBatch.set(docRef, { ...localItem, id, updatedAt: localItem.updatedAt || Date.now() }, { merge: true });
+        uploadBatch.set(docRef, cleanForFirestore({ ...localItem, id, updatedAt: localItem.updatedAt || Date.now() }), { merge: true });
         batchHasOperations = true;
         uploadedCount++;
         mergedList.push(localItem);
@@ -573,21 +557,12 @@ export async function performFullBidirectionalSync(currentData: {
     stats.uploaded += academicRes.uploadedCount;
     stats.downloaded += academicRes.downloadedCount;
 
-    // 10. Major Digits
-    const digitsRes = await syncCollectionBidirectional(
-      'major_digits',
-      currentData.majorDigits,
-      (item) => String(item.number)
-    );
-    stats.uploaded += digitsRes.uploadedCount;
-    stats.downloaded += digitsRes.downloadedCount;
-
     // Sort major items by number
     const sortedMajor = [...majorRes.mergedItems].sort((a, b) => a.number - b.number);
     const sortedPao = [...paoRes.mergedItems].sort((a, b) => a.number - b.number);
     const sortedBody = [...bodyRes.mergedItems].sort((a, b) => a.index - b.index);
     const sortedShapes = [...shapeRes.mergedItems].sort((a, b) => a.number - b.number);
-    const sortedDigits = [...digitsRes.mergedItems].sort((a, b) => a.number - b.number);
+    const sortedDigits = currentData.majorDigits || [];
 
     // Check if any errors occurred
     const collectionErrors = [
@@ -600,7 +575,6 @@ export async function performFullBidirectionalSync(currentData: {
       peopleRes.error,
       abstractRes.error,
       academicRes.error,
-      digitsRes.error,
     ].filter(Boolean);
 
     if (collectionErrors.length > 0 && stats.uploaded === 0 && stats.downloaded === 0) {
@@ -674,24 +648,51 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks): () => 
         const items: MajorItem[] = [];
         snap.forEach((d) => {
           const data = d.data();
-          const num = typeof data.number === 'number' ? data.number : parseInt(data.numberStr || d.id, 10);
-          const numStr = data.numberStr || (num < 10 ? `0${num}` : String(num));
+          const num = typeof data.number === 'number' ? data.number : parseInt(String(data.numberStr || d.id), 10);
+          const numStr = String(data.numberStr ?? (num < 10 ? `0${num}` : String(num))).padStart(2, '0');
+
+          // Harmonize word between Rowy columns (defaultWord & userWord)
+          let word = '';
+          if (data.defaultWord && data.defaultWord !== 'null') word = data.defaultWord;
+          if (data.userWord && data.userWord !== 'null' && data.userWord !== data.defaultWord) {
+            word = data.userWord;
+          }
+          if (!word) word = (data.defaultWord !== 'null' ? data.defaultWord : '') || (data.userWord !== 'null' ? data.userWord : '') || '';
+
+          // Harmonize hint
+          let hint = '';
+          if (data.imageHint && data.imageHint !== 'null') hint = data.imageHint;
+          if (data.userImageHint && data.userImageHint !== 'null' && data.userImageHint !== data.imageHint) {
+            hint = data.userImageHint;
+          }
+          if (!hint) hint = (data.imageHint !== 'null' ? data.imageHint : '') || (data.userImageHint !== 'null' ? data.userImageHint : '') || '';
+
+          // Harmonize consonants
+          let cons = '';
+          if (data.consonants && data.consonants !== 'null') cons = data.consonants;
+          if (data.userConsonants && data.userConsonants !== 'null' && data.userConsonants !== data.consonants) {
+            cons = data.userConsonants;
+          }
+          if (!cons) cons = (data.consonants !== 'null' ? data.consonants : '') || (data.userConsonants !== 'null' ? data.userConsonants : '') || '';
+
           items.push({
+            id: d.id,
             number: isNaN(num) ? 0 : num,
             numberStr: numStr,
-            consonants: data.consonants || '',
-            userConsonants: data.userConsonants || undefined,
-            defaultWord: data.defaultWord || '',
-            userWord: data.userWord !== null && data.userWord !== undefined ? data.userWord : undefined,
-            imageHint: data.imageHint || '',
-            userImageHint: data.userImageHint !== null && data.userImageHint !== undefined ? data.userImageHint : undefined,
-            customNotes: data.customNotes !== null && data.customNotes !== undefined ? data.customNotes : undefined,
-            is_ready_for_practice: data.is_ready_for_practice ?? false,
+            consonants: cons,
+            userConsonants: cons,
+            defaultWord: word,
+            userWord: word,
+            imageHint: hint,
+            userImageHint: hint,
+            customNotes: data.customNotes && data.customNotes !== 'null' ? data.customNotes : undefined,
+            is_ready_for_practice: Boolean(data.is_ready_for_practice),
             updatedAt: Math.max(
               getTimestampMillis(data.updatedAt),
               getTimestampMillis(data._updatedAt),
               getTimestampMillis(data.updated_at),
-              getTimestampMillis(data.lastModified)
+              getTimestampMillis(data.lastModified),
+              Date.now()
             ),
           });
         });
@@ -710,23 +711,41 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks): () => 
         const items: PAOItem[] = [];
         snap.forEach((d) => {
           const data = d.data();
-          const num = typeof data.number === 'number' ? data.number : parseInt(data.numberStr || d.id, 10);
-          const numStr = data.numberStr || (num < 10 ? `0${num}` : String(num));
+          const num = typeof data.number === 'number' ? data.number : parseInt(String(data.numberStr || d.id), 10);
+          const numStr = String(data.numberStr ?? (num < 10 ? `0${num}` : String(num))).padStart(2, '0');
+
+          let person = (data.person !== 'null' ? data.person : '') || (data.userPerson !== 'null' ? data.userPerson : '') || '';
+          if (data.userPerson && data.userPerson !== 'null' && data.userPerson !== data.person) {
+            person = data.userPerson;
+          }
+
+          let action = (data.action !== 'null' ? data.action : '') || (data.userAction !== 'null' ? data.userAction : '') || '';
+          if (data.userAction && data.userAction !== 'null' && data.userAction !== data.action) {
+            action = data.userAction;
+          }
+
+          let object = (data.object !== 'null' ? data.object : '') || (data.userObject !== 'null' ? data.userObject : '') || '';
+          if (data.userObject && data.userObject !== 'null' && data.userObject !== data.object) {
+            object = data.userObject;
+          }
+
           items.push({
+            id: d.id,
             number: isNaN(num) ? 0 : num,
             numberStr: numStr,
-            person: data.person || '',
-            action: data.action || '',
-            object: data.object || '',
-            userPerson: data.userPerson !== null && data.userPerson !== undefined ? data.userPerson : undefined,
-            userAction: data.userAction !== null && data.userAction !== undefined ? data.userAction : undefined,
-            userObject: data.userObject !== null && data.userObject !== undefined ? data.userObject : undefined,
-            is_ready_for_practice: data.is_ready_for_practice ?? false,
+            person,
+            action,
+            object,
+            userPerson: person,
+            userAction: action,
+            userObject: object,
+            is_ready_for_practice: Boolean(data.is_ready_for_practice),
             updatedAt: Math.max(
               getTimestampMillis(data.updatedAt),
               getTimestampMillis(data._updatedAt),
               getTimestampMillis(data.updated_at),
-              getTimestampMillis(data.lastModified)
+              getTimestampMillis(data.lastModified),
+              Date.now()
             ),
           });
         });
@@ -746,19 +765,25 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks): () => 
         snap.forEach((d) => {
           const data = d.data();
           const idx = typeof data.index === 'number' ? data.index : parseInt(d.id, 10);
+          const bodyPart = (data.bodyPartHebrew !== 'null' ? data.bodyPartHebrew : '') || (data.userBodyPart !== 'null' ? data.userBodyPart : '') || '';
+          const defaultObj = (data.defaultObject !== 'null' ? data.defaultObject : '') || (data.userObject !== 'null' ? data.userObject : '') || '';
+          const tip = (data.kineticTip !== 'null' ? data.kineticTip : '') || (data.userKineticTip !== 'null' ? data.userKineticTip : '') || '';
+
           items.push({
+            id: d.id,
             index: isNaN(idx) ? 1 : idx,
-            bodyPartHebrew: data.bodyPartHebrew || '',
-            userBodyPart: data.userBodyPart !== null && data.userBodyPart !== undefined ? data.userBodyPart : undefined,
-            defaultObject: data.defaultObject || '',
-            userObject: data.userObject !== null && data.userObject !== undefined ? data.userObject : undefined,
-            kineticTip: data.kineticTip || '',
-            userKineticTip: data.userKineticTip !== null && data.userKineticTip !== undefined ? data.userKineticTip : undefined,
-            is_ready_for_practice: data.is_ready_for_practice ?? false,
+            bodyPartHebrew: bodyPart,
+            userBodyPart: bodyPart,
+            defaultObject: defaultObj,
+            userObject: defaultObj,
+            kineticTip: tip,
+            userKineticTip: tip,
+            is_ready_for_practice: Boolean(data.is_ready_for_practice),
             updatedAt: Math.max(
               getTimestampMillis(data.updatedAt),
               getTimestampMillis(data._updatedAt),
-              getTimestampMillis(data.updated_at)
+              getTimestampMillis(data.updated_at),
+              Date.now()
             ),
           });
         });
@@ -778,20 +803,26 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks): () => 
         snap.forEach((d) => {
           const data = d.data();
           const num = typeof data.number === 'number' ? data.number : parseInt(d.id, 10);
+          const shapeName = (data.shapeName !== 'null' ? data.shapeName : '') || (data.userShapeName !== 'null' ? data.userShapeName : '') || '';
+          const defaultObj = (data.defaultObject !== 'null' ? data.defaultObject : '') || (data.userObject !== 'null' ? data.userObject : '') || '';
+          const tip = (data.kineticTip !== 'null' ? data.kineticTip : '') || (data.userKineticTip !== 'null' ? data.userKineticTip : '') || '';
+
           items.push({
+            id: d.id,
             number: isNaN(num) ? 0 : num,
-            shapeName: data.shapeName || '',
-            userShapeName: data.userShapeName !== null && data.userShapeName !== undefined ? data.userShapeName : undefined,
+            shapeName,
+            userShapeName: shapeName,
             visualMetaphor: data.visualMetaphor || '',
-            defaultObject: data.defaultObject || '',
-            userObject: data.userObject !== null && data.userObject !== undefined ? data.userObject : undefined,
-            kineticTip: data.kineticTip || '',
-            userKineticTip: data.userKineticTip !== null && data.userKineticTip !== undefined ? data.userKineticTip : undefined,
-            is_ready_for_practice: data.is_ready_for_practice ?? false,
+            defaultObject: defaultObj,
+            userObject: defaultObj,
+            kineticTip: tip,
+            userKineticTip: tip,
+            is_ready_for_practice: Boolean(data.is_ready_for_practice),
             updatedAt: Math.max(
               getTimestampMillis(data.updatedAt),
               getTimestampMillis(data._updatedAt),
-              getTimestampMillis(data.updated_at)
+              getTimestampMillis(data.updated_at),
+              Date.now()
             ),
           });
         });
@@ -954,39 +985,6 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks): () => 
       (err) => callbacks.onError?.('academic_points', err)
     );
     unsubs.push(unsubAcademic);
-
-    // 10. major_digits
-    const unsubDigits = onSnapshot(
-      collection(db, 'major_digits'),
-      (snap) => {
-        if (snap.empty) return;
-        const items: MajorItem[] = [];
-        snap.forEach((d) => {
-          const data = d.data();
-          const num = typeof data.number === 'number' ? data.number : parseInt(d.id, 10);
-          items.push({
-            number: isNaN(num) ? 0 : num,
-            numberStr: String(num),
-            consonants: data.consonants || '',
-            userConsonants: data.userConsonants || undefined,
-            defaultWord: data.defaultWord || '',
-            userWord: data.userWord !== null && data.userWord !== undefined ? data.userWord : undefined,
-            imageHint: data.imageHint || '',
-            userImageHint: data.userImageHint !== null && data.userImageHint !== undefined ? data.userImageHint : undefined,
-            is_ready_for_practice: data.is_ready_for_practice ?? false,
-            updatedAt: Math.max(
-              getTimestampMillis(data.updatedAt),
-              getTimestampMillis(data._updatedAt),
-              getTimestampMillis(data.updated_at)
-            ),
-          });
-        });
-        items.sort((a, b) => a.number - b.number);
-        callbacks.onMajorDigits?.(items, snap.metadata.hasPendingWrites);
-      },
-      (err) => callbacks.onError?.('major_digits', err)
-    );
-    unsubs.push(unsubDigits);
 
   } catch (err) {
     console.warn('Error starting realtime cloud listeners:', err);
