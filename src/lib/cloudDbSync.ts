@@ -5,7 +5,9 @@ import {
   getDocs,
   writeBatch,
   setDoc,
+  deleteDoc,
   serverTimestamp,
+  onSnapshot,
 } from './firebase';
 import {
   MajorItem,
@@ -244,7 +246,7 @@ export async function seedAllDefaultsToFirestore(): Promise<{ success: boolean; 
 /**
  * Safely extracts timestamp in milliseconds from numbers, Firestore Timestamps, ISO strings, etc.
  */
-function getTimestampMillis(val: any): number {
+export function getTimestampMillis(val: any): number {
   if (!val) return 0;
   if (typeof val === 'number') return isNaN(val) ? 0 : val;
   if (typeof val.toMillis === 'function') {
@@ -259,6 +261,87 @@ function getTimestampMillis(val: any): number {
     return isNaN(parsed) ? 0 : parsed;
   }
   return 0;
+}
+
+/**
+ * Checks if meaningful content differ between local and remote items
+ */
+export function isItemDifferent(a: any, b: any): boolean {
+  if (a === b) return false;
+  if (!a || !b) return true;
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const key of keys) {
+    if (key === 'updatedAt' || key === '_updatedAt' || key === 'lastModified' || key === 'updated_at' || key === 'userId') {
+      continue;
+    }
+    const valA = a[key] === undefined || a[key] === null ? null : a[key];
+    const valB = b[key] === undefined || b[key] === null ? null : b[key];
+    if (typeof valA === 'object' && typeof valB === 'object') {
+      if (JSON.stringify(valA) !== JSON.stringify(valB)) return true;
+    } else if (valA !== valB) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Efficiently merges remote collection items into the existing local collection
+ * while preserving pending local offline edits.
+ */
+export function mergeWithRemoteItems<T extends { updatedAt?: number }>(
+  prev: T[],
+  remoteList: T[],
+  getId: (item: T) => string
+): T[] {
+  if (!remoteList || remoteList.length === 0) return prev;
+
+  const remoteMap = new Map<string, T>();
+  for (const item of remoteList) {
+    remoteMap.set(getId(item), item);
+  }
+
+  let hasAnyChanges = false;
+  const merged: T[] = [];
+  const processedIds = new Set<string>();
+
+  for (const prevItem of prev) {
+    const id = getId(prevItem);
+    processedIds.add(id);
+    const remoteItem = remoteMap.get(id);
+
+    if (!remoteItem) {
+      // Local item not present remotely - keep local item
+      merged.push(prevItem);
+    } else {
+      const prevTime = getTimestampMillis(prevItem.updatedAt);
+      const remoteTime = getTimestampMillis(remoteItem.updatedAt);
+      const different = isItemDifferent(prevItem, remoteItem);
+
+      if (different) {
+        if (remoteTime >= prevTime || prevTime === 0) {
+          // Remote is newer or contains modifications from Rowy
+          merged.push({ ...prevItem, ...remoteItem });
+          hasAnyChanges = true;
+        } else {
+          // Local has newer offline timestamp pending upload
+          merged.push(prevItem);
+        }
+      } else {
+        merged.push(prevItem);
+      }
+    }
+  }
+
+  // Remote items that don't exist locally yet
+  for (const [id, remoteItem] of remoteMap.entries()) {
+    if (!processedIds.has(id)) {
+      merged.push(remoteItem);
+      hasAnyChanges = true;
+    }
+  }
+
+  return hasAnyChanges ? merged : prev;
 }
 
 /**
@@ -559,4 +642,359 @@ export async function performFullBidirectionalSync(currentData: {
       mergedData: currentData,
     };
   }
+}
+
+export interface RealtimeSyncCallbacks {
+  onMajorItems?: (items: MajorItem[], hasPendingWrites: boolean) => void;
+  onPaoItems?: (items: PAOItem[], hasPendingWrites: boolean) => void;
+  onBodyPegs?: (items: BodyPegItem[], hasPendingWrites: boolean) => void;
+  onShapePegs?: (items: PegShapeItem[], hasPendingWrites: boolean) => void;
+  onPalaces?: (items: MemoryPalace[], hasPendingWrites: boolean) => void;
+  onPersonalAssociations?: (items: PersonalContactAssociation[], hasPendingWrites: boolean) => void;
+  onPeopleCards?: (items: PersonFaceCard[], hasPendingWrites: boolean) => void;
+  onAbstractShapes?: (items: AbstractShapeCard[], hasPendingWrites: boolean) => void;
+  onAcademicPoints?: (items: AcademicKeyPoint[], hasPendingWrites: boolean) => void;
+  onMajorDigits?: (items: MajorItem[], hasPendingWrites: boolean) => void;
+  onError?: (collectionName: string, error: any) => void;
+}
+
+/**
+ * Starts real-time onSnapshot listeners for all Firestore collections.
+ * Automatically synchronizes changes made in Rowy or other browser sessions directly to the local UI in real time.
+ */
+export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks): () => void {
+  const unsubs: (() => void)[] = [];
+
+  try {
+    // 1. major_items (00-99)
+    const unsubMajor = onSnapshot(
+      collection(db, 'major_items'),
+      (snap) => {
+        if (snap.empty) return;
+        const items: MajorItem[] = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          const num = typeof data.number === 'number' ? data.number : parseInt(data.numberStr || d.id, 10);
+          const numStr = data.numberStr || (num < 10 ? `0${num}` : String(num));
+          items.push({
+            number: isNaN(num) ? 0 : num,
+            numberStr: numStr,
+            consonants: data.consonants || '',
+            userConsonants: data.userConsonants || undefined,
+            defaultWord: data.defaultWord || '',
+            userWord: data.userWord !== null && data.userWord !== undefined ? data.userWord : undefined,
+            imageHint: data.imageHint || '',
+            userImageHint: data.userImageHint !== null && data.userImageHint !== undefined ? data.userImageHint : undefined,
+            customNotes: data.customNotes !== null && data.customNotes !== undefined ? data.customNotes : undefined,
+            is_ready_for_practice: data.is_ready_for_practice ?? false,
+            updatedAt: Math.max(
+              getTimestampMillis(data.updatedAt),
+              getTimestampMillis(data._updatedAt),
+              getTimestampMillis(data.updated_at),
+              getTimestampMillis(data.lastModified)
+            ),
+          });
+        });
+        items.sort((a, b) => a.number - b.number);
+        callbacks.onMajorItems?.(items, snap.metadata.hasPendingWrites);
+      },
+      (err) => callbacks.onError?.('major_items', err)
+    );
+    unsubs.push(unsubMajor);
+
+    // 2. pao_items (00-99)
+    const unsubPao = onSnapshot(
+      collection(db, 'pao_items'),
+      (snap) => {
+        if (snap.empty) return;
+        const items: PAOItem[] = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          const num = typeof data.number === 'number' ? data.number : parseInt(data.numberStr || d.id, 10);
+          const numStr = data.numberStr || (num < 10 ? `0${num}` : String(num));
+          items.push({
+            number: isNaN(num) ? 0 : num,
+            numberStr: numStr,
+            person: data.person || '',
+            action: data.action || '',
+            object: data.object || '',
+            userPerson: data.userPerson !== null && data.userPerson !== undefined ? data.userPerson : undefined,
+            userAction: data.userAction !== null && data.userAction !== undefined ? data.userAction : undefined,
+            userObject: data.userObject !== null && data.userObject !== undefined ? data.userObject : undefined,
+            is_ready_for_practice: data.is_ready_for_practice ?? false,
+            updatedAt: Math.max(
+              getTimestampMillis(data.updatedAt),
+              getTimestampMillis(data._updatedAt),
+              getTimestampMillis(data.updated_at),
+              getTimestampMillis(data.lastModified)
+            ),
+          });
+        });
+        items.sort((a, b) => a.number - b.number);
+        callbacks.onPaoItems?.(items, snap.metadata.hasPendingWrites);
+      },
+      (err) => callbacks.onError?.('pao_items', err)
+    );
+    unsubs.push(unsubPao);
+
+    // 3. body_pegs
+    const unsubBody = onSnapshot(
+      collection(db, 'body_pegs'),
+      (snap) => {
+        if (snap.empty) return;
+        const items: BodyPegItem[] = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          const idx = typeof data.index === 'number' ? data.index : parseInt(d.id, 10);
+          items.push({
+            index: isNaN(idx) ? 1 : idx,
+            bodyPartHebrew: data.bodyPartHebrew || '',
+            userBodyPart: data.userBodyPart !== null && data.userBodyPart !== undefined ? data.userBodyPart : undefined,
+            defaultObject: data.defaultObject || '',
+            userObject: data.userObject !== null && data.userObject !== undefined ? data.userObject : undefined,
+            kineticTip: data.kineticTip || '',
+            userKineticTip: data.userKineticTip !== null && data.userKineticTip !== undefined ? data.userKineticTip : undefined,
+            is_ready_for_practice: data.is_ready_for_practice ?? false,
+            updatedAt: Math.max(
+              getTimestampMillis(data.updatedAt),
+              getTimestampMillis(data._updatedAt),
+              getTimestampMillis(data.updated_at)
+            ),
+          });
+        });
+        items.sort((a, b) => a.index - b.index);
+        callbacks.onBodyPegs?.(items, snap.metadata.hasPendingWrites);
+      },
+      (err) => callbacks.onError?.('body_pegs', err)
+    );
+    unsubs.push(unsubBody);
+
+    // 4. shape_pegs
+    const unsubShape = onSnapshot(
+      collection(db, 'shape_pegs'),
+      (snap) => {
+        if (snap.empty) return;
+        const items: PegShapeItem[] = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          const num = typeof data.number === 'number' ? data.number : parseInt(d.id, 10);
+          items.push({
+            number: isNaN(num) ? 0 : num,
+            shapeName: data.shapeName || '',
+            userShapeName: data.userShapeName !== null && data.userShapeName !== undefined ? data.userShapeName : undefined,
+            visualMetaphor: data.visualMetaphor || '',
+            defaultObject: data.defaultObject || '',
+            userObject: data.userObject !== null && data.userObject !== undefined ? data.userObject : undefined,
+            kineticTip: data.kineticTip || '',
+            userKineticTip: data.userKineticTip !== null && data.userKineticTip !== undefined ? data.userKineticTip : undefined,
+            is_ready_for_practice: data.is_ready_for_practice ?? false,
+            updatedAt: Math.max(
+              getTimestampMillis(data.updatedAt),
+              getTimestampMillis(data._updatedAt),
+              getTimestampMillis(data.updated_at)
+            ),
+          });
+        });
+        items.sort((a, b) => a.number - b.number);
+        callbacks.onShapePegs?.(items, snap.metadata.hasPendingWrites);
+      },
+      (err) => callbacks.onError?.('shape_pegs', err)
+    );
+    unsubs.push(unsubShape);
+
+    // 5. palaces
+    const unsubPalaces = onSnapshot(
+      collection(db, 'palaces'),
+      (snap) => {
+        if (snap.empty) return;
+        const items: MemoryPalace[] = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          items.push({
+            id: d.id,
+            name: data.name || 'ארמון',
+            description: data.description || '',
+            icon: data.icon || 'Building',
+            category: data.category || 'home',
+            isPermanent: data.isPermanent ?? true,
+            loci: Array.isArray(data.loci) ? data.loci : [],
+            updatedAt: Math.max(
+              getTimestampMillis(data.updatedAt),
+              getTimestampMillis(data._updatedAt),
+              getTimestampMillis(data.updated_at)
+            ),
+          });
+        });
+        callbacks.onPalaces?.(items, snap.metadata.hasPendingWrites);
+      },
+      (err) => callbacks.onError?.('palaces', err)
+    );
+    unsubs.push(unsubPalaces);
+
+    // 6. personal_associations
+    const unsubPersonal = onSnapshot(
+      collection(db, 'personal_associations'),
+      (snap) => {
+        if (snap.empty) return;
+        const items: PersonalContactAssociation[] = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          items.push({
+            id: d.id,
+            targetSubject: data.targetSubject || '',
+            storedNumberOrFact: data.storedNumberOrFact || '',
+            encodedMnemonic: data.encodedMnemonic || '',
+            methodUsed: data.methodUsed || 'major',
+            createdAt: getTimestampMillis(data.createdAt),
+            updatedAt: Math.max(
+              getTimestampMillis(data.updatedAt),
+              getTimestampMillis(data._updatedAt),
+              getTimestampMillis(data.updated_at)
+            ),
+            is_ready_for_practice: data.is_ready_for_practice ?? false,
+            successCount: data.successCount || 0,
+            failCount: data.failCount || 0,
+          });
+        });
+        callbacks.onPersonalAssociations?.(items, snap.metadata.hasPendingWrites);
+      },
+      (err) => callbacks.onError?.('personal_associations', err)
+    );
+    unsubs.push(unsubPersonal);
+
+    // 7. people_cards
+    const unsubPeople = onSnapshot(
+      collection(db, 'people_cards'),
+      (snap) => {
+        if (snap.empty) return;
+        const items: PersonFaceCard[] = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          items.push({
+            id: d.id,
+            name: data.name || '',
+            roleOrJob: data.roleOrJob || '',
+            avatarUrl: data.avatarUrl || '',
+            avatarSeed: data.avatarSeed || '',
+            morphologicalAnchor: data.morphologicalAnchor || '',
+            substituteWord: data.substituteWord || '',
+            mnemonicScene: data.mnemonicScene || '',
+            userCustomScene: data.userCustomScene || undefined,
+            is_ready_for_practice: data.is_ready_for_practice ?? false,
+            updatedAt: Math.max(
+              getTimestampMillis(data.updatedAt),
+              getTimestampMillis(data._updatedAt),
+              getTimestampMillis(data.updated_at)
+            ),
+          });
+        });
+        callbacks.onPeopleCards?.(items, snap.metadata.hasPendingWrites);
+      },
+      (err) => callbacks.onError?.('people_cards', err)
+    );
+    unsubs.push(unsubPeople);
+
+    // 8. abstract_shapes
+    const unsubAbstract = onSnapshot(
+      collection(db, 'abstract_shapes'),
+      (snap) => {
+        if (snap.empty) return;
+        const items: AbstractShapeCard[] = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          items.push({
+            id: d.id,
+            title: data.title || '',
+            svgShapeType: data.svgShapeType || 'spiral',
+            textureType: data.textureType || 'smooth',
+            textureDigit: typeof data.textureDigit === 'number' ? data.textureDigit : 1,
+            pareidoliaHint: data.pareidoliaHint || '',
+            mnemonicCode: data.mnemonicCode || '',
+            is_ready_for_practice: data.is_ready_for_practice ?? false,
+            updatedAt: Math.max(
+              getTimestampMillis(data.updatedAt),
+              getTimestampMillis(data._updatedAt),
+              getTimestampMillis(data.updated_at)
+            ),
+          });
+        });
+        callbacks.onAbstractShapes?.(items, snap.metadata.hasPendingWrites);
+      },
+      (err) => callbacks.onError?.('abstract_shapes', err)
+    );
+    unsubs.push(unsubAbstract);
+
+    // 9. academic_points
+    const unsubAcademic = onSnapshot(
+      collection(db, 'academic_points'),
+      (snap) => {
+        if (snap.empty) return;
+        const items: AcademicKeyPoint[] = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          items.push({
+            id: d.id,
+            conceptTitle: data.conceptTitle || '',
+            discipline: data.discipline || '',
+            sourceSummary: data.sourceSummary || '',
+            keyWord: data.keyWord || '',
+            visualAnchor: data.visualAnchor || '',
+            palaceLocusInfo: data.palaceLocusInfo || '',
+            mnemonicScene: data.mnemonicScene || '',
+            is_ready_for_practice: data.is_ready_for_practice ?? false,
+            updatedAt: Math.max(
+              getTimestampMillis(data.updatedAt),
+              getTimestampMillis(data._updatedAt),
+              getTimestampMillis(data.updated_at)
+            ),
+          });
+        });
+        callbacks.onAcademicPoints?.(items, snap.metadata.hasPendingWrites);
+      },
+      (err) => callbacks.onError?.('academic_points', err)
+    );
+    unsubs.push(unsubAcademic);
+
+    // 10. major_digits
+    const unsubDigits = onSnapshot(
+      collection(db, 'major_digits'),
+      (snap) => {
+        if (snap.empty) return;
+        const items: MajorItem[] = [];
+        snap.forEach((d) => {
+          const data = d.data();
+          const num = typeof data.number === 'number' ? data.number : parseInt(d.id, 10);
+          items.push({
+            number: isNaN(num) ? 0 : num,
+            numberStr: String(num),
+            consonants: data.consonants || '',
+            userConsonants: data.userConsonants || undefined,
+            defaultWord: data.defaultWord || '',
+            userWord: data.userWord !== null && data.userWord !== undefined ? data.userWord : undefined,
+            imageHint: data.imageHint || '',
+            userImageHint: data.userImageHint !== null && data.userImageHint !== undefined ? data.userImageHint : undefined,
+            is_ready_for_practice: data.is_ready_for_practice ?? false,
+            updatedAt: Math.max(
+              getTimestampMillis(data.updatedAt),
+              getTimestampMillis(data._updatedAt),
+              getTimestampMillis(data.updated_at)
+            ),
+          });
+        });
+        items.sort((a, b) => a.number - b.number);
+        callbacks.onMajorDigits?.(items, snap.metadata.hasPendingWrites);
+      },
+      (err) => callbacks.onError?.('major_digits', err)
+    );
+    unsubs.push(unsubDigits);
+
+  } catch (err) {
+    console.warn('Error starting realtime cloud listeners:', err);
+  }
+
+  return () => {
+    unsubs.forEach((unsub) => {
+      try { unsub(); } catch {}
+    });
+  };
 }

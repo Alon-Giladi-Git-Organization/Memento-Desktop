@@ -59,6 +59,8 @@ import {
   isNetworkOnline,
   performFullBidirectionalSync,
   seedAllDefaultsToFirestore,
+  startRealtimeCloudSync,
+  mergeWithRemoteItems,
 } from '../lib/cloudDbSync';
 
 const STORAGE_KEYS = {
@@ -371,6 +373,47 @@ export function useMemoryStore() {
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Continuous Real-Time Firestore Sync (onSnapshot)
+  // Automatically mirrors edits from Rowy / Firebase Console directly into the active UI
+  useEffect(() => {
+    const unsubscribeRealtime = startRealtimeCloudSync({
+      onMajorItems: (items) => {
+        setMajorItems((prev) => mergeWithRemoteItems(prev, items, (i) => i.numberStr.padStart(2, '0')));
+      },
+      onPaoItems: (items) => {
+        setPaoItems((prev) => mergeWithRemoteItems(prev, items, (i) => i.numberStr.padStart(2, '0')));
+      },
+      onBodyPegs: (items) => {
+        setBodyPegs((prev) => mergeWithRemoteItems(prev, items, (i) => String(i.index)));
+      },
+      onShapePegs: (items) => {
+        setShapePegs((prev) => mergeWithRemoteItems(prev, items, (i) => String(i.number)));
+      },
+      onPalaces: (items) => {
+        setPalaces((prev) => mergeWithRemoteItems(prev, items, (i) => i.id));
+      },
+      onPersonalAssociations: (items) => {
+        setPersonalAssociations((prev) => mergeWithRemoteItems(prev, items, (i) => i.id));
+      },
+      onPeopleCards: (items) => {
+        setPeopleCards((prev) => mergeWithRemoteItems(prev, items, (i) => i.id));
+      },
+      onAbstractShapes: (items) => {
+        setAbstractShapes((prev) => mergeWithRemoteItems(prev, items, (i) => i.id));
+      },
+      onAcademicPoints: (items) => {
+        setAcademicPoints((prev) => mergeWithRemoteItems(prev, items, (i) => i.id));
+      },
+      onMajorDigits: (items) => {
+        setMajorDigits((prev) => mergeWithRemoteItems(prev, items, (i) => String(i.number)));
+      },
+    });
+
+    return () => {
+      unsubscribeRealtime();
     };
   }, []);
 
@@ -1127,12 +1170,6 @@ export function useMemoryStore() {
     );
   };
 
-  const resetPAOItem = (number: number) => {
-    const original = DEFAULT_PAO_ITEMS.find((p) => p.number === number);
-    if (!original) return;
-    setPaoItems((prev) => prev.map((p) => (p.number === number ? { ...original } : p)));
-  };
-
   const updateBodyPeg = (
     index: number,
     updates: { userObject?: string; userBodyPart?: string; userKineticTip?: string }
@@ -1198,128 +1235,204 @@ export function useMemoryStore() {
   };
 
   const addMajorItem = (item: MajorItem) => {
+    const now = Date.now();
+    const withTime = { ...item, updatedAt: now };
     setMajorItems((prev) => {
       const exists = prev.some((x) => x.number === item.number);
       if (exists) {
-        return prev.map((x) => (x.number === item.number ? item : x));
+        return prev.map((x) => (x.number === item.number ? withTime : x));
       }
-      return [...prev, item].sort((a, b) => a.number - b.number);
+      return [...prev, withTime].sort((a, b) => a.number - b.number);
     });
     earnPoints(15, `הוספת מספר Major חדש (${item.numberStr})`);
+    if (isNetworkOnline()) {
+      setDoc(doc(db, 'major_items', item.numberStr.padStart(2, '0')), withTime, { merge: true }).catch(() => {});
+    }
   };
 
   const deleteMajorItem = (number: number) => {
     setMajorItems((prev) => prev.filter((item) => item.number !== number));
+    if (isNetworkOnline()) {
+      deleteDoc(doc(db, 'major_items', String(number).padStart(2, '0'))).catch(() => {});
+    }
   };
 
   const addPAOItem = (item: PAOItem) => {
+    const now = Date.now();
+    const withTime = { ...item, updatedAt: now };
     setPaoItems((prev) => {
       const exists = prev.some((x) => x.number === item.number);
       if (exists) {
-        return prev.map((x) => (x.number === item.number ? item : x));
+        return prev.map((x) => (x.number === item.number ? withTime : x));
       }
-      return [...prev, item].sort((a, b) => a.number - b.number);
+      return [...prev, withTime].sort((a, b) => a.number - b.number);
     });
     earnPoints(15, `הוספת שלשת PAO (${item.numberStr})`);
+    if (isNetworkOnline()) {
+      setDoc(doc(db, 'pao_items', item.numberStr.padStart(2, '0')), withTime, { merge: true }).catch(() => {});
+    }
   };
 
   const deletePAOItem = (number: number) => {
     setPaoItems((prev) => prev.filter((item) => item.number !== number));
+    if (isNetworkOnline()) {
+      deleteDoc(doc(db, 'pao_items', String(number).padStart(2, '0'))).catch(() => {});
+    }
+  };
+
+  const resetPAOItem = (number: number) => {
+    const original = DEFAULT_PAO_ITEMS.find((p) => p.number === number);
+    if (!original) return;
+    const now = Date.now();
+    const withTime = { ...original, updatedAt: now };
+    setPaoItems((prev) => prev.map((p) => (p.number === number ? withTime : p)));
+    if (isNetworkOnline()) {
+      setDoc(doc(db, 'pao_items', String(number).padStart(2, '0')), withTime, { merge: true }).catch(() => {});
+    }
   };
 
   const addShapePeg = (item: PegShapeItem) => {
+    const now = Date.now();
+    const withTime = { ...item, updatedAt: now };
     setShapePegs((prev) => {
       const exists = prev.some((x) => x.number === item.number);
       if (exists) {
-        return prev.map((x) => (x.number === item.number ? item : x));
+        return prev.map((x) => (x.number === item.number ? withTime : x));
       }
-      return [...prev, item].sort((a, b) => a.number - b.number);
+      return [...prev, withTime].sort((a, b) => a.number - b.number);
     });
     earnPoints(10, `הוספת מתלה צורה (${item.number})`);
+    if (isNetworkOnline()) {
+      setDoc(doc(db, 'shape_pegs', String(item.number)), withTime, { merge: true }).catch(() => {});
+    }
   };
 
   const deleteShapePeg = (number: number) => {
     setShapePegs((prev) => prev.filter((item) => item.number !== number));
+    if (isNetworkOnline()) {
+      deleteDoc(doc(db, 'shape_pegs', String(number))).catch(() => {});
+    }
   };
 
   const addBodyPeg = (item: BodyPegItem) => {
+    const now = Date.now();
+    const withTime = { ...item, updatedAt: now };
     setBodyPegs((prev) => {
       const exists = prev.some((x) => x.index === item.index);
       if (exists) {
-        return prev.map((x) => (x.index === item.index ? item : x));
+        return prev.map((x) => (x.index === item.index ? withTime : x));
       }
-      return [...prev, item].sort((a, b) => a.index - b.index);
+      return [...prev, withTime].sort((a, b) => a.index - b.index);
     });
     earnPoints(10, `הוספת מתלה גוף (${item.index})`);
+    if (isNetworkOnline()) {
+      setDoc(doc(db, 'body_pegs', String(item.index)), withTime, { merge: true }).catch(() => {});
+    }
   };
 
   const deleteBodyPeg = (index: number) => {
     setBodyPegs((prev) => prev.filter((item) => item.index !== index));
+    if (isNetworkOnline()) {
+      deleteDoc(doc(db, 'body_pegs', String(index))).catch(() => {});
+    }
   };
 
   const addPersonFaceCard = (person: Omit<PersonFaceCard, 'id'>) => {
+    const now = Date.now();
     const newPerson: PersonFaceCard = {
-      id: `person-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      id: `person-${now}-${Math.random().toString(36).substr(2, 4)}`,
       ...person,
+      updatedAt: now,
     };
     setPeopleCards((prev) => [newPerson, ...prev]);
     earnPoints(20, 'הוספת שם ופנים');
+    if (isNetworkOnline()) {
+      setDoc(doc(db, 'people_cards', newPerson.id), newPerson, { merge: true }).catch(() => {});
+    }
     return newPerson;
   };
 
   const updatePersonFaceCard = (id: string, updates: Partial<PersonFaceCard>) => {
-    setPeopleCards((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
+    const now = Date.now();
+    setPeopleCards((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates, updatedAt: now } : p)));
     if (updates.name || updates.morphologicalAnchor || updates.mnemonicScene) {
       earnPoints(10, 'עדכון כרטיס שם ופנים');
+    }
+    if (isNetworkOnline()) {
+      setDoc(doc(db, 'people_cards', id), { ...updates, updatedAt: now }, { merge: true }).catch(() => {});
     }
   };
 
   const togglePersonReady = (id: string, explicitState?: boolean) => {
+    const now = Date.now();
+    let nextState = false;
     setPeopleCards((prev) =>
       prev.map((p) => {
         if (p.id !== id) return p;
-        const nextState = explicitState !== undefined ? explicitState : !p.is_ready_for_practice;
-        return { ...p, is_ready_for_practice: nextState };
+        nextState = explicitState !== undefined ? explicitState : !p.is_ready_for_practice;
+        return { ...p, is_ready_for_practice: nextState, updatedAt: now };
       })
     );
+    if (isNetworkOnline()) {
+      setDoc(doc(db, 'people_cards', id), { is_ready_for_practice: nextState, updatedAt: now }, { merge: true }).catch(() => {});
+    }
   };
 
   const setAllPeopleReady = (ready: boolean) => {
-    setPeopleCards((prev) => prev.map((p) => ({ ...p, is_ready_for_practice: ready })));
+    const now = Date.now();
+    setPeopleCards((prev) => prev.map((p) => ({ ...p, is_ready_for_practice: ready, updatedAt: now })));
   };
 
   const togglePersonalAssociationReady = (id: string, explicitState?: boolean) => {
+    const now = Date.now();
+    let nextState = false;
     setPersonalAssociations((prev) =>
       prev.map((a) => {
         if (a.id !== id) return a;
-        const nextState = explicitState !== undefined ? explicitState : !a.is_ready_for_practice;
-        return { ...a, is_ready_for_practice: nextState };
+        nextState = explicitState !== undefined ? explicitState : !a.is_ready_for_practice;
+        return { ...a, is_ready_for_practice: nextState, updatedAt: now };
       })
     );
+    if (isNetworkOnline()) {
+      setDoc(doc(db, 'personal_associations', id), { is_ready_for_practice: nextState, updatedAt: now }, { merge: true }).catch(() => {});
+    }
   };
 
   const toggleShapePegReady = (number: number, explicitState?: boolean) => {
+    const now = Date.now();
+    let nextState = false;
     setShapePegs((prev) =>
       prev.map((sp) => {
         if (sp.number !== number) return sp;
-        const nextState = explicitState !== undefined ? explicitState : !sp.is_ready_for_practice;
-        return { ...sp, is_ready_for_practice: nextState };
+        nextState = explicitState !== undefined ? explicitState : !sp.is_ready_for_practice;
+        return { ...sp, is_ready_for_practice: nextState, updatedAt: now };
       })
     );
+    if (isNetworkOnline()) {
+      setDoc(doc(db, 'shape_pegs', String(number)), { is_ready_for_practice: nextState, updatedAt: now }, { merge: true }).catch(() => {});
+    }
   };
 
   const toggleBodyPegReady = (index: number, explicitState?: boolean) => {
+    const now = Date.now();
+    let nextState = false;
     setBodyPegs((prev) =>
       prev.map((bp) => {
         if (bp.index !== index) return bp;
-        const nextState = explicitState !== undefined ? explicitState : !bp.is_ready_for_practice;
-        return { ...bp, is_ready_for_practice: nextState };
+        nextState = explicitState !== undefined ? explicitState : !bp.is_ready_for_practice;
+        return { ...bp, is_ready_for_practice: nextState, updatedAt: now };
       })
     );
+    if (isNetworkOnline()) {
+      setDoc(doc(db, 'body_pegs', String(index)), { is_ready_for_practice: nextState, updatedAt: now }, { merge: true }).catch(() => {});
+    }
   };
 
   const deletePersonFaceCard = (id: string) => {
     setPeopleCards((prev) => prev.filter((p) => p.id !== id));
+    if (isNetworkOnline()) {
+      deleteDoc(doc(db, 'people_cards', id)).catch(() => {});
+    }
   };
 
   const resetPersonFaceCards = () => {
@@ -1327,22 +1440,34 @@ export function useMemoryStore() {
   };
 
   const addAbstractShape = (shape: Omit<AbstractShapeCard, 'id'>) => {
+    const now = Date.now();
     const newShape: AbstractShapeCard = {
-      id: `shape-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      id: `shape-${now}-${Math.random().toString(36).substr(2, 4)}`,
       ...shape,
+      updatedAt: now,
     };
     setAbstractShapes((prev) => [newShape, ...prev]);
     earnPoints(20, 'הוספת צורה/מרקם');
+    if (isNetworkOnline()) {
+      setDoc(doc(db, 'abstract_shapes', newShape.id), newShape, { merge: true }).catch(() => {});
+    }
     return newShape;
   };
 
   const updateAbstractShape = (id: string, updates: Partial<AbstractShapeCard>) => {
-    setAbstractShapes((prev) => prev.map((s) => (s.id === id ? { ...s, ...updates } : s)));
+    const now = Date.now();
+    setAbstractShapes((prev) => prev.map((s) => (s.id === id ? { ...s, ...updates, updatedAt: now } : s)));
     earnPoints(10, 'עדכון צורה ומרקם');
+    if (isNetworkOnline()) {
+      setDoc(doc(db, 'abstract_shapes', id), { ...updates, updatedAt: now }, { merge: true }).catch(() => {});
+    }
   };
 
   const deleteAbstractShape = (id: string) => {
     setAbstractShapes((prev) => prev.filter((s) => s.id !== id));
+    if (isNetworkOnline()) {
+      deleteDoc(doc(db, 'abstract_shapes', id)).catch(() => {});
+    }
   };
 
   const resetAbstractShapes = () => {
@@ -1350,22 +1475,34 @@ export function useMemoryStore() {
   };
 
   const addAcademicPoint = (point: Omit<AcademicKeyPoint, 'id'>) => {
+    const now = Date.now();
     const newPoint: AcademicKeyPoint = {
-      id: `academic-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      id: `academic-${now}-${Math.random().toString(36).substr(2, 4)}`,
       ...point,
+      updatedAt: now,
     };
     setAcademicPoints((prev) => [newPoint, ...prev]);
     earnPoints(25, 'הוספת מושג אקדמי');
+    if (isNetworkOnline()) {
+      setDoc(doc(db, 'academic_points', newPoint.id), newPoint, { merge: true }).catch(() => {});
+    }
     return newPoint;
   };
 
   const updateAcademicPoint = (id: string, updates: Partial<AcademicKeyPoint>) => {
-    setAcademicPoints((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates } : p)));
+    const now = Date.now();
+    setAcademicPoints((prev) => prev.map((p) => (p.id === id ? { ...p, ...updates, updatedAt: now } : p)));
     earnPoints(10, 'עדכון מושג אקדמי');
+    if (isNetworkOnline()) {
+      setDoc(doc(db, 'academic_points', id), { ...updates, updatedAt: now }, { merge: true }).catch(() => {});
+    }
   };
 
   const deleteAcademicPoint = (id: string) => {
     setAcademicPoints((prev) => prev.filter((p) => p.id !== id));
+    if (isNetworkOnline()) {
+      deleteDoc(doc(db, 'academic_points', id)).catch(() => {});
+    }
   };
 
   const resetAcademicPoints = () => {
