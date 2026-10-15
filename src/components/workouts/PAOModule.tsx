@@ -17,6 +17,8 @@ import {
   Check,
   ArrowLeft,
   Filter,
+  Zap,
+  Package,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { PAOItem } from '../../types/memory';
@@ -76,13 +78,22 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
   const [newAction, setNewAction] = useState('');
   const [newObject, setNewObject] = useState('');
 
+  // PAO Quiz question & filter types
+  type PAOQuizQuestionType =
+    | 'numberToPerson'
+    | 'numberToAction'
+    | 'numberToObject'
+    | 'personToNumber'
+    | 'actionToNumber'
+    | 'objectToNumber';
+
+  type PAOQuizFilter = 'all' | 'person' | 'action' | 'object' | 'reverse';
+
   // PAO Quiz state (Strictly over readyPaoItems)
   const [quizIndex, setQuizIndex] = useState(0);
-  const [quizType, setQuizType] = useState<'numberToAll' | 'personToNumber'>('numberToAll');
-  const [userGuessPerson, setUserGuessPerson] = useState('');
-  const [userGuessAction, setUserGuessAction] = useState('');
-  const [userGuessObject, setUserGuessObject] = useState('');
-  const [userGuessNumber, setUserGuessNumber] = useState('');
+  const [quizFilter, setQuizFilter] = useState<PAOQuizFilter>('all');
+  const [questionType, setQuestionType] = useState<PAOQuizQuestionType>('numberToPerson');
+  const [userGuessInput, setUserGuessInput] = useState('');
   const [quizFeedback, setQuizFeedback] = useState<'idle' | 'correct' | 'incorrect'>('idle');
   const [revealQuizAnswer, setRevealQuizAnswer] = useState(false);
 
@@ -186,52 +197,82 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
     setShowAddForm(false);
   };
 
-  const handleNextQuizQuestion = () => {
+  const pickNextQuestionType = (filter: PAOQuizFilter): PAOQuizQuestionType => {
+    if (filter === 'person') return 'numberToPerson';
+    if (filter === 'action') return 'numberToAction';
+    if (filter === 'object') return 'numberToObject';
+    if (filter === 'reverse') {
+      const revs: PAOQuizQuestionType[] = ['personToNumber', 'actionToNumber', 'objectToNumber'];
+      return revs[Math.floor(Math.random() * revs.length)];
+    }
+    // Filter 'all' -> random question testing either Person (35%), Action (35%), Object (20%), or Reverse Number (10%)
+    const rand = Math.random();
+    if (rand < 0.35) return 'numberToPerson';
+    if (rand < 0.70) return 'numberToAction';
+    if (rand < 0.90) return 'numberToObject';
+    const revs: PAOQuizQuestionType[] = ['personToNumber', 'actionToNumber', 'objectToNumber'];
+    return revs[Math.floor(Math.random() * revs.length)];
+  };
+
+  const handleNextQuizQuestion = (customFilter?: PAOQuizFilter) => {
     if (readyPaoItems.length === 0) return;
     const nextIdx = Math.floor(Math.random() * readyPaoItems.length);
     setQuizIndex(nextIdx);
-    setUserGuessPerson('');
-    setUserGuessAction('');
-    setUserGuessObject('');
-    setUserGuessNumber('');
+    setUserGuessInput('');
     setQuizFeedback('idle');
     setRevealQuizAnswer(false);
-    setQuizType(Math.random() > 0.5 ? 'numberToAll' : 'personToNumber');
+    const activeFilter = customFilter !== undefined ? customFilter : quizFilter;
+    setQuestionType(pickNextQuestionType(activeFilter));
   };
 
   const handleCheckQuiz = () => {
     if (!currentQuizItem) return;
+    const guess = userGuessInput.trim();
+    if (!guess) return;
 
-    if (quizType === 'numberToAll') {
-      const targetP = currentQuizItem.userPerson || currentQuizItem.person || '';
-      const defaultP = currentQuizItem.person || '';
-      const guessP = userGuessPerson.trim();
-      if (!guessP) return;
+    let isMatch = false;
+    let successReason = '';
 
-      // Flexible Fuzzy Match & Normalization (strips brackets, initials, handles typos)
-      const isMatch = isHebrewFuzzyMatch(guessP, targetP) || isHebrewFuzzyMatch(guessP, defaultP);
-      if (isMatch) {
-        setQuizFeedback('correct');
-        setRevealQuizAnswer(true);
-        onEarnPoints(20, 'זיהוי מדויק של רכיב PAO');
-        onUnlockBadge('שלשת אלופים (PAO)');
-        confetti({ particleCount: 40, spread: 60, origin: { y: 0.6 } });
-      } else {
-        setQuizFeedback('incorrect');
-        setRevealQuizAnswer(true); // Automatically reveal correct answer on error
+    switch (questionType) {
+      case 'numberToPerson': {
+        const target = currentQuizItem.userPerson || currentQuizItem.person || '';
+        const fallback = currentQuizItem.person || '';
+        isMatch = isHebrewFuzzyMatch(guess, target) || isHebrewFuzzyMatch(guess, fallback);
+        successReason = 'שליפת דמות PAO';
+        break;
       }
+      case 'numberToAction': {
+        const target = currentQuizItem.userAction || currentQuizItem.action || '';
+        const fallback = currentQuizItem.action || '';
+        isMatch = isHebrewFuzzyMatch(guess, target) || isHebrewFuzzyMatch(guess, fallback);
+        successReason = 'שליפת פעולת PAO';
+        break;
+      }
+      case 'numberToObject': {
+        const target = currentQuizItem.userObject || currentQuizItem.object || '';
+        const fallback = currentQuizItem.object || '';
+        isMatch = isHebrewFuzzyMatch(guess, target) || isHebrewFuzzyMatch(guess, fallback);
+        successReason = 'שליפת חפץ PAO';
+        break;
+      }
+      case 'personToNumber':
+      case 'actionToNumber':
+      case 'objectToNumber': {
+        isMatch = guess === currentQuizItem.numberStr || parseInt(guess, 10) === currentQuizItem.number;
+        successReason = 'שליפת מספר משלשת PAO';
+        break;
+      }
+    }
+
+    if (isMatch) {
+      setQuizFeedback('correct');
+      setRevealQuizAnswer(true);
+      onEarnPoints(20, successReason);
+      onUnlockBadge('שלשת אלופים (PAO)');
+      confetti({ particleCount: 40, spread: 60, origin: { y: 0.6 } });
     } else {
-      const guessNum = userGuessNumber.trim();
-      if (!guessNum) return;
-      if (guessNum === currentQuizItem.numberStr || parseInt(guessNum, 10) === currentQuizItem.number) {
-        setQuizFeedback('correct');
-        setRevealQuizAnswer(true);
-        onEarnPoints(20, 'שליפת מספר משלשת PAO');
-        confetti({ particleCount: 40, spread: 60, origin: { y: 0.6 } });
-      } else {
-        setQuizFeedback('incorrect');
-        setRevealQuizAnswer(true); // Automatically reveal correct answer on error
-      }
+      setQuizFeedback('incorrect');
+      setRevealQuizAnswer(true); // Automatically reveal correct answer on error
     }
   };
 
@@ -248,6 +289,86 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
       o.toLowerCase().includes(search.toLowerCase())
     );
   });
+
+  const getQuizMeta = () => {
+    if (!currentQuizItem) return null;
+    switch (questionType) {
+      case 'numberToPerson':
+        return {
+          badgeIcon: <User className="w-3.5 h-3.5 text-amber-400" />,
+          badgeText: '👤 שאלה: דמות (Person)',
+          badgeColor: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+          title: 'מי הדמות המשויכת למספר:',
+          mainValue: currentQuizItem.numberStr,
+          isNumberMain: true,
+          testedField: 'person' as const,
+          placeholder: 'הקלד את שם הדמות (למשל סילבסטר סטאלון)...',
+          correctTarget: currentQuizItem.userPerson || currentQuizItem.person,
+        };
+      case 'numberToAction':
+        return {
+          badgeIcon: <Zap className="w-3.5 h-3.5 text-indigo-400" />,
+          badgeText: '⚡ שאלה: פעולה (Action)',
+          badgeColor: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30',
+          title: 'מה הפעולה המשויכת למספר:',
+          mainValue: currentQuizItem.numberStr,
+          isNumberMain: true,
+          testedField: 'action' as const,
+          placeholder: 'הקלד את הפעולה (למשל הקלדה / מקליד)...',
+          correctTarget: currentQuizItem.userAction || currentQuizItem.action,
+        };
+      case 'numberToObject':
+        return {
+          badgeIcon: <Package className="w-3.5 h-3.5 text-teal-400" />,
+          badgeText: '📦 שאלה: חפץ (Object)',
+          badgeColor: 'bg-teal-500/15 text-teal-300 border-teal-500/30',
+          title: 'מה החפץ המשויך למספר:',
+          mainValue: currentQuizItem.numberStr,
+          isNumberMain: true,
+          testedField: 'object' as const,
+          placeholder: 'הקלד את שם החפץ (למשל חוברת / כפפות)...',
+          correctTarget: currentQuizItem.userObject || currentQuizItem.object,
+        };
+      case 'personToNumber':
+        return {
+          badgeIcon: <User className="w-3.5 h-3.5 text-amber-400" />,
+          badgeText: '🔢 שליפת מספר מדמות (Person)',
+          badgeColor: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+          title: 'מה המספר המשויך לדמות:',
+          mainValue: currentQuizItem.userPerson || currentQuizItem.person,
+          isNumberMain: false,
+          testedField: 'number' as const,
+          placeholder: 'הקלד את המספר (למשל 23)...',
+          correctTarget: currentQuizItem.numberStr,
+        };
+      case 'actionToNumber':
+        return {
+          badgeIcon: <Zap className="w-3.5 h-3.5 text-indigo-400" />,
+          badgeText: '🔢 שליפת מספר מפעולה (Action)',
+          badgeColor: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30',
+          title: 'מה המספר המשויך לפעולה:',
+          mainValue: currentQuizItem.userAction || currentQuizItem.action,
+          isNumberMain: false,
+          testedField: 'number' as const,
+          placeholder: 'הקלד את המספר (למשל 23)...',
+          correctTarget: currentQuizItem.numberStr,
+        };
+      case 'objectToNumber':
+        return {
+          badgeIcon: <Package className="w-3.5 h-3.5 text-teal-400" />,
+          badgeText: '🔢 שליפת מספר מחפץ (Object)',
+          badgeColor: 'bg-teal-500/15 text-teal-300 border-teal-500/30',
+          title: 'מה המספר המשויך לחפץ:',
+          mainValue: currentQuizItem.userObject || currentQuizItem.object,
+          isNumberMain: false,
+          testedField: 'number' as const,
+          placeholder: 'הקלד את המספר (למשל 23)...',
+          correctTarget: currentQuizItem.numberStr,
+        };
+    }
+  };
+
+  const quizMeta = getQuizMeta();
 
   return (
     <div className="bg-white border-2 border-slate-200 border-b-6 border-b-slate-300 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6 text-slate-900">
@@ -992,83 +1113,104 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
             </div>
           ) : (
             <>
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-3 py-1.5 rounded-xl border border-emerald-300 flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>מתרגל {readyPaoItems.length} שלשות שסומנו כמוכנות (מתוך {paoItems.length})</span>
-                </span>
-                <button
-                  onClick={handleNextQuizQuestion}
-                  className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 bg-slate-800 px-3.5 py-1.5 rounded-xl cursor-pointer"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>שאלה אקראית חדשה</span>
-                </button>
+              {/* Quiz Mode Selector & Header */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-950/80 p-3 rounded-2xl border border-slate-800">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-xs text-slate-400 font-bold ml-1 flex items-center gap-1">
+                    <Filter className="w-3.5 h-3.5 text-indigo-400" />
+                    <span>התמקד ב:</span>
+                  </span>
+                  {[
+                    { id: 'all', label: '🎯 הכל מעורב (אקראי)' },
+                    { id: 'person', label: '👤 דמויות (P)' },
+                    { id: 'action', label: '⚡ פעולות (A)' },
+                    { id: 'object', label: '📦 חפצים (O)' },
+                    { id: 'reverse', label: '🔢 פריט ➔ מספר' },
+                  ].map((f) => (
+                    <button
+                      key={f.id}
+                      onClick={() => {
+                        setQuizFilter(f.id as PAOQuizFilter);
+                        handleNextQuizQuestion(f.id as PAOQuizFilter);
+                      }}
+                      className={`px-3 py-1 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        quizFilter === f.id
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-2 justify-between sm:justify-end">
+                  <span className="text-[11px] bg-emerald-500/15 text-emerald-300 font-bold px-2.5 py-1 rounded-xl border border-emerald-500/30 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                    <span>{readyPaoItems.length} מוכנים לתרגול</span>
+                  </span>
+                  <button
+                    onClick={() => handleNextQuizQuestion()}
+                    className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 bg-slate-800 px-3 py-1 rounded-xl cursor-pointer"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>החלף שאלה</span>
+                  </button>
+                </div>
               </div>
 
-              {currentQuizItem && (
+              {currentQuizItem && quizMeta && (
                 <div className="max-w-xl mx-auto space-y-6 text-center">
                   <div className="p-8 rounded-3xl bg-slate-950 border border-slate-800 shadow-inner space-y-3">
-                    {quizType === 'numberToAll' ? (
-                      <>
-                        <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest">
-                          מי הדמות של המספר:
-                        </span>
-                        <div className="text-6xl font-black text-white tracking-wider">
-                          {currentQuizItem.numberStr}
+                    <div className="flex items-center justify-center gap-2">
+                      <span
+                        className={`inline-flex items-center gap-1 text-[11px] font-black px-3 py-1 rounded-xl border ${quizMeta.badgeColor}`}
+                      >
+                        {quizMeta.badgeIcon}
+                        <span>{quizMeta.badgeText}</span>
+                      </span>
+                    </div>
+
+                    <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest block">
+                      {quizMeta.title}
+                    </span>
+
+                    {quizMeta.isNumberMain ? (
+                      <div className="flex flex-col items-center justify-center gap-1">
+                        <div className="text-6xl font-black text-white tracking-wider font-mono">
+                          {quizMeta.mainValue}
                         </div>
-                      </>
+                        <span className="text-[11px] font-sans font-bold text-amber-300/90 bg-amber-500/10 px-2.5 py-0.5 rounded-lg border border-amber-500/20">
+                          ר"ת: {getPAOInitials(currentQuizItem.number).initials}
+                        </span>
+                      </div>
                     ) : (
-                      <>
-                        <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest">
-                          מה המספר של הדמות:
-                        </span>
-                        <div className="text-3xl font-black text-white tracking-wide">
-                          {currentQuizItem.userPerson || currentQuizItem.person}
-                        </div>
-                      </>
+                      <div className="text-3xl font-black text-white tracking-wide py-2">
+                        {quizMeta.mainValue}
+                      </div>
                     )}
                   </div>
 
                   <div className="space-y-4">
                     <div className="flex gap-2 max-w-sm mx-auto">
-                      {quizType === 'numberToAll' ? (
-                        <input
-                          type="text"
-                          value={userGuessPerson}
-                          onChange={(e) => setUserGuessPerson(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              if (quizFeedback !== 'idle' || revealQuizAnswer) {
-                                handleNextQuizQuestion();
-                              } else {
-                                handleCheckQuiz();
-                              }
+                      <input
+                        type="text"
+                        value={userGuessInput}
+                        onChange={(e) => setUserGuessInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (quizFeedback !== 'idle' || revealQuizAnswer) {
+                              handleNextQuizQuestion();
+                            } else {
+                              handleCheckQuiz();
                             }
-                          }}
-                          placeholder="הקלד את שם הדמות..."
-                          className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-center text-sm font-bold text-white focus:outline-none focus:border-indigo-500"
-                        />
-                      ) : (
-                        <input
-                          type="text"
-                          value={userGuessNumber}
-                          onChange={(e) => setUserGuessNumber(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              if (quizFeedback !== 'idle' || revealQuizAnswer) {
-                                handleNextQuizQuestion();
-                              } else {
-                                handleCheckQuiz();
-                              }
-                            }
-                          }}
-                          placeholder="הקלד את המספר (למשל 21)..."
-                          className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-center text-sm font-bold text-white focus:outline-none focus:border-indigo-500 font-mono"
-                        />
-                      )}
+                          }
+                        }}
+                        autoFocus
+                        placeholder={quizMeta.placeholder}
+                        className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-center text-sm font-bold text-white focus:outline-none focus:border-indigo-500 placeholder:text-slate-600"
+                      />
                       <button
                         onClick={() => {
                           if (quizFeedback !== 'idle' || revealQuizAnswer) {
@@ -1077,7 +1219,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                             handleCheckQuiz();
                           }
                         }}
-                        className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-5 py-2.5 rounded-xl text-xs transition-all cursor-pointer"
+                        className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-5 py-2.5 rounded-xl text-xs transition-all cursor-pointer whitespace-nowrap"
                       >
                         {quizFeedback !== 'idle' || revealQuizAnswer ? 'הבא ↵' : 'בדוק'}
                       </button>
@@ -1119,22 +1261,68 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                             ר"ת: {getPAOInitials(currentQuizItem.number).initials}
                           </span>
                         </div>
+
+                        {/* Triplet Grid with highlight for the tested dimension */}
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-center pt-1">
-                          <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30">
-                            <span className="text-[10px] text-amber-400 font-bold block">👤 דמות (P):</span>
-                            <strong className="text-white text-xs block mt-0.5">
+                          {/* Person Card */}
+                          <div
+                            className={`p-2.5 rounded-xl border transition-all ${
+                              quizMeta.testedField === 'person'
+                                ? 'bg-amber-500/25 border-amber-400 ring-2 ring-amber-400/30'
+                                : 'bg-amber-500/10 border-amber-500/30 opacity-80'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] text-amber-400 font-bold block">👤 דמות (P):</span>
+                              {quizMeta.testedField === 'person' && (
+                                <span className="text-[9px] bg-amber-400 text-slate-950 font-black px-1.5 py-0.2 rounded-md">
+                                  נבדק בשאלה
+                                </span>
+                              )}
+                            </div>
+                            <strong className="text-white text-xs block mt-1">
                               {currentQuizItem.userPerson || currentQuizItem.person}
                             </strong>
                           </div>
-                          <div className="p-2.5 rounded-xl bg-indigo-500/10 border border-indigo-500/30">
-                            <span className="text-[10px] text-indigo-400 font-bold block">⚡ פעולה (A):</span>
-                            <strong className="text-white text-xs block mt-0.5">
+
+                          {/* Action Card */}
+                          <div
+                            className={`p-2.5 rounded-xl border transition-all ${
+                              quizMeta.testedField === 'action'
+                                ? 'bg-indigo-500/25 border-indigo-400 ring-2 ring-indigo-400/30'
+                                : 'bg-indigo-500/10 border-indigo-500/30 opacity-80'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] text-indigo-400 font-bold block">⚡ פעולה (A):</span>
+                              {quizMeta.testedField === 'action' && (
+                                <span className="text-[9px] bg-indigo-400 text-slate-950 font-black px-1.5 py-0.2 rounded-md">
+                                  נבדק בשאלה
+                                </span>
+                              )}
+                            </div>
+                            <strong className="text-white text-xs block mt-1">
                               {currentQuizItem.userAction || currentQuizItem.action}
                             </strong>
                           </div>
-                          <div className="p-2.5 rounded-xl bg-teal-500/10 border border-teal-500/30">
-                            <span className="text-[10px] text-teal-400 font-bold block">📦 חפץ (O):</span>
-                            <strong className="text-white text-xs block mt-0.5">
+
+                          {/* Object Card */}
+                          <div
+                            className={`p-2.5 rounded-xl border transition-all ${
+                              quizMeta.testedField === 'object'
+                                ? 'bg-teal-500/25 border-teal-400 ring-2 ring-teal-400/30'
+                                : 'bg-teal-500/10 border-teal-500/30 opacity-80'
+                            }`}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="text-[10px] text-teal-400 font-bold block">📦 חפץ (O):</span>
+                              {quizMeta.testedField === 'object' && (
+                                <span className="text-[9px] bg-teal-400 text-slate-950 font-black px-1.5 py-0.2 rounded-md">
+                                  נבדק בשאלה
+                                </span>
+                              )}
+                            </div>
+                            <strong className="text-white text-xs block mt-1">
                               {currentQuizItem.userObject || currentQuizItem.object}
                             </strong>
                           </div>
@@ -1142,12 +1330,14 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
 
                         <div className="p-3 rounded-xl bg-indigo-950/40 border border-indigo-500/30 text-xs text-indigo-200">
                           ⚡ <strong className="text-amber-400">סצנה מנטלית:</strong>{' '}
-                          "{currentQuizItem.userPerson || currentQuizItem.person} {currentQuizItem.userAction || currentQuizItem.action} {currentQuizItem.userObject || currentQuizItem.object}"
+                          "{currentQuizItem.userPerson || currentQuizItem.person}{' '}
+                          {currentQuizItem.userAction || currentQuizItem.action}{' '}
+                          {currentQuizItem.userObject || currentQuizItem.object}"
                         </div>
 
                         <div className="flex justify-center pt-1">
                           <button
-                            onClick={handleNextQuizQuestion}
+                            onClick={() => handleNextQuizQuestion()}
                             className="text-xs text-indigo-300 hover:text-white font-bold inline-flex items-center gap-1 bg-slate-900 px-4 py-2 rounded-xl border border-indigo-500/30 cursor-pointer shadow-sm hover:border-indigo-400"
                           >
                             <span>לשאלה האקראית הבאה (Enter ↵)</span>

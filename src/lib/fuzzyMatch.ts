@@ -1,14 +1,28 @@
 /**
+ * Normalizes Hebrew final forms (sofit) to standard letters
+ * (ך->כ, ם->מ, ן->נ, ף->פ, ץ->צ) so roots and stems match seamlessly.
+ */
+export function normalizeHebrewFinals(text: string): string {
+  if (!text) return '';
+  return text
+    .replace(/ך/g, 'כ')
+    .replace(/ם/g, 'מ')
+    .replace(/ן/g, 'נ')
+    .replace(/ף/g, 'פ')
+    .replace(/ץ/g, 'צ');
+}
+
+/**
  * Normalizes Hebrew text for flexible comparison:
  * - Strips parentheses and brackets with contents (e.g., "(ס.ב)" or "[ס.ב.]")
  * - Strips Hebrew niqqud / diacritics
  * - Removes punctuation (quotes, hyphens, dots, commas)
- * - Normalizes Hebrew plene spelling (matres lectionis like 'א', 'ו', 'י' variations)
+ * - Normalizes Hebrew final letters
  * - Trims extra whitespace
  */
 export function normalizeHebrewText(text: string): string {
   if (!text) return '';
-  return text
+  const cleaned = text
     // Remove parentheses/brackets and their inner content
     .replace(/\(.*?\)/g, '')
     .replace(/\[.*?\]/g, '')
@@ -20,6 +34,8 @@ export function normalizeHebrewText(text: string): string {
     .toLowerCase()
     .trim()
     .replace(/\s+/g, ' ');
+
+  return normalizeHebrewFinals(cleaned);
 }
 
 /**
@@ -60,12 +76,99 @@ export function levenshteinDistance(a: string, b: string): number {
 }
 
 /**
- * Flexible Hebrew Fuzzy Match:
- * 1. Normalizes both guess & target (strips parentheses, punctuation, niqqud).
+ * Common Hebrew prepositions, conjunctions, and stop words to ignore when comparing phrases
+ */
+const HEBREW_STOP_WORDS = new Set([
+  'של', 'על', 'את', 'עם', 'אל', 'ב', 'ל', 'מ', 'כ', 'ש', 'הוא', 'היא', 'הם', 'הן',
+  'זה', 'זו', 'אלה', 'עבור', 'לתוך', 'מתוך', 'מעל', 'תחת', 'ליד', 'בתוך', 'מול',
+  'לעבר', 'בין', 'אשר', 'שלו', 'שלה', 'שלהם', 'שלהן', 'אודות', 'בלי', 'ללא', 'כמו',
+  'אך', 'רק', 'גם', 'כל'
+]);
+
+/**
+ * Extracts the Hebrew morphological root/stem skeleton:
+ * - Strips verb/noun prefixes (ה, מ, ל, ת, נ, ו, ש, ב, כ)
+ * - Strips common suffixes (ות, ים, ית, יה, ון, ה, ת, י)
+ * - Strips vowel letters (אהו"י)
+ *
+ * Example:
+ * "הקלדה" -> "קלד"
+ * "מקליד" -> "קלד"
+ * "מניף"   -> "נפ"
+ * "הנפה"   -> "נפ"
+ */
+export function getHebrewStem(word: string): string {
+  let w = normalizeHebrewText(word);
+  if (w.length <= 2) return w;
+
+  // Leading conjunctions & prepositions
+  if (w.startsWith('ו') && w.length >= 4) w = w.slice(1);
+  if (w.startsWith('כש') && w.length >= 5) w = w.slice(2);
+  if (w.startsWith('ש') && w.length >= 4) w = w.slice(1);
+  if (
+    (w.startsWith('ה') ||
+      w.startsWith('מ') ||
+      w.startsWith('ל') ||
+      w.startsWith('ת') ||
+      w.startsWith('נ') ||
+      w.startsWith('ב') ||
+      w.startsWith('כ')) &&
+    w.length >= 4
+  ) {
+    w = w.slice(1);
+  }
+
+  // Trailing suffixes
+  if (w.endsWith('ות') && w.length >= 4) w = w.slice(0, -2);
+  else if (w.endsWith('ים') && w.length >= 4) w = w.slice(0, -2);
+  else if (w.endsWith('ית') && w.length >= 4) w = w.slice(0, -2);
+  else if (w.endsWith('יה') && w.length >= 4) w = w.slice(0, -2);
+  else if (w.endsWith('ון') && w.length >= 4) w = w.slice(0, -2);
+  else if (w.endsWith('ה') && w.length >= 4) w = w.slice(0, -1);
+  else if (w.endsWith('ת') && w.length >= 4) w = w.slice(0, -1);
+  else if (w.endsWith('י') && w.length >= 4) w = w.slice(0, -1);
+
+  const skeleton = w.replace(/[אהוי]/g, '');
+  return skeleton.length >= 2 ? skeleton : w;
+}
+
+/**
+ * Checks whether an individual guess word matches an individual target word
+ * using exact, substring, typo (Levenshtein), or Hebrew morphological stem.
+ */
+export function isHebrewWordMatch(guessWord: string, targetWord: string): boolean {
+  if (!guessWord || !targetWord) return false;
+  if (guessWord === targetWord) return true;
+
+  // Substring match if meaningful length
+  if (guessWord.length >= 3 && targetWord.includes(guessWord)) return true;
+  if (targetWord.length >= 3 && guessWord.includes(targetWord)) return true;
+
+  // Levenshtein fuzzy match for typos (e.g. "סלסבטר" vs "סילבסטר")
+  const maxLen = Math.max(guessWord.length, targetWord.length);
+  const dist = levenshteinDistance(guessWord, targetWord);
+  if (maxLen <= 5 && dist <= 1) return true;
+  if (maxLen <= 8 && dist <= 2) return true;
+  if (maxLen > 8 && dist <= 3) return true;
+  if (maxLen >= 7 && dist <= 3) return true;
+
+  // Hebrew morphological stem match (e.g. "הקלדה" vs "מקליד")
+  const stemG = getHebrewStem(guessWord);
+  const stemT = getHebrewStem(targetWord);
+  if (stemG.length >= 2 && stemG === stemT) return true;
+  if (stemG.length >= 3 && (stemT.includes(stemG) || stemG.includes(stemT))) return true;
+
+  return false;
+}
+
+/**
+ * Flexible Hebrew Fuzzy Match with Morphological Support:
+ * 1. Normalizes both guess & target (strips parentheses, punctuation, niqqud, finals).
  * 2. Checks exact normalized match.
- * 3. Checks if guess matches part of target or vice versa.
- * 4. Checks Hebrew plene spelling variations (ignoring 'א', 'ו', 'י' differences).
- * 5. Uses Levenshtein distance for minor typos/spelling differences.
+ * 3. Checks direct substring inclusion (e.g. "חוברת" inside "חוברת קומיקס נדירה").
+ * 4. Checks word-by-word matching with morphological stemming & Levenshtein typo tolerance.
+ *    (e.g., "הקלדה" matches "מקליד על מחשב", "סלסבטר סטלון" matches "סילבסטר סטאלון").
+ * 5. Overall Levenshtein tolerance for whole-phrase typos.
  */
 export function isHebrewFuzzyMatch(guess: string, target: string): boolean {
   const normGuess = normalizeHebrewText(guess);
@@ -76,44 +179,45 @@ export function isHebrewFuzzyMatch(guess: string, target: string): boolean {
   // 1. Direct match after normalization
   if (normGuess === normTarget) return true;
 
-  // 2. Substring match (e.g. "סילבסטר" or "סטאלון" for "סילבסטר סטאלון")
-  if (normTarget.includes(normGuess) || normGuess.includes(normTarget)) {
+  // 2. Direct substring check (e.g. "חוברת" in "חוברת קומיקס נדירה", or "סילבסטר" in "סילבסטר סטאלון")
+  if (normGuess.length >= 3 && normTarget.includes(normGuess)) return true;
+  if (normTarget.length >= 3 && normGuess.includes(normTarget)) return true;
+
+  // Split into meaningful words, filtering stop words
+  const targetWords = normTarget.split(' ').filter((w) => w && !HEBREW_STOP_WORDS.has(w));
+  const guessWords = normGuess.split(' ').filter((w) => w && !HEBREW_STOP_WORDS.has(w));
+
+  if (guessWords.length === 0 || targetWords.length === 0) return false;
+
+  // 3. Check if words of the guess match words in target
+  let matchedGuessCount = 0;
+  for (const gw of guessWords) {
+    const matched = targetWords.some((tw) => isHebrewWordMatch(gw, tw));
+    if (matched) matchedGuessCount++;
+  }
+
+  // If every meaningful word of the guess matched a target word
+  if (matchedGuessCount === guessWords.length) return true;
+
+  // For multi-word guesses, allow majority match
+  if (guessWords.length >= 2 && matchedGuessCount >= Math.ceil(guessWords.length * 0.7)) {
     return true;
   }
 
-  // 3. Word-by-word match (if multi-word target, e.g., first + last name)
-  const targetWords = normTarget.split(' ').filter(Boolean);
-  const guessWords = normGuess.split(' ').filter(Boolean);
-
-  if (targetWords.length > 1 && guessWords.length > 0) {
-    const matchedCount = guessWords.filter((gw) =>
-      targetWords.some(
-        (tw) => tw === gw || (tw.length >= 3 && (tw.includes(gw) || gw.includes(tw)))
-      )
-    ).length;
-
-    if (matchedCount === guessWords.length || matchedCount >= Math.ceil(targetWords.length / 2)) {
-      return true;
-    }
-  }
-
   // 4. Hebrew Plene spelling reduction (removing matres lectionis 'א', 'ו', 'י' for phonetic comparison)
-  const skeletonGuess = normGuess.replace(/[אוי]/g, '');
-  const skeletonTarget = normTarget.replace(/[אוי]/g, '');
+  const skeletonGuess = normGuess.replace(/[אהוי]/g, '');
+  const skeletonTarget = normTarget.replace(/[אהוי]/g, '');
 
   if (skeletonGuess.length > 2 && skeletonGuess === skeletonTarget) {
     return true;
   }
 
-  // 5. Levenshtein Distance tolerance
+  // 5. Overall Levenshtein Distance tolerance
   const dist = levenshteinDistance(normGuess, normTarget);
   const maxLen = Math.max(normGuess.length, normTarget.length);
 
-  // Allow minor typos based on string length
-  if (maxLen <= 5 && dist <= 1) return true;
-  if (maxLen <= 10 && dist <= 2) return true;
-  if (maxLen > 10 && dist <= 3) return true;
+  if (maxLen <= 8 && dist <= 2) return true;
+  if (maxLen > 8 && (maxLen - dist) / maxLen >= 0.7) return true;
 
-  const similarity = (maxLen - dist) / maxLen;
-  return similarity >= 0.75;
+  return false;
 }
