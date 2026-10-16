@@ -127,28 +127,28 @@ export const Navbar: React.FC<NavbarProps> = ({
   ];
 
   return (
-    <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b-2 border-slate-200 shadow-sm">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
+    <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b-2 border-slate-200 shadow-sm w-full max-w-full overflow-hidden">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 w-full max-w-full">
+        <div className="flex items-center justify-between h-14 sm:h-16 gap-2 w-full">
           {/* Logo */}
           <div
             onClick={() => onTabChange('workouts')}
-            className="flex items-center gap-3 cursor-pointer group shrink-0"
+            className="flex items-center gap-2 sm:gap-3 cursor-pointer group shrink-0 min-w-0"
           >
-            <div className="relative flex items-center justify-center w-11 h-11 rounded-2xl bg-[#58CC02] border-b-4 border-[#46a302] shadow-sm group-hover:scale-105 active:translate-y-0.5 transition-all">
-              <Brain className="w-6 h-6 text-white font-black drop-shadow" />
-              <div className="absolute -top-1 -right-1 w-3 h-3 bg-[#FFC800] rounded-full border-2 border-white animate-pulse" />
+            <div className="relative flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-[#58CC02] border-b-4 border-[#46a302] shadow-sm group-hover:scale-105 active:translate-y-0.5 transition-all shrink-0">
+              <Brain className="w-5 h-5 sm:w-6 sm:h-6 text-white font-black drop-shadow" />
+              <div className="absolute -top-1 -right-1 w-2.5 h-2.5 sm:w-3 sm:h-3 bg-[#FFC800] rounded-full border-2 border-white animate-pulse" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xl font-black text-slate-900 tracking-tight">
-                  ממנטו <span className="text-[#58CC02]">Memento</span>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <span className="text-base sm:text-xl font-black text-slate-900 tracking-tight whitespace-nowrap">
+                  ממנטו <span className="text-[#58CC02] hidden xs:inline">Memento</span>
                 </span>
-                <span className="text-[11px] font-black uppercase tracking-wider bg-[#FFC800]/25 text-amber-800 border-2 border-[#FFC800]/60 px-2 py-0.5 rounded-xl">
+                <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider bg-[#FFC800]/25 text-amber-800 border-2 border-[#FFC800]/60 px-1.5 sm:px-2 py-0.5 rounded-lg sm:rounded-xl whitespace-nowrap">
                   רמה {profile.level}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500 font-semibold hidden sm:block">
+              <p className="text-[11px] text-slate-500 font-semibold hidden sm:block truncate">
                 אקדמיית מנמוניקה, ארמונות זיכרון ואימונים יומיים
               </p>
             </div>
@@ -172,15 +172,15 @@ export const Navbar: React.FC<NavbarProps> = ({
           )}
 
           {/* Gamification Stats & User Auth */}
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
             {/* Mobile Search Button */}
             {onOpenSearch && (
               <button
                 onClick={onOpenSearch}
-                className="md:hidden text-slate-600 hover:text-amber-600 p-2 rounded-xl bg-slate-100 border border-slate-300 transition-colors"
+                className="md:hidden text-slate-600 hover:text-amber-600 p-1.5 sm:p-2 rounded-xl bg-slate-100 border border-slate-300 transition-colors"
                 title="חיפוש כללי"
               >
-                <Search className="w-4 h-4 text-amber-600" />
+                <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-600" />
               </button>
             )}
 
@@ -188,75 +188,76 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div
               onClick={() => onTabChange('gamification')}
               title="רצף ימי אימון יומי"
-              className="flex items-center gap-1.5 bg-[#FF9600]/15 border-2 border-[#FF9600]/40 px-3 py-1.5 rounded-2xl text-[#c76500] font-black text-xs cursor-pointer hover:bg-[#FF9600]/25 transition-all hover:scale-105 active:scale-95"
+              className="flex items-center gap-1 bg-[#FF9600]/15 border-2 border-[#FF9600]/40 px-2 sm:px-3 py-1 sm:py-1.5 rounded-xl sm:rounded-2xl text-[#c76500] font-black text-[11px] sm:text-xs cursor-pointer hover:bg-[#FF9600]/25 transition-all hover:scale-105 active:scale-95 whitespace-nowrap"
             >
-              <Flame className="w-4 h-4 fill-[#FF9600]" />
-              <span>{profile.dailyStreak} ימים</span>
+              <Flame className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-[#FF9600]" />
+              <span>{profile.dailyStreak}</span>
+              <span className="hidden xs:inline"> ימים</span>
             </div>
 
             {/* XP Points */}
             <div
               onClick={() => onTabChange('gamification')}
               title="סך נקודות XP"
-              className="flex items-center gap-1.5 bg-[#FFC800]/20 border-2 border-[#FFC800]/50 px-3 py-1.5 rounded-2xl text-amber-900 font-black text-xs cursor-pointer hover:bg-[#FFC800]/30 transition-all hover:scale-105 active:scale-95"
+              className="flex items-center gap-1 bg-[#FFC800]/20 border-2 border-[#FFC800]/50 px-2 sm:px-3 py-1 sm:py-1.5 rounded-xl sm:rounded-2xl text-amber-900 font-black text-[11px] sm:text-xs cursor-pointer hover:bg-[#FFC800]/30 transition-all hover:scale-105 active:scale-95 whitespace-nowrap"
             >
-              <Zap className="w-4 h-4 fill-[#FFC800]" />
+              <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-[#FFC800]" />
               <span>{profile.points} XP</span>
             </div>
 
             {/* Network & Real-Time Sync Indicator */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1">
               {!isOnline ? (
                 <div
                   title="מצב אופליין: עובד מקומית. כל השינויים נשמרים במכשיר ויסונכרנו אוטומטית לענן ברגע שתתחבר לרשת"
-                  className="flex items-center gap-1.5 bg-amber-100 border-2 border-amber-300 text-amber-900 px-2.5 py-1.5 rounded-2xl text-[11px] font-black shadow-xs"
+                  className="flex items-center gap-1 bg-amber-100 border-2 border-amber-300 text-amber-900 p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl sm:rounded-2xl text-[11px] font-black shadow-xs whitespace-nowrap"
                 >
                   <CloudOff className="w-3.5 h-3.5 text-amber-700 animate-pulse" />
-                  <span className="hidden sm:inline">אופליין (נשמר מקומית)</span>
-                  <span className="sm:hidden">אופליין</span>
+                  <span className="hidden md:inline">אופליין (נשמר מקומית)</span>
+                  <span className="hidden sm:inline md:hidden">אופליין</span>
                 </div>
               ) : (
                 <div
                   title="סנכרון ענן ו-Rowy פעיל בזמן אמת (onSnapshot): כל שינוי ב-Rowy או במכשיר מתעדכן מיידית"
-                  className="flex items-center gap-1.5 bg-emerald-50 border-2 border-emerald-300 text-emerald-800 px-2.5 py-1.5 rounded-2xl text-[11px] font-black shadow-xs"
+                  className="flex items-center gap-1 bg-emerald-50 border-2 border-emerald-300 text-emerald-800 p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl sm:rounded-2xl text-[11px] font-black shadow-xs whitespace-nowrap"
                 >
                   <span className="relative flex h-2 w-2">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                   </span>
-                  <Cloud className="w-3.5 h-3.5 text-emerald-600" />
+                  <Cloud className="w-3.5 h-3.5 text-emerald-600 hidden xs:inline" />
                   <span className="hidden md:inline">סנכרון בזמן אמת</span>
-                  <span className="md:hidden">זמן אמת</span>
+                  <span className="hidden sm:inline md:hidden">זמן אמת</span>
                 </div>
               )}
             </div>
 
             {/* Auth Button */}
             {currentUser ? (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 sm:gap-2">
                 {currentUser.photoURL ? (
                   <img
                     src={currentUser.photoURL}
                     alt=""
-                    className="w-9 h-9 rounded-2xl border-2 border-[#58CC02] object-cover shadow-sm"
+                    className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl sm:rounded-2xl border-2 border-[#58CC02] object-cover shadow-sm"
                   />
                 ) : (
-                  <div className="w-9 h-9 rounded-2xl bg-slate-100 text-[#58CC02] border-2 border-[#58CC02] flex items-center justify-center font-black text-sm shadow-sm">
+                  <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl sm:rounded-2xl bg-slate-100 text-[#58CC02] border-2 border-[#58CC02] flex items-center justify-center font-black text-xs sm:text-sm shadow-sm">
                     {profile.displayName?.charAt(0) || 'U'}
                   </div>
                 )}
                 <button
                   onClick={onLogout}
                   title="התנתק"
-                  className="text-slate-500 hover:text-rose-600 p-2 rounded-xl hover:bg-slate-100 transition-colors"
+                  className="text-slate-500 hover:text-rose-600 p-1.5 sm:p-2 rounded-xl hover:bg-slate-100 transition-colors"
                 >
-                  <LogOut className="w-4 h-4" />
+                  <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </button>
               </div>
             ) : (
               <button
                 onClick={onLogin}
-                className="flex items-center gap-1.5 btn-duo-green px-3.5 py-1.5 text-xs cursor-pointer"
+                className="flex items-center gap-1 sm:gap-1.5 btn-duo-green px-2.5 sm:px-3.5 py-1.5 text-xs cursor-pointer whitespace-nowrap"
               >
                 <LogIn className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">התחבר</span>
@@ -266,43 +267,45 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               onClick={onResetDefaults}
               title="איפוס נתונים לברירת מחדל"
-              className="text-slate-500 hover:text-slate-800 p-2 rounded-xl hover:bg-slate-100 transition-colors"
+              className="text-slate-500 hover:text-slate-800 p-1.5 sm:p-2 rounded-xl hover:bg-slate-100 transition-colors hidden xs:flex"
             >
-              <RotateCcw className="w-4 h-4" />
+              <RotateCcw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </button>
           </div>
         </div>
 
         {/* Navigation Tabs Bar */}
-        <div className="flex items-center gap-2 overflow-x-auto py-2.5 no-scrollbar border-t border-slate-200">
-          {tabs.map((tab) => {
-            const isActive = currentTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => onTabChange(tab.id)}
-                className={`flex items-center whitespace-nowrap px-3.5 py-1.5 rounded-2xl text-xs sm:text-sm font-extrabold transition-all duration-150 cursor-pointer ${
-                  isActive
-                    ? 'bg-slate-100 text-slate-900 border-2 border-[#58CC02] border-b-4 border-b-[#46a302] shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 border-2 border-transparent'
-                }`}
-              >
-                <span className={isActive ? 'text-[#58CC02]' : tab.color}>{tab.icon}</span>
-                <span className="mr-1">{tab.label}</span>
-                {tab.badge && (
-                  <span
-                    className={`mr-2 text-[10px] font-black px-2 py-0.5 rounded-lg ${
-                      isActive
-                        ? 'bg-[#58CC02]/20 text-[#2e6e01] border border-[#58CC02]/40'
-                        : 'bg-slate-200/70 text-slate-600 border border-slate-300'
-                    }`}
-                  >
-                    {tab.badge}
-                  </span>
-                )}
-              </button>
-            );
-          })}
+        <div className="w-full max-w-full overflow-x-auto py-2 sm:py-2.5 no-scrollbar border-t border-slate-200">
+          <div className="flex items-center gap-1.5 sm:gap-2 w-max">
+            {tabs.map((tab) => {
+              const isActive = currentTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => onTabChange(tab.id)}
+                  className={`flex items-center whitespace-nowrap px-3 sm:px-3.5 py-1.5 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-extrabold transition-all duration-150 cursor-pointer ${
+                    isActive
+                      ? 'bg-slate-100 text-slate-900 border-2 border-[#58CC02] border-b-4 border-b-[#46a302] shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 border-2 border-transparent'
+                  }`}
+                >
+                  <span className={isActive ? 'text-[#58CC02]' : tab.color}>{tab.icon}</span>
+                  <span className="mr-1">{tab.label}</span>
+                  {tab.badge && (
+                    <span
+                      className={`mr-2 text-[10px] font-black px-1.5 sm:px-2 py-0.5 rounded-lg ${
+                        isActive
+                          ? 'bg-[#58CC02]/20 text-[#2e6e01] border border-[#58CC02]/40'
+                          : 'bg-slate-200/70 text-slate-600 border border-slate-300'
+                      }`}
+                    >
+                      {tab.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
     </header>

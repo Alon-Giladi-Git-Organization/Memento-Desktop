@@ -13,6 +13,7 @@ export type MnemonicPromptType =
   | 'pao_person'
   | 'pao_action'
   | 'pao_object'
+  | 'pao_scene'
   | 'name_face_anchor'
   | 'name_face_substitute'
   | 'name_face_scene'
@@ -26,6 +27,7 @@ interface AIFieldGeneratorButtonProps {
   promptType: MnemonicPromptType;
   inputContext: string;
   extraContext?: string;
+  customDigits?: any[];
   onGenerated: (generatedText: string) => void;
   label?: string;
   className?: string;
@@ -36,6 +38,7 @@ export const AIFieldGeneratorButton: React.FC<AIFieldGeneratorButtonProps> = ({
   promptType,
   inputContext,
   extraContext,
+  customDigits,
   onGenerated,
   label = 'מלא עם AI',
   className = '',
@@ -43,15 +46,26 @@ export const AIFieldGeneratorButton: React.FC<AIFieldGeneratorButtonProps> = ({
 }) => {
   const [loading, setLoading] = useState(false);
   const [justGenerated, setJustGenerated] = useState(false);
+  const [cycleCount, setCycleCount] = useState(0);
 
   const handleGenerate = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
     const effectiveInput = inputContext || extraContext || 'זיכרון ומנמוניקה';
+    const currentCycle = cycleCount;
+    setCycleCount((prev) => prev + 1);
 
     setLoading(true);
     setJustGenerated(false);
+
+    let activeDigits = customDigits;
+    if (!activeDigits || activeDigits.length === 0) {
+      try {
+        const raw = localStorage.getItem('mem_major_digits_0_9_v3');
+        if (raw) activeDigits = JSON.parse(raw);
+      } catch {}
+    }
 
     try {
       const res = await fetch('/api/gemini/generate-mnemonic', {
@@ -61,6 +75,8 @@ export const AIFieldGeneratorButton: React.FC<AIFieldGeneratorButtonProps> = ({
           type: promptType,
           input: effectiveInput,
           extra: extraContext || '',
+          cycle: currentCycle,
+          customDigits: activeDigits,
         }),
       });
 
@@ -73,6 +89,9 @@ export const AIFieldGeneratorButton: React.FC<AIFieldGeneratorButtonProps> = ({
       let textToUse = '';
 
       switch (promptType) {
+        case 'pao_scene':
+          textToUse = data.fullScene || data.visualScene || data.explanation || '';
+          break;
         case 'major_word':
         case 'major_consonants':
         case 'name_face_substitute':
@@ -96,7 +115,7 @@ export const AIFieldGeneratorButton: React.FC<AIFieldGeneratorButtonProps> = ({
         case 'major_hint':
         case 'shape_tip':
         case 'custom_association':
-          textToUse = data.visualScene || data.explanation || data.headline || '';
+          textToUse = data.visualScene || data.fullScene || data.explanation || data.headline || '';
           break;
         case 'academic_concept':
           textToUse = data.visualScene || `${data.headline}: ${data.explanation}`;
@@ -109,13 +128,13 @@ export const AIFieldGeneratorButton: React.FC<AIFieldGeneratorButtonProps> = ({
           textToUse = data.hebrewKeyword || data.headline || data.visualScene || '';
           break;
         default:
-          textToUse = data.visualScene || data.hebrewKeyword || data.headline || '';
+          textToUse = data.fullScene || data.visualScene || data.hebrewKeyword || data.headline || '';
           break;
       }
 
       // Fallback if empty string
       if (!textToUse) {
-        textToUse = data.headline || data.visualScene || effectiveInput;
+        textToUse = data.fullScene || data.headline || data.visualScene || effectiveInput;
       }
 
       if (textToUse) {
@@ -125,8 +144,13 @@ export const AIFieldGeneratorButton: React.FC<AIFieldGeneratorButtonProps> = ({
       }
     } catch (err) {
       console.error('Failed to generate mnemonic field:', err);
-      // Even in catch, provide a sensible instant Hebrew kinetic fallback
-      const fallbackText = `התנגשות קינטית של ${effectiveInput} עם אש וצבעי זהב מתפרצים`;
+      // Sensible instant Hebrew multisensory fallback
+      const fallbackOptions = [
+        `סצנה חושית עזה של ${effectiveInput}: צבעים עזים, ריח אבקת שריפה והתנגשות מתכתית רועמת`,
+        `סצנה קולנועית של ${effectiveInput} בגלימת משי אדומה, מזיע ומריח מחציר רטוב לקראת קרב דרמטי`,
+        `בתוך ענן עשן סגול וריח מנטה מקפיא: ${effectiveInput} מתנפץ לרסיסי זהב מנצנצים`,
+      ];
+      const fallbackText = fallbackOptions[currentCycle % fallbackOptions.length];
       onGenerated(fallbackText);
       setJustGenerated(true);
       setTimeout(() => setJustGenerated(false), 2000);
@@ -135,28 +159,35 @@ export const AIFieldGeneratorButton: React.FC<AIFieldGeneratorButtonProps> = ({
     }
   };
 
+  const dynamicLabel =
+    loading
+      ? 'מייצר רעיון...'
+      : justGenerated
+      ? 'הושלם בהצלחה!'
+      : cycleCount > 0
+      ? `${label} (רעיון נוסף)`
+      : label;
+
   return (
     <button
       type="button"
       onClick={handleGenerate}
       disabled={loading}
-      title="יצירה והשלמת שדה זה בעזרת מנוע ה-AI של ממנטו"
-      className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg font-bold transition-all cursor-pointer select-none active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
+      title="יצירה והשלמת שדה זה בעזרת מנוע ה-AI של ממנטו. לחיצה חוזרת תציע רעיון רב-חושי חדש!"
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl font-bold transition-all cursor-pointer select-none active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
         justGenerated
-          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px]'
-          : 'bg-gradient-to-r from-amber-500/15 to-amber-600/15 hover:from-amber-500/25 hover:to-amber-600/25 text-amber-300 border border-amber-500/35 hover:border-amber-500/60 text-[10px] shadow-sm'
-      } ${compact ? 'px-1.5 py-0.5 text-[9px]' : ''} ${className}`}
+          ? 'bg-emerald-500/25 text-emerald-200 border border-emerald-500/50 text-xs shadow-xs'
+          : 'bg-gradient-to-r from-amber-500/20 via-amber-600/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 text-amber-200 border border-amber-500/40 hover:border-amber-400 text-xs shadow-xs'
+      } ${compact ? 'px-2 py-0.5 text-[11px]' : ''} ${className}`}
     >
       {loading ? (
-        <Loader2 className="w-3 h-3 animate-spin text-amber-400 shrink-0" />
+        <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400 shrink-0" />
       ) : justGenerated ? (
-        <Check className="w-3 h-3 text-emerald-400 shrink-0" />
+        <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
       ) : (
-        <Sparkles className="w-3 h-3 text-amber-400 shrink-0" />
+        <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
       )}
-      <span>
-        {loading ? 'מייצר...' : justGenerated ? 'הושלם!' : label}
-      </span>
+      <span>{dynamicLabel}</span>
     </button>
   );
 };

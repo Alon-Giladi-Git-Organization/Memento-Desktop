@@ -10,151 +10,152 @@ import {
   AcademicKeyPoint,
 } from '../types/memory';
 
-// Hebrew Major System Consonants Map (ערכת המשתמש המותאמת אישית):
-// 0: ס, ז, שׂ (שמאלית)
+// Hebrew Major System Consonants Map (מיפוי העיצורים הרשמי של האפליקציה):
+// אותיות א-נ-י-ע-ו-נ-ה: אותיות חיבור שאינן מקושרות למספר
+// 0: ס, ז, ש דגושה
 // 1: ל
-// 2: ב, פ (דגושה)
+// 2: ב
 // 3: ג, ק, כ
 // 4: ד, ת, ט
-// 5: ח, ה, ע
-// 6: שׁ, צ
-// 7: ז, ס (צליל ז/ס)
-// 8: ח, כ (גרוניות/חיכיות ח/כ)
-// 9: פ (רפה), ב (רפה), ו
+// 5: ח
+// 6: ש, ג', צ'
+// 7: ר
+// 8: מ
+// 9: פ (רפה ודגושה)
 
 export const DEFAULT_MAJOR_DIGITS: MajorItem[] = [
-  { number: 0, numberStr: '0', consonants: 'ס, ז, שׂ', defaultWord: 'סוס', imageHint: 'סוס לבן דוהר ורוקע בפרסות' },
+  { number: 0, numberStr: '0', consonants: 'ס, ז, ש דגושה', defaultWord: 'סוס', imageHint: 'סוס לבן דוהר ורוקע בפרסות' },
   { number: 1, numberStr: '1', consonants: 'ל', defaultWord: 'לב', imageHint: 'לב ענק פועם באדום זוהר' },
-  { number: 2, numberStr: '2', consonants: 'ב, פ (דגושה)', defaultWord: 'פה', imageHint: 'פה ענקי פעור עם שיני זהב' },
-  { number: 3, numberStr: '3', consonants: 'כ, ק, ג', defaultWord: 'כוס', imageHint: 'כוס זכוכית מתנפצת לרסיסים' },
-  { number: 4, numberStr: '4', consonants: 'ט, ת, ד', defaultWord: 'תה', imageHint: 'ספל תה רותח שמעלה אדים' },
+  { number: 2, numberStr: '2', consonants: 'ב', defaultWord: 'בית', imageHint: 'בית חם עם גג רעפים ועשן בארובה' },
+  { number: 3, numberStr: '3', consonants: 'ג, ק, כ', defaultWord: 'כוס', imageHint: 'כוס זכוכית מתנפצת לרסיסים' },
+  { number: 4, numberStr: '4', consonants: 'ד, ת, ט', defaultWord: 'תה', imageHint: 'ספל תה רותח שמעלה אדים' },
   { number: 5, numberStr: '5', consonants: 'ח', defaultWord: 'חי', imageHint: 'שרשרת ח"י ענקית מזהב' },
-  { number: 6, numberStr: '6', consonants: 'שׁ, צ\', ג\'', defaultWord: 'אש', imageHint: 'להבות אש מתפרצות ומפצפצות' },
+  { number: 6, numberStr: '6', consonants: 'ש, ג\', צ\'', defaultWord: 'אש', imageHint: 'להבות אש מתפרצות ומפצפצות' },
   { number: 7, numberStr: '7', consonants: 'ר', defaultWord: 'אור', imageHint: 'פנס זרקור מסנוור בעוצמה' },
   { number: 8, numberStr: '8', consonants: 'מ', defaultWord: 'ים', imageHint: 'גלי ים ענקיים מתנפצים' },
-  { number: 9, numberStr: '9', consonants: 'פ, ב (רפה)', defaultWord: 'אף', imageHint: 'אף פינוקיו שצומח ומשפד בלון' },
+  { number: 9, numberStr: '9', consonants: 'פ (רפה ודגושה)', defaultWord: 'פה', imageHint: 'פה ענקי פעור עם שיני זהב' },
 ];
 
 // Complete 00-99 Hebrew Major System (לפי מיפוי העיצורים החדש)
 export const DEFAULT_MAJOR_00_99: MajorItem[] = [
-  { number: 0, numberStr: '0', consonants: 'ס, ז, שׂ', defaultWord: 'סוס', imageHint: 'סוס לבן דוהר ורוקע בפרסות' },
+  { number: 0, numberStr: '0', consonants: 'ס, ז, ש דגושה', defaultWord: 'סוס', imageHint: 'סוס לבן דוהר ורוקע בפרסות' },
   { number: 1, numberStr: '1', consonants: 'ל', defaultWord: 'לב', imageHint: 'לב ענק פועם באדום זוהר' },
-  { number: 2, numberStr: '2', consonants: 'ב, פ (דגושה)', defaultWord: 'פה', imageHint: 'פה ענקי פעור עם שיני זהב' },
-  { number: 3, numberStr: '3', consonants: 'כ, ק, ג', defaultWord: 'כוס', imageHint: 'כוס זכוכית מתנפצת לרסיסים' },
-  { number: 4, numberStr: '4', consonants: 'ט, ת, ד', defaultWord: 'תה', imageHint: 'ספל תה רותח שמעלה אדים' },
+  { number: 2, numberStr: '2', consonants: 'ב', defaultWord: 'בית', imageHint: 'בית חם עם גג רעפים ועשן בארובה' },
+  { number: 3, numberStr: '3', consonants: 'ג, ק, כ', defaultWord: 'כוס', imageHint: 'כוס זכוכית מתנפצת לרסיסים' },
+  { number: 4, numberStr: '4', consonants: 'ד, ת, ט', defaultWord: 'תה', imageHint: 'ספל תה רותח שמעלה אדים' },
   { number: 5, numberStr: '5', consonants: 'ח', defaultWord: 'חי', imageHint: 'שרשרת ח"י ענקית מזהב' },
-  { number: 6, numberStr: '6', consonants: 'שׁ, צ\', ג\'', defaultWord: 'אש', imageHint: 'להבות אש מתפרצות ומפצפצות' },
+  { number: 6, numberStr: '6', consonants: 'ש, ג\', צ\'', defaultWord: 'אש', imageHint: 'להבות אש מתפרצות ומפצפצות' },
   { number: 7, numberStr: '7', consonants: 'ר', defaultWord: 'אור', imageHint: 'פנס זרקור מסנוור בעוצמה' },
   { number: 8, numberStr: '8', consonants: 'מ', defaultWord: 'ים', imageHint: 'גלי ים ענקיים מתנפצים' },
-  { number: 9, numberStr: '9', consonants: 'פ, ב (רפה)', defaultWord: 'אף', imageHint: 'אף פינוקיו שצומח ומשפד בלון' },
+  { number: 9, numberStr: '9', consonants: 'פ (רפה ודגושה)', defaultWord: 'פה', imageHint: 'פה ענקי פעור עם שיני זהב' },
 
   // עשור 10-19 (ספרת עשרות 1: ל)
   { number: 10, numberStr: '10', consonants: 'ל + ס/ז', defaultWord: 'לוז', imageHint: 'אגוז לוז עגול שמתפצח בפטיש' },
   { number: 11, numberStr: '11', consonants: 'ל + ל', defaultWord: 'לול', imageHint: 'לול תרנגולות מקרקרות שמטילות ביצים' },
-  { number: 12, numberStr: '12', consonants: 'ל + ב/פ', defaultWord: 'לבה', imageHint: 'לבה רותחת שפורצת מהר געש' },
-  { number: 13, numberStr: '13', consonants: 'ל + כ/ק/ג', defaultWord: 'לק', imageHint: 'בקבוק לק ציפורניים אדום ובוהק' },
-  { number: 14, numberStr: '14', consonants: 'ל + ט/ת/ד', defaultWord: 'ילד', imageHint: 'ילד קטן רץ ומעיף עפיפון זוהר' },
+  { number: 12, numberStr: '12', consonants: 'ל + ב', defaultWord: 'לבה', imageHint: 'לבה רותחת שפורצת מהר געש' },
+  { number: 13, numberStr: '13', consonants: 'ל + ג/ק/כ', defaultWord: 'לק', imageHint: 'בקבוק לק ציפורניים אדום ובוהק' },
+  { number: 14, numberStr: '14', consonants: 'ל + ד/ת/ט', defaultWord: 'ילד', imageHint: 'ילד קטן רץ ומעיף עפיפון זוהר' },
   { number: 15, numberStr: '15', consonants: 'ל + ח', defaultWord: 'לוח', imageHint: 'לוח עץ ענק שנשבר לשניים' },
-  { number: 16, numberStr: '16', consonants: 'ל + שׁ/צ', defaultWord: 'לשון', imageHint: 'לשון ענקית ורודה שמתגלגלת החוצה' },
+  { number: 16, numberStr: '16', consonants: 'ל + ש/ג\'/צ\'', defaultWord: 'לשון', imageHint: 'לשון ענקית ורודה שמתגלגלת החוצה' },
   { number: 17, numberStr: '17', consonants: 'ל + ר', defaultWord: 'לירה', imageHint: 'מטבע לירה מזהב נוצץ שמסתובב מהר' },
   { number: 18, numberStr: '18', consonants: 'ל + מ', defaultWord: 'לום', imageHint: 'לום ברזל כבד שמפרק ארגז עץ ברעש' },
-  { number: 19, numberStr: '19', consonants: 'ל + פ/ב רפה', defaultWord: 'לוף', imageHint: 'קופסת שימורי לוף שנפתחת בסכין' },
+  { number: 19, numberStr: '19', consonants: 'ל + פ', defaultWord: 'לפיד', imageHint: 'לפיד בוער באש בוהקת שמפיץ חום' },
 
-  // עשור 20-29 (ספרת עשרות 2: ב/פ דגושה)
-  { number: 20, numberStr: '20', consonants: 'ב/פ + ס/ז', defaultWord: 'בז', imageHint: 'בז צייד מהיר שצולל מהשמיים' },
-  { number: 21, numberStr: '21', consonants: 'ב/פ + ל', defaultWord: 'בול', imageHint: 'בול דואר זוהר עם ציור כתר' },
-  { number: 22, numberStr: '22', consonants: 'ב/פ + ב/פ', defaultWord: 'בובה', imageHint: 'בובת חרסינה עתיקה עם עיניים שזזות' },
-  { number: 23, numberStr: '23', consonants: 'ב/פ + כ/ק/ג', defaultWord: 'בנק', imageHint: 'כספת בנק ענקית שנפתחת ומגלה מטילי זהב' },
-  { number: 24, numberStr: '24', consonants: 'ב/פ + ט/ת/ד', defaultWord: 'בד', imageHint: 'בד משי אדום מתנפנף ברוח סוערת' },
-  { number: 25, numberStr: '25', consonants: 'ב/פ + ח', defaultWord: 'פח', imageHint: 'פח אשפה ממתכת שרועם בחבטה' },
-  { number: 26, numberStr: '26', consonants: 'ב/פ + שׁ/צ', defaultWord: 'בוץ', imageHint: 'מגפיים ששוקעים עמוק בתוך בוץ סמיך' },
-  { number: 27, numberStr: '27', consonants: 'ב/פ + ר', defaultWord: 'בור', imageHint: 'בור עמוק ואפל באדמה עם הד חוזר' },
-  { number: 28, numberStr: '28', consonants: 'ב/פ + מ', defaultWord: 'במה', imageHint: 'במת תיאטרון גדולה עם אור זרקורים' },
-  { number: 29, numberStr: '29', consonants: 'ב/פ + פ/ב רפה', defaultWord: 'פוף', imageHint: 'כרית פוף ענקית שצוללים לתוכה בנוחות' },
+  // עשור 20-29 (ספרת עשרות 2: ב)
+  { number: 20, numberStr: '20', consonants: 'ב + ס/ז', defaultWord: 'בז', imageHint: 'בז צייד מהיר שצולל מהשמיים' },
+  { number: 21, numberStr: '21', consonants: 'ב + ל', defaultWord: 'בלון', imageHint: 'בלון הליום אדום מבריק שמרחף אל העננים' },
+  { number: 22, numberStr: '22', consonants: 'ב + ב', defaultWord: 'בובה', imageHint: 'בובת חרסינה עתיקה עם עיניים שזזות' },
+  { number: 23, numberStr: '23', consonants: 'ב + ג/ק/כ', defaultWord: 'בנק', imageHint: 'כספת בנק ענקית שנפתחת ומגלה מטילי זהב' },
+  { number: 24, numberStr: '24', consonants: 'ב + ד/ת/ט', defaultWord: 'בית', imageHint: 'בית עץ חמים עם ארובה מפיצת עשן לבן' },
+  { number: 25, numberStr: '25', consonants: 'ב + ח', defaultWord: 'בכי', imageHint: 'דמעות זכוכית נוצצות שזולגות על לחי' },
+  { number: 26, numberStr: '26', consonants: 'ב + ש/ג\'/צ\'', defaultWord: 'בושם', imageHint: 'בקבוק בושם קריסטל יקר שמתיז ענן ריחני' },
+  { number: 27, numberStr: '27', consonants: 'ב + ר', defaultWord: 'ברז', imageHint: 'ברז מים מזהב שמשפריץ סילון מים קרים' },
+  { number: 28, numberStr: '28', consonants: 'ב + מ', defaultWord: 'במבה', imageHint: 'שקית במבה צהובה שנפתחת בריח בוטנים חזק' },
+  { number: 29, numberStr: '29', consonants: 'ב + פ', defaultWord: 'בופה', imageHint: 'שולחן בופה עמוס מטעמים וצלחות זהב' },
 
-  // עשור 30-39 (ספרת עשרות 3: כ/ק/ג)
-  { number: 30, numberStr: '30', consonants: 'כ/ק/ג + ס/ז', defaultWord: 'גז', imageHint: 'להבת גז כחולה שדולקת בעוצמה' },
-  { number: 31, numberStr: '31', consonants: 'כ/ק/ג + ל', defaultWord: 'גל', imageHint: 'גל ים ענק שמתרומם ונשבר ברעש' },
-  { number: 32, numberStr: '32', consonants: 'כ/ק/ג + ב/פ', defaultWord: 'גב', imageHint: 'גב של גורילה ענקית ושרירית' },
-  { number: 33, numberStr: '33', consonants: 'כ/ק/ג + כ/ק/ג', defaultWord: 'גג', imageHint: 'גג רעפים אדום שממנו משקיפים לנוף' },
-  { number: 34, numberStr: '34', consonants: 'כ/ק/ג + ט/ת/ד', defaultWord: 'כד', imageHint: 'כד חרס עתיק מלא במטבעות זהב' },
-  { number: 35, numberStr: '35', consonants: 'כ/ק/ג + ח', defaultWord: 'כוח', imageHint: 'שרירן ענקי שמניף משקולת ברזל' },
-  { number: 36, numberStr: '36', consonants: 'כ/ק/ג + שׁ/צ', defaultWord: 'קש', imageHint: 'ערימת קש זהובה שממנה מציץ אפרוח' },
-  { number: 37, numberStr: '37', consonants: 'כ/ק/ג + ר', defaultWord: 'קיר', imageHint: 'קיר לבנים גבוה שמטפסים עליו בסולם' },
-  { number: 38, numberStr: '38', consonants: 'כ/ק/ג + מ', defaultWord: 'אגם', imageHint: 'אגם מים צלול ורגוע עם ברבורים' },
-  { number: 39, numberStr: '39', consonants: 'כ/ק/ג + פ/ב רפה', defaultWord: 'קוף', imageHint: 'קוף שובב שקופץ בין ענפי עצים' },
+  // עשור 30-39 (ספרת עשרות 3: ג/ק/כ)
+  { number: 30, numberStr: '30', consonants: 'ג/ק/כ + ס/ז', defaultWord: 'גז', imageHint: 'להבת גז כחולה שדולקת בעוצמה' },
+  { number: 31, numberStr: '31', consonants: 'ג/ק/כ + ל', defaultWord: 'גל', imageHint: 'גל ים ענק שמתרומם ונשבר ברעש' },
+  { number: 32, numberStr: '32', consonants: 'ג/ק/כ + ב', defaultWord: 'גב', imageHint: 'גב של גורילה ענקית ושרירית' },
+  { number: 33, numberStr: '33', consonants: 'ג/ק/כ + ג/ק/כ', defaultWord: 'גג', imageHint: 'גג רעפים אדום שממנו משקיפים לנוף' },
+  { number: 34, numberStr: '34', consonants: 'ג/ק/כ + ד/ת/ט', defaultWord: 'כד', imageHint: 'כד חרס עתיק מלא במטבעות זהב' },
+  { number: 35, numberStr: '35', consonants: 'ג/ק/כ + ח', defaultWord: 'כוח', imageHint: 'שרירן ענקי שמניף משקולת ברזל' },
+  { number: 36, numberStr: '36', consonants: 'ג/ק/כ + ש/ג\'/צ\'', defaultWord: 'קש', imageHint: 'ערימת קש זהובה שממנה מציץ אפרוח' },
+  { number: 37, numberStr: '37', consonants: 'ג/ק/כ + ר', defaultWord: 'קיר', imageHint: 'קיר לבנים גבוה שמטפסים עליו בסולם' },
+  { number: 38, numberStr: '38', consonants: 'ג/ק/כ + מ', defaultWord: 'אגם', imageHint: 'אגם מים צלול ורגוע עם ברבורים' },
+  { number: 39, numberStr: '39', consonants: 'ג/ק/כ + פ', defaultWord: 'קוף', imageHint: 'קוף שובב שקופץ בין ענפי עצים' },
 
-  // עשור 40-49 (ספרת עשרות 4: ט/ת/ד)
-  { number: 40, numberStr: '40', consonants: 'ט/ת/ד + ס/ז', defaultWord: 'טס', imageHint: 'מטוס סילון שטס במהירות שיא בשמיים' },
-  { number: 41, numberStr: '41', consonants: 'ט/ת/ד + ל', defaultWord: 'דלי', imageHint: 'דלי מים מלא שנשפך ומשפריץ' },
-  { number: 42, numberStr: '42', consonants: 'ט/ת/ד + ב/פ', defaultWord: 'דוב', imageHint: 'דוב חום ענקי שצועד ביער' },
-  { number: 43, numberStr: '43', consonants: 'ט/ת/ד + כ/ק/ג', defaultWord: 'דג', imageHint: 'דג זהב קופץ מתוך המים בניתור' },
-  { number: 44, numberStr: '44', consonants: 'ט/ת/ד + ט/ת/ד', defaultWord: 'דוד', imageHint: 'דוד שמש מתכת שרותח ומעלה קיטור' },
-  { number: 45, numberStr: '45', consonants: 'ט/ת/ד + ח', defaultWord: 'דוח', imageHint: 'דו"ח תנועה לבן שמתעופף ברוח' },
-  { number: 46, numberStr: '46', consonants: 'ט/ת/ד + שׁ/צ', defaultWord: 'דשא', imageHint: 'מדשאה ירוקה שקוצצים אותה במכסחת' },
-  { number: 47, numberStr: '47', consonants: 'ט/ת/ד + ר', defaultWord: 'דירה', imageHint: 'דירה מרווחת עם מרפסת שמש לנוף' },
-  { number: 48, numberStr: '48', consonants: 'ט/ת/ד + מ', defaultWord: 'דם', imageHint: 'טיפת דם אדומה תחת מיקרוסקופ' },
-  { number: 49, numberStr: '49', consonants: 'ט/ת/ד + פ/ב רפה', defaultWord: 'דף', imageHint: 'דף נייר לבן שמתקפל לאווירון' },
+  // עשור 40-49 (ספרת עשרות 4: ד/ת/ט)
+  { number: 40, numberStr: '40', consonants: 'ד/ת/ט + ס/ז', defaultWord: 'טס', imageHint: 'מטוס סילון שטס במהירות שיא בשמיים' },
+  { number: 41, numberStr: '41', consonants: 'ד/ת/ט + ל', defaultWord: 'דלי', imageHint: 'דלי מים מלא שנשפך ומשפריץ' },
+  { number: 42, numberStr: '42', consonants: 'ד/ת/ט + ב', defaultWord: 'דוב', imageHint: 'דוב חום ענקי שצועד ביער' },
+  { number: 43, numberStr: '43', consonants: 'ד/ת/ט + ג/ק/כ', defaultWord: 'דג', imageHint: 'דג זהב קופץ מתוך המים בניתור' },
+  { number: 44, numberStr: '44', consonants: 'ד/ת/ט + ד/ת/ט', defaultWord: 'דוד', imageHint: 'דוד שמש מתכת שרותח ומעלה קיטור' },
+  { number: 45, numberStr: '45', consonants: 'ד/ת/ט + ח', defaultWord: 'דוח', imageHint: 'דו"ח תנועה לבן שמתעופף ברוח' },
+  { number: 46, numberStr: '46', consonants: 'ד/ת/ט + ש/ג\'/צ\'', defaultWord: 'דשא', imageHint: 'מדשאה ירוקה שקוצצים אותה במכסחת' },
+  { number: 47, numberStr: '47', consonants: 'ד/ת/ט + ר', defaultWord: 'דירה', imageHint: 'דירה מרווחת עם מרפסת שמש לנוף' },
+  { number: 48, numberStr: '48', consonants: 'ד/ת/ט + מ', defaultWord: 'דם', imageHint: 'טיפת דם אדומה תחת מיקרוסקופ' },
+  { number: 49, numberStr: '49', consonants: 'ד/ת/ט + פ', defaultWord: 'דף', imageHint: 'דף נייר לבן שמתקפל לאווירון' },
 
   // עשור 50-59 (ספרת עשרות 5: ח)
   { number: 50, numberStr: '50', consonants: 'ח + ס/ז', defaultWord: 'חסה', imageHint: 'ראש חסה ירוק ורענן שנשטף במים' },
   { number: 51, numberStr: '51', consonants: 'ח + ל', defaultWord: 'חול', imageHint: 'גרגרי חול זהובים שנושרים בשעון חול' },
-  { number: 52, numberStr: '52', consonants: 'ח + ב/פ', defaultWord: 'חיבה', imageHint: 'שני גורי כלבים שמפגינים חיבה' },
-  { number: 53, numberStr: '53', consonants: 'ח + כ/ק/ג', defaultWord: 'חג', imageHint: 'שולחן חג חגיגי עמוס מטעמים ונרות' },
-  { number: 54, numberStr: '54', consonants: 'ח + ט/ת/ד', defaultWord: 'חוט', imageHint: 'סליל חוט אדום שנפרם ומתגלגל' },
+  { number: 52, numberStr: '52', consonants: 'ח + ב', defaultWord: 'חוב', imageHint: 'שטר חוב עתיק עם חותמת שעווה אדומה' },
+  { number: 53, numberStr: '53', consonants: 'ח + ג/ק/כ', defaultWord: 'חג', imageHint: 'שולחן חג חגיגי עמוס מטעמים ונרות' },
+  { number: 54, numberStr: '54', consonants: 'ח + ד/ת/ט', defaultWord: 'חוט', imageHint: 'סליל חוט אדום שנפרם ומתגלגל' },
   { number: 55, numberStr: '55', consonants: 'ח + ח', defaultWord: 'חוח', imageHint: 'שיח חוח וקוצים דוקרני בשדה' },
-  { number: 56, numberStr: '56', consonants: 'ח + שׁ/צ', defaultWord: 'חץ', imageHint: 'חץ קשת שנורה ישר למרכז המטרה' },
+  { number: 56, numberStr: '56', consonants: 'ח + ש/ג\'/צ\'', defaultWord: 'חץ', imageHint: 'חץ קשת שנורה ישר למרכז המטרה' },
   { number: 57, numberStr: '57', consonants: 'ח + ר', defaultWord: 'חור', imageHint: 'חור מנעול עתיק שמציצים דרכו' },
   { number: 58, numberStr: '58', consonants: 'ח + מ', defaultWord: 'חום', imageHint: 'מדחום כספית שמודד חום לוהט' },
-  { number: 59, numberStr: '59', consonants: 'ח + פ/ב רפה', defaultWord: 'חוף', imageHint: 'חוף ים חולי עם שמשיות וצדפים' },
+  { number: 59, numberStr: '59', consonants: 'ח + פ', defaultWord: 'חוף', imageHint: 'חוף ים חולי עם שמשיות וצדפים' },
 
-  // עשור 60-69 (ספרת עשרות 6: שׁ/צ)
-  { number: 60, numberStr: '60', consonants: 'שׁ/צ + ס/ז', defaultWord: 'שסע', imageHint: 'שסע עמוק באדמה שנפער ברעידת אדמה' },
-  { number: 61, numberStr: '61', consonants: 'שׁ/צ + ל', defaultWord: 'צל', imageHint: 'צל שחור ענקי שמטיל עץ בשמש' },
-  { number: 62, numberStr: '62', consonants: 'שׁ/צ + ב/פ', defaultWord: 'צב', imageHint: 'צב משוריין עם שריון ירוק' },
-  { number: 63, numberStr: '63', consonants: 'שׁ/צ + כ/ק/ג', defaultWord: 'צוק', imageHint: 'צוק סלע גבוה שמשקיף על הים' },
-  { number: 64, numberStr: '64', consonants: 'שׁ/צ + ט/ת/ד', defaultWord: 'שוט', imageHint: 'שוט עור שמצליף באוויר בקול נפץ' },
-  { number: 65, numberStr: '65', consonants: 'שׁ/צ + ח', defaultWord: 'שיח', imageHint: 'שיח ירוק עמוס פרחים ריחניים' },
-  { number: 66, numberStr: '66', consonants: 'שׁ/צ + שׁ/צ', defaultWord: 'שושן', imageHint: 'פרח שושן צחור שמפיץ ריח מתוק' },
-  { number: 67, numberStr: '67', consonants: 'שׁ/צ + ר', defaultWord: 'שור', imageHint: 'שור זועם עם קרניים חדות שרוקע ברגליו' },
-  { number: 68, numberStr: '68', consonants: 'שׁ/צ + מ', defaultWord: 'שום', imageHint: 'ראש שום שלם שמתפצח לשיניים ריחניות' },
-  { number: 69, numberStr: '69', consonants: 'שׁ/צ + פ/ב רפה', defaultWord: 'שף', imageHint: 'שף עם כובע טבחים גבוה שטועם ממרק' },
+  // עשור 60-69 (ספרת עשרות 6: ש/ג'/צ')
+  { number: 60, numberStr: '60', consonants: 'ש/ג\'/צ\' + ס/ז', defaultWord: 'שסע', imageHint: 'שסע עמוק באדמה שנפער ברעידת אדמה' },
+  { number: 61, numberStr: '61', consonants: 'ש/ג\'/צ\' + ל', defaultWord: 'צל', imageHint: 'צל שחור ענקי שמטיל עץ בשמש' },
+  { number: 62, numberStr: '62', consonants: 'ש/ג\'/צ\' + ב', defaultWord: 'צב', imageHint: 'צב משוריין עם שריון ירוק' },
+  { number: 63, numberStr: '63', consonants: 'ש/ג\'/צ\' + ג/ק/כ', defaultWord: 'צוק', imageHint: 'צוק סלע גבוה שמשקיף על הים' },
+  { number: 64, numberStr: '64', consonants: 'ש/ג\'/צ\' + ד/ת/ט', defaultWord: 'שוט', imageHint: 'שוט עור שמצליף באוויר בקול נפץ' },
+  { number: 65, numberStr: '65', consonants: 'ש/ג\'/צ\' + ח', defaultWord: 'שיח', imageHint: 'שיח ירוק עמוס פרחים ריחניים' },
+  { number: 66, numberStr: '66', consonants: 'ש/ג\'/צ\' + ש/ג\'/צ\'', defaultWord: 'שושן', imageHint: 'פרח שושן צחור שמפיץ ריח מתוק' },
+  { number: 67, numberStr: '67', consonants: 'ש/ג\'/צ\' + ר', defaultWord: 'שור', imageHint: 'שור זועם עם קרניים חדות שרוקע ברגליו' },
+  { number: 68, numberStr: '68', consonants: 'ש/ג\'/צ\' + מ', defaultWord: 'שום', imageHint: 'ראש שום שלם שמתפצח לשיניים ריחניות' },
+  { number: 69, numberStr: '69', consonants: 'ש/ג\'/צ\' + פ', defaultWord: 'שף', imageHint: 'שף עם כובע טבחים גבוה שטועם ממרק' },
 
   // עשור 70-79 (ספרת עשרות 7: ר)
   { number: 70, numberStr: '70', consonants: 'ר + ס/ז', defaultWord: 'רז', imageHint: 'מגילת רזים עתיקה שנפתחת וזוהרת' },
   { number: 71, numberStr: '71', consonants: 'ר + ל', defaultWord: 'רעל', imageHint: 'בקבוקון רעל ירוק עם ציור גולגולת' },
-  { number: 72, numberStr: '72', consonants: 'ר + ב/פ', defaultWord: 'רב', imageHint: 'רב קשיש עם זקן לבן וספר תורה' },
-  { number: 73, numberStr: '73', consonants: 'ר + כ/ק/ג', defaultWord: 'רוק', imageHint: 'גיטרת רוק חשמלית שמתפוצצת בסולו' },
-  { number: 74, numberStr: '74', consonants: 'ר + ט/ת/ד', defaultWord: 'רדיו', imageHint: 'מכשיר רדיו ישן שמשמיע מוזיקה חזקה' },
+  { number: 72, numberStr: '72', consonants: 'ר + ב', defaultWord: 'רב', imageHint: 'רב קשיש עם זקן לבן וספר תורה' },
+  { number: 73, numberStr: '73', consonants: 'ר + ג/ק/כ', defaultWord: 'רוק', imageHint: 'גיטרת רוק חשמלית שמתפוצצת בסולו' },
+  { number: 74, numberStr: '74', consonants: 'ר + ד/ת/ט', defaultWord: 'רדיו', imageHint: 'מכשיר רדיו ישן שמשמיע מוזיקה חזקה' },
   { number: 75, numberStr: '75', consonants: 'ר + ח', defaultWord: 'רוח', imageHint: 'משב רוח עז שמעיף עלים ומטריות' },
-  { number: 76, numberStr: '76', consonants: 'ר + שׁ/צ', defaultWord: 'ראש', imageHint: 'ראש פסל שיש ענקי עם כתר זהב' },
+  { number: 76, numberStr: '76', consonants: 'ר + ש/ג\'/צ\'', defaultWord: 'ראש', imageHint: 'ראש פסל שיש ענקי עם כתר זהב' },
   { number: 77, numberStr: '77', consonants: 'ר + ר', defaultWord: 'ריר', imageHint: 'טיפת ריר של חילזון זוהרת על עלה' },
   { number: 78, numberStr: '78', consonants: 'ר + מ', defaultWord: 'רעם', imageHint: 'ברק ורעם אדיר שמרעידים את השמיים' },
-  { number: 79, numberStr: '79', consonants: 'ר + פ/ב רפה', defaultWord: 'רף', imageHint: 'מדף עץ שנשבר מכובד ספרים' },
+  { number: 79, numberStr: '79', consonants: 'ר + פ', defaultWord: 'רף', imageHint: 'מדף עץ שנשבר מכובד ספרים' },
 
   // עשור 80-89 (ספרת עשרות 8: מ)
   { number: 80, numberStr: '80', consonants: 'מ + ס/ז', defaultWord: 'מוס', imageHint: 'גביע מוס שוקולד אוורירי עם דובדבן' },
   { number: 81, numberStr: '81', consonants: 'מ + ל', defaultWord: 'מול', imageHint: 'קניון ענק ומואר עם חנויות זוהרות' },
-  { number: 82, numberStr: '82', consonants: 'מ + ב/פ', defaultWord: 'מפה', imageHint: 'מפת אוצר ישנה שנפרשת על שולחן' },
-  { number: 83, numberStr: '83', consonants: 'מ + כ/ק/ג', defaultWord: 'מאג', imageHint: 'מאג קפה ענקי ומעלה אדים' },
-  { number: 84, numberStr: '84', consonants: 'מ + ט/ת/ד', defaultWord: 'מד', imageHint: 'מד מהירות ברכב שמחוגו מזנק לאדום' },
+  { number: 82, numberStr: '82', consonants: 'מ + ב', defaultWord: 'מבצר', imageHint: 'מבצר אבן עתיק ומבוצר עם חומות ענק' },
+  { number: 83, numberStr: '83', consonants: 'מ + ג/ק/כ', defaultWord: 'מאג', imageHint: 'מאג קפה ענקי ומעלה אדים' },
+  { number: 84, numberStr: '84', consonants: 'מ + ד/ת/ט', defaultWord: 'מד', imageHint: 'מד מהירות ברכב שמחוגו מזנק לאדום' },
   { number: 85, numberStr: '85', consonants: 'מ + ח', defaultWord: 'מוח', imageHint: 'מוח אנושי זוהר בניצוצות חשמליים' },
-  { number: 86, numberStr: '86', consonants: 'מ + שׁ/צ', defaultWord: 'מיץ', imageHint: 'כוס מיץ תפוזים עסיסית עם קשית' },
+  { number: 86, numberStr: '86', consonants: 'מ + ש/ג\'/צ\'', defaultWord: 'מיץ', imageHint: 'כוס מיץ תפוזים עסיסית עם קשית' },
   { number: 87, numberStr: '87', consonants: 'מ + ר', defaultWord: 'מור', imageHint: 'שמן מור יקר וריחני בבקבוקון זכוכית' },
   { number: 88, numberStr: '88', consonants: 'מ + מ', defaultWord: 'מים', imageHint: 'מפל מים שוצף וקריר שניתז לכל עבר' },
-  { number: 89, numberStr: '89', consonants: 'מ + פ/ב רפה', defaultWord: 'מנוף', imageHint: 'מנוף בנייה צהוב ענק שמרים קורת פלדה' },
+  { number: 89, numberStr: '89', consonants: 'מ + פ', defaultWord: 'מנוף', imageHint: 'מנוף בנייה צהוב ענק שמרים קורת פלדה' },
 
-  // עשור 90-99 (ספרת עשרות 9: פ/ב רפה)
-  { number: 90, numberStr: '90', consonants: 'פ/ב רפה + ס/ז', defaultWord: 'פז', imageHint: 'מטיל פז מוזהב שנוצץ בשמש' },
-  { number: 91, numberStr: '91', consonants: 'פ/ב רפה + ל', defaultWord: 'פיל', imageHint: 'פיל אפריקאי ענק שמרים חדק ותוקע' },
-  { number: 92, numberStr: '92', consonants: 'פ/ב רפה + ב/פ דגושה', defaultWord: 'פאב', imageHint: 'פאב הומה אדם עם כוסות בירה מוקצפות' },
-  { number: 93, numberStr: '93', consonants: 'פ/ב רפה + כ/ק/ג', defaultWord: 'פך', imageHint: 'פך שמן קטן מזהב שמטפטף שמן זך' },
-  { number: 94, numberStr: '94', consonants: 'פ/ב רפה + ט/ת/ד', defaultWord: 'פת', imageHint: 'פת לחם טרייה וחמה שנבצעת' },
-  { number: 95, numberStr: '95', consonants: 'פ/ב רפה + ח', defaultWord: 'פיח', imageHint: 'פיח שחור סמיך שיוצא מארובת עשן' },
-  { number: 96, numberStr: '96', consonants: 'פ/ב רפה + שׁ/צ', defaultWord: 'פשע', imageHint: 'זירת בילוש וסרט פשע עם זכוכית מגדלת' },
-  { number: 97, numberStr: '97', consonants: 'פ/ב רפה + ר', defaultWord: 'פר', imageHint: 'פר שחור וחזק שרוקע בפרסותיו' },
-  { number: 98, numberStr: '98', consonants: 'פ/ב רפה + מ', defaultWord: 'פנים', imageHint: 'פנים מאירות עם חיוך רחב ועיניים טובות' },
-  { number: 99, numberStr: '99', consonants: 'פ/ב רפה + פ/ב רפה', defaultWord: 'פוף', imageHint: 'כרית פוף ענקית שצוללים לתוכה ברכות' },
+  // עשור 90-99 (ספרת עשרות 9: פ רפה ודגושה)
+  { number: 90, numberStr: '90', consonants: 'פ + ס/ז', defaultWord: 'פז', imageHint: 'מטיל פז מוזהב שנוצץ בשמש' },
+  { number: 91, numberStr: '91', consonants: 'פ + ל', defaultWord: 'פיל', imageHint: 'פיל אפריקאי ענק שמרים חדק ותוקע' },
+  { number: 92, numberStr: '92', consonants: 'פ + ב', defaultWord: 'פאב', imageHint: 'פאב הומה אדם עם כוסות בירה מוקצפות' },
+  { number: 93, numberStr: '93', consonants: 'פ + ג/ק/כ', defaultWord: 'פך', imageHint: 'פך שמן קטן מזהב שמטפטף שמן זך' },
+  { number: 94, numberStr: '94', consonants: 'פ + ד/ת/ט', defaultWord: 'פת', imageHint: 'פת לחם טרייה וחמה שנבצעת' },
+  { number: 95, numberStr: '95', consonants: 'פ + ח', defaultWord: 'פיח', imageHint: 'פיח שחור סמיך שיוצא מארובת עשן' },
+  { number: 96, numberStr: '96', consonants: 'פ + ש/ג\'/צ\'', defaultWord: 'פשע', imageHint: 'זירת בילוש וסרט פשע עם זכוכית מגדלת' },
+  { number: 97, numberStr: '97', consonants: 'פ + ר', defaultWord: 'פר', imageHint: 'פר שחור וחזק שרוקע בפרסותיו' },
+  { number: 98, numberStr: '98', consonants: 'פ + מ', defaultWord: 'פנים', imageHint: 'פנים מאירות עם חיוך רחב ועיניים טובות' },
+  { number: 99, numberStr: '99', consonants: 'פ + פ', defaultWord: 'פוף', imageHint: 'כרית פוף ענקית שצוללים לתוכה ברכות' },
 ];
 
 // PAO (Person-Action-Object) System (00-99 מלא לפי ראשי תיבות של שיטת ה-Major):

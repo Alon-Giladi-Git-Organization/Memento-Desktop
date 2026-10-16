@@ -46,6 +46,7 @@ interface PalacesManagerProps {
   ) => Promise<void>;
   onUpdateLocus: (palaceId: string, locusId: string, updates: Partial<PalaceLocus>) => void;
   onDeleteLocus: (palaceId: string, locusId: string) => void;
+  onSetAllLociReady?: (palaceId: string, ready: boolean) => void;
   onEarnPoints: (amount: number, reason?: string) => void;
   onUnlockBadge: (badge: string) => void;
   isAuthenticated: boolean;
@@ -59,6 +60,7 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
   onAddLocus,
   onUpdateLocus,
   onDeleteLocus,
+  onSetAllLociReady,
   onEarnPoints,
   onUnlockBadge,
   isAuthenticated,
@@ -335,7 +337,29 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              {onSetAllLociReady && currentPalace.loci.length > 0 && (
+                <div className="flex items-center gap-1.5 text-xs bg-slate-100 p-1 rounded-xl border border-slate-200">
+                  <button
+                    onClick={() => {
+                      onSetAllLociReady(currentPalace.id, true);
+                      onEarnPoints(15, `סימון כל התחנות בארמון ${currentPalace.name} כמוכנות`);
+                    }}
+                    className="text-xs font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-100 hover:bg-emerald-200 border border-emerald-300 px-2.5 py-1.5 rounded-lg transition-all cursor-pointer"
+                    title="סמן את כל התחנות בארמון זה כמוכנות לתרגול (Select All)"
+                  >
+                    ✓ סמן הכל ({currentPalace.loci.length})
+                  </button>
+                  <button
+                    onClick={() => onSetAllLociReady(currentPalace.id, false)}
+                    className="text-xs font-medium text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-2.5 py-1.5 rounded-lg transition-all cursor-pointer"
+                    title="בטל את כל סימוני התרגול לתחנות בארמון (Deselect All)"
+                  >
+                    ✗ בטל הכל
+                  </button>
+                </div>
+              )}
+
               <button
                 onClick={() => setShowAddLocusForm(true)}
                 className="btn-duo-neutral flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold transition-all cursor-pointer"

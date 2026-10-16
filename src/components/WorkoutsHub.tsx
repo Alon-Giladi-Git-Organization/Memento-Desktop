@@ -47,35 +47,46 @@ export interface WorkoutsHubProps {
       userConsonants?: string;
       userImageHint?: string;
       customNotes?: string;
+      is_ready_for_practice?: boolean;
     }
   ) => void;
   onDeleteMajorItem?: (number: number) => void;
   onResetMajorItem: (number: number) => void;
+  onToggleMajorReady?: (number: number, explicitState?: boolean) => void;
+  onSetAllMajorReady?: (ready: boolean, numbers?: number[]) => void;
   onAddPAOItem?: (item: PAOItem) => void;
   onUpdatePAOItem: (
     number: number,
-    updates: { userPerson?: string; userAction?: string; userObject?: string }
+    updates: { userPerson?: string; userAction?: string; userObject?: string; userScene?: string; is_ready_for_practice?: boolean }
   ) => void;
   onDeletePAOItem?: (number: number) => void;
   onResetPAOItem: (number: number) => void;
+  onTogglePAOReady?: (number: number, explicitState?: boolean) => void;
+  onSetAllPAOReady?: (ready: boolean, numbers?: number[]) => void;
   onAddShapePeg?: (item: PegShapeItem) => void;
   onUpdateShapePeg: (
     number: number,
-    updates: { userObject?: string; userShapeName?: string; userKineticTip?: string }
+    updates: { userObject?: string; userShapeName?: string; userKineticTip?: string; is_ready_for_practice?: boolean }
   ) => void;
   onDeleteShapePeg?: (number: number) => void;
   onResetShapePeg: (number: number) => void;
+  onToggleShapePegReady?: (number: number, explicitState?: boolean) => void;
+  onSetAllShapePegsReady?: (ready: boolean) => void;
   onAddBodyPeg?: (item: BodyPegItem) => void;
   onUpdateBodyPeg: (
     index: number,
-    updates: { userObject?: string; userBodyPart?: string; userKineticTip?: string }
+    updates: { userObject?: string; userBodyPart?: string; userKineticTip?: string; is_ready_for_practice?: boolean }
   ) => void;
   onDeleteBodyPeg?: (index: number) => void;
   onResetBodyPeg: (index: number) => void;
+  onToggleBodyPegReady?: (index: number, explicitState?: boolean) => void;
+  onSetAllBodyPegsReady?: (ready: boolean) => void;
   onAddPersonFaceCard?: (person: Omit<PersonFaceCard, 'id'>) => void;
   onUpdatePersonFaceCard?: (id: string, updates: Partial<PersonFaceCard>) => void;
   onDeletePersonFaceCard?: (id: string) => void;
   onResetPersonFaceCards?: () => void;
+  onTogglePersonReady?: (id: string, explicitState?: boolean) => void;
+  onSetAllPeopleReady?: (ready: boolean) => void;
   onAddAbstractShape?: (shape: Omit<AbstractShapeCard, 'id'>) => void;
   onUpdateAbstractShape?: (id: string, updates: Partial<AbstractShapeCard>) => void;
   onDeleteAbstractShape?: (id: string) => void;
@@ -108,22 +119,32 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
   onUpdateMajorItem,
   onDeleteMajorItem,
   onResetMajorItem,
+  onToggleMajorReady,
+  onSetAllMajorReady,
   onAddPAOItem,
   onUpdatePAOItem,
   onDeletePAOItem,
   onResetPAOItem,
+  onTogglePAOReady,
+  onSetAllPAOReady,
   onAddShapePeg,
   onUpdateShapePeg,
   onDeleteShapePeg,
   onResetShapePeg,
+  onToggleShapePegReady,
+  onSetAllShapePegsReady,
   onAddBodyPeg,
   onUpdateBodyPeg,
   onDeleteBodyPeg,
   onResetBodyPeg,
+  onToggleBodyPegReady,
+  onSetAllBodyPegsReady,
   onAddPersonFaceCard,
   onUpdatePersonFaceCard,
   onDeletePersonFaceCard,
   onResetPersonFaceCards,
+  onTogglePersonReady,
+  onSetAllPeopleReady,
   onAddAcademicPoint,
   onUpdateAcademicPoint,
   onDeleteAcademicPoint,
@@ -208,7 +229,7 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
             <button
               key={m.id}
               onClick={() => handleSelectModule(m.id)}
-              className={`p-4 rounded-2xl border-2 text-right transition-all flex flex-col justify-between cursor-pointer active:translate-y-0.5 ${
+              className={`p-3 sm:p-4 rounded-2xl border-2 text-right transition-all flex flex-col justify-between cursor-pointer active:translate-y-0.5 ${
                 isActive
                   ? m.bgActive
                   : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50 border-b-4 border-b-slate-300 shadow-xs'
@@ -259,6 +280,8 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
           onUpdateMajorItem={onUpdateMajorItem}
           onDeleteMajorItem={onDeleteMajorItem}
           onResetMajorItem={onResetMajorItem}
+          onToggleMajorReady={onToggleMajorReady}
+          onSetAllMajorReady={onSetAllMajorReady}
           onOpenSummary={onOpenSummary}
         />
       )}
@@ -266,12 +289,15 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
       {activeModule === 'pao' && (
         <PAOModule
           paoItems={paoItems}
+          majorDigits={majorDigits}
           onEarnPoints={onEarnPoints}
           onUnlockBadge={onUnlockBadge}
           onAddPAOItem={onAddPAOItem}
           onUpdatePAOItem={onUpdatePAOItem}
           onDeletePAOItem={onDeletePAOItem}
           onResetPAOItem={onResetPAOItem}
+          onTogglePAOReady={onTogglePAOReady}
+          onSetAllPAOReady={onSetAllPAOReady}
           onOpenSummary={onOpenSummary}
         />
       )}
@@ -285,6 +311,8 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
           onUpdatePersonFaceCard={onUpdatePersonFaceCard}
           onDeletePersonFaceCard={onDeletePersonFaceCard}
           onResetPersonFaceCards={onResetPersonFaceCards}
+          onTogglePersonReady={onTogglePersonReady}
+          onSetAllPeopleReady={onSetAllPeopleReady}
           onOpenSummary={onOpenSummary}
         />
       )}
@@ -299,10 +327,14 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
           onUpdateShapePeg={onUpdateShapePeg}
           onDeleteShapePeg={onDeleteShapePeg}
           onResetShapePeg={onResetShapePeg}
+          onToggleShapePegReady={onToggleShapePegReady}
+          onSetAllShapePegsReady={onSetAllShapePegsReady}
           onAddBodyPeg={onAddBodyPeg}
           onUpdateBodyPeg={onUpdateBodyPeg}
           onDeleteBodyPeg={onDeleteBodyPeg}
           onResetBodyPeg={onResetBodyPeg}
+          onToggleBodyPegReady={onToggleBodyPegReady}
+          onSetAllBodyPegsReady={onSetAllBodyPegsReady}
           onOpenSummary={onOpenSummary}
         />
       )}

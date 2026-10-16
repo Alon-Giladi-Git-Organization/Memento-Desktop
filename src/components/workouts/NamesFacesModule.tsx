@@ -263,19 +263,18 @@ export const NamesFacesModule: React.FC<NamesFacesModuleProps> = ({
                       onSetAllPeopleReady(true);
                       onEarnPoints(15, 'סימון כל כרטיסי השמות כמוכנים');
                     }}
-                    className="text-[11px] font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 border border-emerald-300 px-2.5 py-1.5 rounded-xl transition-all cursor-pointer"
+                    className="text-xs font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-3 py-1.5 rounded-xl transition-all cursor-pointer shadow-2xs"
+                    title="סמן את כל כרטיסי השמות כמוכנים לתרגול (Select All)"
                   >
                     ✓ סמן הכל
                   </button>
-                  {readyPeople.length > 0 && (
-                    <button
-                      onClick={() => onSetAllPeopleReady(false)}
-                      className="text-[11px] font-medium text-slate-500 hover:text-rose-600 px-2 py-1.5 rounded-xl transition-all cursor-pointer"
-                      title="בטל את כל סימוני התרגול"
-                    >
-                      נקה סימונים
-                    </button>
-                  )}
+                  <button
+                    onClick={() => onSetAllPeopleReady(false)}
+                    className="text-xs font-medium text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
+                    title="בטל את כל סימוני התרגול לכרטיסים (Deselect All)"
+                  >
+                    ✗ בטל הכל
+                  </button>
                 </div>
               )}
 

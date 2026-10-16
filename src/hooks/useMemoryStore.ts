@@ -1120,7 +1120,13 @@ export function useMemoryStore() {
 
   const updatePAOItem = (
     number: number,
-    updates: { userPerson?: string; userAction?: string; userObject?: string; is_ready_for_practice?: boolean }
+    updates: {
+      userPerson?: string;
+      userAction?: string;
+      userObject?: string;
+      userScene?: string;
+      is_ready_for_practice?: boolean;
+    }
   ) => {
     const now = Date.now();
     const existing = paoItems.find((p) => p.number === number);
@@ -1131,6 +1137,7 @@ export function useMemoryStore() {
       ...(updates.userPerson !== undefined ? { person: updates.userPerson, userPerson: updates.userPerson } : {}),
       ...(updates.userAction !== undefined ? { action: updates.userAction, userAction: updates.userAction } : {}),
       ...(updates.userObject !== undefined ? { object: updates.userObject, userObject: updates.userObject } : {}),
+      ...(updates.userScene !== undefined ? { scene: updates.userScene, userScene: updates.userScene } : {}),
       updatedAt: now,
     };
 
@@ -1142,7 +1149,7 @@ export function useMemoryStore() {
       return [...prev, updatedItem].sort((a, b) => a.number - b.number);
     });
 
-    if (updates.userPerson || updates.userAction || updates.userObject) {
+    if (updates.userPerson || updates.userAction || updates.userObject || updates.userScene) {
       earnPoints(15, 'התאמת שלשת PAO אישית');
     }
 
@@ -1442,6 +1449,20 @@ export function useMemoryStore() {
     }
   };
 
+  const setAllShapePegsReady = (ready: boolean) => {
+    const now = Date.now();
+    setShapePegs((prev) =>
+      prev.map((sp) => {
+        const updated = { ...sp, is_ready_for_practice: ready, updatedAt: now };
+        if (isNetworkOnline()) {
+          setDoc(doc(db, 'shape_pegs', String(sp.number)), cleanForFirestore({ is_ready_for_practice: ready, updatedAt: now }), { merge: true })
+            .catch((err) => console.error('Error batch setting shape_peg ready:', err));
+        }
+        return updated;
+      })
+    );
+  };
+
   const toggleBodyPegReady = (index: number, explicitState?: boolean) => {
     const now = Date.now();
     let nextState = false;
@@ -1456,6 +1477,20 @@ export function useMemoryStore() {
       setDoc(doc(db, 'body_pegs', String(index)), cleanForFirestore({ is_ready_for_practice: nextState, updatedAt: now }), { merge: true })
         .catch((err) => console.error('Error toggling body_peg ready:', err));
     }
+  };
+
+  const setAllBodyPegsReady = (ready: boolean) => {
+    const now = Date.now();
+    setBodyPegs((prev) =>
+      prev.map((bp) => {
+        const updated = { ...bp, is_ready_for_practice: ready, updatedAt: now };
+        if (isNetworkOnline()) {
+          setDoc(doc(db, 'body_pegs', String(bp.index)), cleanForFirestore({ is_ready_for_practice: ready, updatedAt: now }), { merge: true })
+            .catch((err) => console.error('Error batch setting body_peg ready:', err));
+        }
+        return updated;
+      })
+    );
   };
 
   const deletePersonFaceCard = (id: string) => {
@@ -1714,11 +1749,13 @@ export function useMemoryStore() {
     deleteBodyPeg,
     resetBodyPeg,
     toggleBodyPegReady,
+    setAllBodyPegsReady,
     addShapePeg,
     updateShapePeg,
     deleteShapePeg,
     resetShapePeg,
     toggleShapePegReady,
+    setAllShapePegsReady,
     addPersonalAssociation,
     updatePersonalAssociation,
     deletePersonalAssociation,

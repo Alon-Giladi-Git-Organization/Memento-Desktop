@@ -217,7 +217,7 @@ export const GlobalAIMentorWidget: React.FC<GlobalAIMentorWidgetProps> = ({
             onClick={() => setIsOpen(false)}
           />
           <div
-            className="fixed bottom-20 left-4 sm:left-6 z-50 w-[calc(100vw-32px)] sm:w-[460px] h-[580px] max-h-[85vh] bg-white border-2 border-slate-200 border-b-6 border-b-slate-300 rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-fadeIn text-slate-900"
+            className="fixed bottom-16 sm:bottom-20 left-3 right-3 sm:left-6 sm:right-auto z-50 sm:w-[460px] max-w-[calc(100vw-24px)] h-[580px] max-h-[82vh] bg-white border-2 border-slate-200 border-b-6 border-b-slate-300 rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-fadeIn text-slate-900"
             onClick={(e) => e.stopPropagation()}
           >
           {/* Drawer Header */}

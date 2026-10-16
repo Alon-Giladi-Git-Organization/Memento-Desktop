@@ -67,7 +67,8 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
   onToggleMajorReady,
   onSetAllMajorReady,
 }) => {
-  const [subView, setSubView] = useState<'table' | 'quiz'>('table');
+  const [subView, setSubView] = useState<'table' | 'digits' | 'quiz'>('table');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [search, setSearch] = useState('');
   const [decadeFilter, setDecadeFilter] = useState('all');
   const [onlyReadyFilter, setOnlyReadyFilter] = useState(false);
@@ -81,6 +82,23 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
   const [editWord, setEditWord] = useState('');
   const [editConsonants, setEditConsonants] = useState('');
   const [editHint, setEditHint] = useState('');
+
+  // Editing Single Digit (0-9) Mapping
+  const [editingDigitNum, setEditingDigitNum] = useState<number | null>(null);
+  const [editDigitConsonants, setEditDigitConsonants] = useState('');
+  const [editDigitWord, setEditDigitWord] = useState('');
+  const [editDigitHint, setEditDigitHint] = useState('');
+
+  const handleSaveDigit = (digitNum: number) => {
+    onUpdateMajorDigit(
+      digitNum,
+      editDigitConsonants.trim(),
+      editDigitWord.trim(),
+      editDigitHint.trim()
+    );
+    setEditingDigitNum(null);
+    onEarnPoints(10, `עדכון לוגיקת ספרה ${digitNum}`);
+  };
 
   const handleSaveItem = (itemNum: number) => {
     onUpdateMajorItem(itemNum, {
@@ -258,27 +276,38 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
           </p>
         </div>
 
-        <div className="flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-2xl border-2 border-slate-200 self-stretch md:self-auto justify-center">
+        <div className="flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-2xl border-2 border-slate-200 self-stretch md:self-auto justify-center flex-wrap">
           <button
             onClick={() => setSubView('table')}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer ${
               subView === 'table'
                 ? 'bg-[#58CC02] text-white border-b-2 border-[#46a302] shadow-sm'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <Hash className="w-3.5 h-3.5" />
+            <Hash className="w-4 h-4" />
             <span>מאגר מספרים 0-100 ({majorItems.length})</span>
           </button>
           <button
+            onClick={() => setSubView('digits')}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer ${
+              subView === 'digits'
+                ? 'bg-[#58CC02] text-white border-b-2 border-[#46a302] shadow-sm'
+                : 'text-slate-600 hover:text-slate-900'
+            }`}
+          >
+            <Sliders className="w-4 h-4" />
+            <span>מיפוי ספרות 0-9 (עריכת לוגיקה)</span>
+          </button>
+          <button
             onClick={() => setSubView('quiz')}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer ${
               subView === 'quiz'
                 ? 'bg-[#58CC02] text-white border-b-2 border-[#46a302] shadow-sm'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
-            <Sparkles className="w-3.5 h-3.5" />
+            <Sparkles className="w-4 h-4" />
             <span>מבחן שליפה ({readyItems.length} מוכנים)</span>
           </button>
         </div>
@@ -287,28 +316,27 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
       {/* Connecting Letters Rule Note / חוק אותיות הקישור */}
       <div className="bg-gradient-to-r from-sky-50 via-white to-indigo-50 border border-sky-200 rounded-2xl p-4 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-right">
         <div className="flex items-start sm:items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-sky-100 text-sky-700 border border-sky-300 flex items-center justify-center font-bold shrink-0 text-base shadow-xs">
+          <div className="w-10 h-10 rounded-xl bg-sky-100 text-sky-700 border border-sky-300 flex items-center justify-center font-bold shrink-0 text-lg shadow-xs">
             💡
           </div>
           <div className="space-y-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-black text-sky-900">
-                חוק "אותיות הקישור" (ללא ספרה משויכת):
+              <span className="text-sm font-black text-sky-900">
+                חוק אותיות החיבור (ללא ערך מספרי):
               </span>
-              <span className="text-xs font-mono font-bold text-sky-800 bg-sky-100 px-2.5 py-0.5 rounded-lg border border-sky-300">
-                א', ה', ו', י, נ', ע'
+              <span className="text-sm font-mono font-bold text-sky-800 bg-sky-100 px-2.5 py-0.5 rounded-lg border border-sky-300">
+                א', נ', י', ע', ו', ה'
               </span>
               <span className="text-xs font-black text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-lg border border-amber-300">
-                ביטוי עזר אנגרמתי לזיכרון: "אני עונה"
+                ביטוי עזר לזיכרון: "א-נ-י-ע-ו-נ-ה"
               </span>
             </div>
-            <p className="text-[11px] text-slate-600 leading-relaxed">
-              לאותיות אלו אין ספרה משויכת, והן משמשות חופשי כחומרי קישור. כל מילות 00-99 מורכבות <strong>אך ורק</strong> מעיצורי המספר עצמו + אותיות הקישור הללו (למשל: <span className="text-amber-800 font-bold">11 = לול</span>, כי 1=ל ו-ו' אות קישור, ללא עיצורים זרים).
+            <p className="text-xs text-slate-600 leading-relaxed">
+              אותיות אלו שקופות לחלוטין ומשמשות כחומרי קישור חופשיים. כל מילות המאגר מבוססות <strong>אך ורק</strong> על עיצורי המספר עצמו + אותיות החיבור (למשל: <span className="text-amber-800 font-bold">11 = לול</span>, כי 1=ל ו-ו' אות חיבור).
             </p>
           </div>
         </div>
       </div>
-
 
       {/* SUB-VIEW 2: TABLE 00-99 & CUSTOM */}
       {subView === 'table' && (
@@ -316,22 +344,22 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
               <div className="relative flex-1 sm:w-60">
-                <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-500" />
+                <Search className="w-4 h-4 absolute right-3 top-3 text-slate-500" />
                 <input
                   type="text"
                   placeholder="חיפוש מספר, מילה או אות..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500"
                 />
               </div>
 
-              <div className="flex items-center gap-1 bg-slate-950 border border-slate-800 rounded-xl px-2 py-1">
+              <div className="flex items-center gap-1 bg-slate-950 border border-slate-800 rounded-xl px-2.5 py-1.5">
                 <Filter className="w-3.5 h-3.5 text-slate-400" />
                 <select
                   value={decadeFilter}
                   onChange={(e) => setDecadeFilter(e.target.value)}
-                  className="bg-transparent text-xs text-slate-300 focus:outline-none cursor-pointer"
+                  className="bg-transparent text-xs sm:text-sm text-slate-300 focus:outline-none cursor-pointer"
                 >
                   <option value="all" className="bg-slate-900 text-white">כל העשורים</option>
                   {[0, 10, 20, 30, 40, 50, 60, 70, 80, 90].map((d) => (
@@ -345,61 +373,104 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
               {/* Ready for Practice Filter Button */}
               <button
                 onClick={() => setOnlyReadyFilter(!onlyReadyFilter)}
-                className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 text-xs sm:text-sm font-bold px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
                   onlyReadyFilter
                     ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
                     : 'bg-slate-950 text-slate-300 border-slate-800 hover:border-slate-700'
                 }`}
                 title="סנן והצג רק פריטים שסומנו כמוכנים לתרגול"
               >
-                <CheckCircle2 className={`w-3.5 h-3.5 ${onlyReadyFilter ? 'text-emerald-400' : 'text-slate-400'}`} />
+                <CheckCircle2 className={`w-4 h-4 ${onlyReadyFilter ? 'text-emerald-400' : 'text-slate-400'}`} />
                 <span>מוכנים בלבד ({readyItems.length})</span>
               </button>
+
+              {/* View Mode Toggle (כוורת vs. רשימה) */}
+              <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('grid')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                    viewMode === 'grid'
+                      ? 'bg-amber-500 text-slate-950 shadow-xs'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="תצוגת כוורת (כרטיסים)"
+                >
+                  <span>⊞</span>
+                  <span>כוורת</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('list')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer ${
+                    viewMode === 'list'
+                      ? 'bg-amber-500 text-slate-950 shadow-xs'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="תצוגת רשימה (נוחה לעיניים)"
+                >
+                  <span>☰</span>
+                  <span>רשימה</span>
+                </button>
+              </div>
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
-              {/* Batch Actions */}
+              {/* Batch Actions - Always display BOTH Select All and Deselect All */}
               {onSetAllMajorReady && (
                 <div className="flex items-center gap-1.5 text-xs">
                   {decadeFilter !== 'all' ? (
-                    <button
-                      onClick={() => {
-                        const d = parseInt(decadeFilter, 10);
-                        const nums = Array.from({ length: 10 }, (_, i) => d + i);
-                        onSetAllMajorReady(true, nums);
-                        onEarnPoints(10, `סימון עשור ${d} כמוכן לתרגול`);
-                      }}
-                      className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-1.5 rounded-xl transition-all cursor-pointer"
-                      title="סמן את כל 10 המספרים בעשור זה כמוכנים לתרגול"
-                    >
-                      ✓ סמן עשור {decadeFilter}
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        onSetAllMajorReady(true);
-                        onEarnPoints(20, 'סימון כל 100 מספרי Major כמוכנים');
-                      }}
-                      className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-1.5 rounded-xl transition-all cursor-pointer"
-                    >
-                      ✓ סמן הכל
-                    </button>
-                  )}
-                  {readyItems.length > 0 && (
-                    <button
-                      onClick={() => onSetAllMajorReady(false)}
-                      className="text-[11px] font-medium text-slate-400 hover:text-rose-400 px-2 py-1.5 rounded-xl transition-all cursor-pointer"
-                      title="בטל את כל סימוני התרגול"
-                    >
-                      נקה סימונים
-                    </button>
-                  )}
+                    <>
+                      <button
+                        onClick={() => {
+                          const d = parseInt(decadeFilter, 10);
+                          const nums = Array.from({ length: 10 }, (_, i) => d + i);
+                          onSetAllMajorReady(true, nums);
+                          onEarnPoints(10, `סימון עשור ${d} כמוכן לתרגול`);
+                        }}
+                        className="text-xs font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 px-2.5 py-1.5 rounded-xl transition-all cursor-pointer shadow-xs"
+                        title="סמן את כל 10 המספרים בעשור זה כמוכנים לתרגול"
+                      >
+                        ✓ סמן עשור {decadeFilter}
+                      </button>
+                      <button
+                        onClick={() => {
+                          const d = parseInt(decadeFilter, 10);
+                          const nums = Array.from({ length: 10 }, (_, i) => d + i);
+                          onSetAllMajorReady(false, nums);
+                        }}
+                        className="text-xs font-medium text-slate-400 hover:text-rose-400 bg-slate-950 hover:bg-rose-500/10 border border-slate-800 hover:border-rose-500/30 px-2 py-1.5 rounded-xl transition-all cursor-pointer"
+                        title="בטל סימון לעשור זה"
+                      >
+                        ✗ בטל עשור
+                      </button>
+                    </>
+                  ) : null}
+
+                  <button
+                    onClick={() => {
+                      onSetAllMajorReady(true);
+                      onEarnPoints(20, 'סימון כל 100 מספרי Major כמוכנים');
+                    }}
+                    className="text-xs font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 px-3 py-1.5 rounded-xl transition-all cursor-pointer shadow-xs"
+                    title="סמן את כל 100 המספרים כמוכנים לתרגול (Select All)"
+                  >
+                    ✓ סמן הכל (100)
+                  </button>
+
+                  <button
+                    onClick={() => onSetAllMajorReady(false)}
+                    className="text-xs font-medium text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
+                    title="בטל את כל סימוני התרגול (Deselect All)"
+                  >
+                    ✗ בטל הכל
+                  </button>
                 </div>
               )}
 
               <button
                 onClick={() => setShowAddForm(!showAddForm)}
-                className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs px-3.5 py-1.5 rounded-xl transition-all cursor-pointer shrink-0"
+                className="flex items-center gap-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs sm:text-sm px-3.5 py-2 rounded-xl transition-all cursor-pointer shrink-0 shadow-xs"
               >
                 <Plus className="w-4 h-4" />
                 <span>הוסף מספר ואסוציאציה</span>
@@ -555,230 +626,375 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
             </form>
           )}
 
-          {/* Cards Grid with Side Navigator */}
-          <div className="flex gap-3 items-start">
-            {/* Main Cards Grid */}
-            <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 max-h-[580px] overflow-y-auto pr-1 scroll-smooth">
-              {filteredItems.map((item) => {
-                const isEditing = editingNum === item.number;
-                const activeWord = item.defaultWord || item.userWord || '';
-                const activeConsonants = item.consonants || item.userConsonants || '';
-                const activeHint = item.imageHint || item.userImageHint || '';
-                const isCustom = Boolean(item.userWord && item.userWord !== item.defaultWord);
-                const isHighlighted = highlightedNum === item.number;
+          <div className="flex gap-4 items-start">
+            {viewMode === 'grid' ? (
+              /* Main Cards Grid */
+              <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5 max-h-[640px] overflow-y-auto pr-1 scroll-smooth">
+                {filteredItems.map((item) => {
+                  const isEditing = editingNum === item.number;
+                  const activeWord = item.userWord || item.defaultWord || '';
+                  const activeConsonants = item.userConsonants || item.consonants || '';
+                  const activeHint = item.userImageHint || item.imageHint || '';
+                  const isCustom = Boolean(item.userWord && item.userWord !== item.defaultWord);
+                  const isHighlighted = highlightedNum === item.number;
 
-                return (
-                  <div
-                    id={`major-item-${item.number}`}
-                    key={item.number}
-                    className={`bg-slate-950 border rounded-2xl p-3.5 transition-all duration-300 flex flex-col justify-between ${
-                      item.is_ready_for_practice
-                        ? 'border-emerald-500/60 ring-2 ring-emerald-500/20 bg-emerald-950/10'
-                        : isHighlighted
-                        ? 'border-amber-400 ring-4 ring-amber-400/30 scale-[1.02] shadow-xl shadow-amber-500/20 bg-amber-950/20'
-                        : isCustom
-                        ? 'border-amber-500/50 shadow-sm shadow-amber-500/10'
-                        : 'border-slate-800 hover:border-slate-700'
-                    }`}
-                  >
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-lg font-black text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-lg border border-amber-500/20">
-                          {item.numberStr}
-                        </span>
-                        <span className="text-[10px] text-slate-400 font-mono">
-                          [{activeConsonants}]
-                        </span>
-                      </div>
+                  return (
+                    <div
+                      id={`major-item-${item.number}`}
+                      key={item.number}
+                      className={`bg-slate-950 border rounded-2xl p-4 transition-all duration-300 flex flex-col justify-between ${
+                        item.is_ready_for_practice
+                          ? 'border-emerald-500/60 ring-2 ring-emerald-500/20 bg-emerald-950/15'
+                          : isHighlighted
+                          ? 'border-amber-400 ring-4 ring-amber-400/30 scale-[1.02] shadow-xl shadow-amber-500/20 bg-amber-950/20'
+                          : isCustom
+                          ? 'border-amber-500/50 shadow-sm shadow-amber-500/10'
+                          : 'border-slate-800 hover:border-slate-700'
+                      }`}
+                    >
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xl font-black text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-lg border border-amber-500/20">
+                            {item.numberStr}
+                          </span>
+                          <span className="text-xs text-amber-300/80 font-mono font-bold">
+                            [{activeConsonants}]
+                          </span>
+                        </div>
 
-                      <div className="flex items-center gap-1">
-                        {isCustom && (
+                        <div className="flex items-center gap-1">
+                          {isCustom && (
+                            <button
+                              onClick={() => {
+                                onResetMajorItem(item.number);
+                                if (isEditing) setEditingNum(null);
+                              }}
+                              title="אפס לברירת מחדל"
+                              className="p-1.5 text-slate-500 hover:text-rose-400 cursor-pointer"
+                            >
+                              <Undo2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                           <button
                             onClick={() => {
-                              onResetMajorItem(item.number);
-                              if (isEditing) setEditingNum(null);
+                              if (isEditing) {
+                                setEditingNum(null);
+                              } else {
+                                setEditingNum(item.number);
+                                setEditWord(activeWord);
+                                setEditConsonants(activeConsonants);
+                                setEditHint(activeHint || '');
+                              }
                             }}
-                            title="אפס לברירת מחדל"
-                            className="p-1 text-slate-500 hover:text-rose-400 cursor-pointer"
+                            className="p-1.5 text-slate-400 hover:text-amber-400 cursor-pointer"
+                            title="ערוך מספר"
                           >
-                            <Undo2 className="w-3 h-3" />
+                            <Edit3 className="w-4 h-4" />
                           </button>
-                        )}
-                        <button
-                          onClick={() => {
-                            if (isEditing) {
-                              setEditingNum(null);
-                            } else {
-                              setEditingNum(item.number);
-                              setEditWord(activeWord);
-                              setEditConsonants(activeConsonants);
-                              setEditHint(activeHint || '');
-                            }
-                          }}
-                          className="p-1 text-slate-400 hover:text-amber-400 cursor-pointer"
-                          title="ערוך מספר"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </button>
-                        {onDeleteMajorItem && (
-                          <button
-                            onClick={() => onDeleteMajorItem(item.number)}
-                            className="p-1 text-slate-600 hover:text-rose-400 cursor-pointer"
-                            title="מחק מהמאגר"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {isEditing ? (
-                      <div className="space-y-2 pt-1 text-right">
-                        <div>
-                          <div className="flex items-center justify-between mb-0.5">
-                            <label className="text-[9px] text-slate-400 font-bold">מילה מנמונית:</label>
-                            <AIFieldGeneratorButton
-                              promptType="major_word"
-                              inputContext={item.number.toString()}
-                              extraContext={editConsonants || item.consonants}
-                              onGenerated={(val) => setEditWord(val)}
-                              label="מילה עם AI"
-                              compact
-                            />
-                          </div>
-                          <input
-                            type="text"
-                            value={editWord}
-                            onChange={(e) => setEditWord(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                handleSaveItem(item.number);
-                              }
-                            }}
-                            placeholder="מילה מנמונית..."
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white"
-                          />
-                        </div>
-
-                        <div>
-                          <div className="flex items-center justify-between mb-0.5">
-                            <label className="text-[9px] text-slate-400 font-bold">עיצורים (ס + ר):</label>
-                            <AIFieldGeneratorButton
-                              promptType="major_consonants"
-                              inputContext={item.number.toString()}
-                              onGenerated={(val) => setEditConsonants(val)}
-                              label="עיצורים"
-                              compact
-                            />
-                          </div>
-                          <input
-                            type="text"
-                            value={editConsonants}
-                            onChange={(e) => setEditConsonants(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                handleSaveItem(item.number);
-                              }
-                            }}
-                            placeholder="עיצורים (ס + ר)..."
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-amber-200"
-                          />
-                        </div>
-
-                        <div>
-                          <div className="flex items-center justify-between mb-0.5">
-                            <label className="text-[9px] text-slate-400 font-bold">סצנה קינטית:</label>
-                            <AIFieldGeneratorButton
-                              promptType="major_hint"
-                              inputContext={item.number.toString()}
-                              extraContext={editWord}
-                              onGenerated={(val) => setEditHint(val)}
-                              label="סצנה עם AI"
-                              compact
-                            />
-                          </div>
-                          <input
-                            type="text"
-                            value={editHint}
-                            onChange={(e) => setEditHint(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                handleSaveItem(item.number);
-                              }
-                            }}
-                            placeholder="סצנה קינטית..."
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-[10px] text-slate-300"
-                          />
-                        </div>
-
-                        <div className="flex items-center justify-between gap-1 pt-1">
-                          <span className="text-[9px] text-slate-500 font-mono">↵ Enter לשמירה</span>
-                          <div className="flex gap-1">
+                          {onDeleteMajorItem && (
                             <button
-                              onClick={() => setEditingNum(null)}
-                              className="text-[10px] text-slate-400 hover:text-slate-200 px-2"
+                              onClick={() => onDeleteMajorItem(item.number)}
+                              className="p-1.5 text-slate-600 hover:text-rose-400 cursor-pointer"
+                              title="מחק מהמאגר"
                             >
-                              ביטול
+                              <Trash2 className="w-4 h-4" />
                             </button>
-                            <button
-                              onClick={() => handleSaveItem(item.number)}
-                              className="text-[10px] bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-2.5 py-1 rounded cursor-pointer"
-                            >
-                              שמור
-                            </button>
-                          </div>
+                          )}
                         </div>
                       </div>
-                    ) : (
-                      <>
-                        <h4 className="text-sm font-bold text-white">{activeWord}</h4>
-                        {activeHint && (
-                          <p className="text-[10px] text-slate-400 bg-slate-900/60 p-1.5 rounded-lg border border-slate-800">
-                            ⚡ {activeHint}
-                          </p>
-                        )}
-                      </>
-                    )}
 
-                    {/* Ready for Practice Checkbox */}
-                    <div className="pt-2 mt-2 border-t border-slate-800/80 flex items-center justify-between">
-                      <label className="inline-flex items-center gap-1.5 cursor-pointer select-none py-1 px-2 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 transition-all">
-                        <input
-                          type="checkbox"
-                          checked={Boolean(item.is_ready_for_practice)}
-                          onChange={() => handleToggleItemReady(item.number, item.is_ready_for_practice)}
-                          className="w-3.5 h-3.5 rounded text-emerald-500 focus:ring-emerald-500 cursor-pointer accent-emerald-500"
-                        />
-                        <span className={`text-[11px] font-bold ${item.is_ready_for_practice ? 'text-emerald-400' : 'text-slate-400'}`}>
-                          מוכן לתרגול
-                        </span>
-                      </label>
-                      {item.is_ready_for_practice && (
-                        <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1">
-                          <Check className="w-3 h-3 text-emerald-400" />
-                          <span>מוכן</span>
-                        </span>
+                      {isEditing ? (
+                        <div className="space-y-2.5 pt-1 text-right">
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="text-xs text-slate-300 font-bold">מילה מנמונית:</label>
+                              <AIFieldGeneratorButton
+                                promptType="major_word"
+                                inputContext={item.number.toString()}
+                                extraContext={editConsonants || item.consonants}
+                                onGenerated={(val) => setEditWord(val)}
+                                label="מילה עם AI"
+                                compact
+                              />
+                            </div>
+                            <input
+                              type="text"
+                              value={editWord}
+                              onChange={(e) => setEditWord(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleSaveItem(item.number);
+                                }
+                              }}
+                              placeholder="מילה מנמונית..."
+                              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-sm text-white focus:outline-none focus:border-amber-500"
+                            />
+                          </div>
+
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="text-xs text-slate-300 font-bold">עיצורים (למשל: ס + ר):</label>
+                              <AIFieldGeneratorButton
+                                promptType="major_consonants"
+                                inputContext={item.number.toString()}
+                                onGenerated={(val) => setEditConsonants(val)}
+                                label="עיצורים"
+                                compact
+                              />
+                            </div>
+                            <input
+                              type="text"
+                              value={editConsonants}
+                              onChange={(e) => setEditConsonants(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleSaveItem(item.number);
+                                }
+                              }}
+                              placeholder="עיצורים (ס + ר)..."
+                              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-sm text-amber-200 focus:outline-none focus:border-amber-500"
+                            />
+                          </div>
+
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="text-xs text-slate-300 font-bold">סצנה קינטית / דימוי חושי:</label>
+                              <AIFieldGeneratorButton
+                                promptType="major_hint"
+                                inputContext={item.number.toString()}
+                                extraContext={editWord}
+                                onGenerated={(val) => setEditHint(val)}
+                                label="סצנה עם AI"
+                                compact
+                              />
+                            </div>
+                            <input
+                              type="text"
+                              value={editHint}
+                              onChange={(e) => setEditHint(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  handleSaveItem(item.number);
+                                }
+                              }}
+                              placeholder="סצנה קינטית רב-חושית..."
+                              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs sm:text-sm text-slate-200 focus:outline-none focus:border-amber-500"
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between gap-1 pt-1">
+                            <span className="text-[11px] text-slate-500 font-mono">↵ Enter לשמירה</span>
+                            <div className="flex gap-1.5">
+                              <button
+                                onClick={() => setEditingNum(null)}
+                                className="text-xs text-slate-400 hover:text-slate-200 px-2 py-1"
+                              >
+                                ביטול
+                              </button>
+                              <button
+                                onClick={() => handleSaveItem(item.number)}
+                                className="text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-1 rounded-lg cursor-pointer shadow-xs"
+                              >
+                                שמור
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <h4 className="text-base font-bold text-white tracking-wide">{activeWord}</h4>
+                          {activeHint && (
+                            <p className="text-xs text-slate-300 bg-slate-900/80 p-2 rounded-xl border border-slate-800 leading-relaxed">
+                              ⚡ {activeHint}
+                            </p>
+                          )}
+                        </>
                       )}
+
+                      {/* Ready for Practice Checkbox */}
+                      <div className="pt-2.5 mt-2 border-t border-slate-800/80 flex items-center justify-between">
+                        <label className="inline-flex items-center gap-2 cursor-pointer select-none py-1.5 px-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 transition-all">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(item.is_ready_for_practice)}
+                            onChange={() => handleToggleItemReady(item.number, item.is_ready_for_practice)}
+                            className="w-4 h-4 rounded text-emerald-500 focus:ring-emerald-500 cursor-pointer accent-emerald-500"
+                          />
+                          <span className={`text-xs font-bold ${item.is_ready_for_practice ? 'text-emerald-400' : 'text-slate-400'}`}>
+                            מוכן לתרגול
+                          </span>
+                        </label>
+                        {item.is_ready_for_practice && (
+                          <span className="text-xs bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1">
+                            <Check className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>מוכן</span>
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
-            </div>
+                );
+              })}
+              </div>
+            ) : (
+              /* List View (רשימה נקייה, מרווחת ונוחה לעין) */
+              <div className="flex-1 bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-inner max-h-[640px] overflow-y-auto">
+                <table className="w-full text-right border-collapse">
+                  <thead className="bg-slate-900/90 sticky top-0 z-10 border-b border-slate-800 text-xs font-bold text-slate-400">
+                    <tr>
+                      <th className="py-3 px-4 w-16 text-center">מספר</th>
+                      <th className="py-3 px-4 w-28">עיצורים</th>
+                      <th className="py-3 px-4 w-36">מילה</th>
+                      <th className="py-3 px-4">דימוי חושי קינטי</th>
+                      <th className="py-3 px-4 w-32 text-center">מוכן לתרגול</th>
+                      <th className="py-3 px-4 w-24 text-left">פעולות</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60 text-sm">
+                    {filteredItems.map((item) => {
+                      const isEditing = editingNum === item.number;
+                      const activeWord = item.userWord || item.defaultWord || '';
+                      const activeConsonants = item.userConsonants || item.consonants || '';
+                      const activeHint = item.userImageHint || item.imageHint || '';
+                      const isCustom = Boolean(item.userWord && item.userWord !== item.defaultWord);
+
+                      return (
+                        <tr
+                          key={item.number}
+                          id={`major-item-${item.number}`}
+                          className={`hover:bg-slate-900/60 transition-colors ${
+                            item.is_ready_for_practice ? 'bg-emerald-950/10' : ''
+                          }`}
+                        >
+                          <td className="py-3 px-4 text-center font-mono font-black text-amber-400 text-base">
+                            {item.numberStr}
+                          </td>
+                          <td className="py-3 px-4 font-mono text-amber-300 font-semibold text-xs">
+                            {isEditing ? (
+                              <input
+                                type="text"
+                                value={editConsonants}
+                                onChange={(e) => setEditConsonants(e.target.value)}
+                                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-amber-300"
+                              />
+                            ) : (
+                              activeConsonants
+                            )}
+                          </td>
+                          <td className="py-3 px-4 font-bold text-white text-base">
+                            {isEditing ? (
+                              <input
+                                type="text"
+                                value={editWord}
+                                onChange={(e) => setEditWord(e.target.value)}
+                                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-sm text-white"
+                              />
+                            ) : (
+                              <span>{activeWord}</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-xs text-slate-300">
+                            {isEditing ? (
+                              <div className="space-y-1">
+                                <input
+                                  type="text"
+                                  value={editHint}
+                                  onChange={(e) => setEditHint(e.target.value)}
+                                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200"
+                                />
+                                <div className="flex gap-1">
+                                  <AIFieldGeneratorButton
+                                    promptType="major_hint"
+                                    inputContext={item.number.toString()}
+                                    extraContext={editWord}
+                                    onGenerated={(val) => setEditHint(val)}
+                                    label="הצע סצנה AI"
+                                    compact
+                                  />
+                                </div>
+                              </div>
+                            ) : (
+                              activeHint || <span className="text-slate-600 italic">ללא סצנה</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <label className="inline-flex items-center gap-1.5 cursor-pointer select-none py-1 px-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 transition-all">
+                              <input
+                                type="checkbox"
+                                checked={Boolean(item.is_ready_for_practice)}
+                                onChange={() => handleToggleItemReady(item.number, item.is_ready_for_practice)}
+                                className="w-4 h-4 rounded text-emerald-500 focus:ring-emerald-500 cursor-pointer accent-emerald-500"
+                              />
+                              <span className={`text-xs font-bold ${item.is_ready_for_practice ? 'text-emerald-400' : 'text-slate-500'}`}>
+                                {item.is_ready_for_practice ? 'מוכן' : 'לא מוכן'}
+                              </span>
+                            </label>
+                          </td>
+                          <td className="py-3 px-4 text-left">
+                            <div className="flex items-center gap-1 justify-end">
+                              {isEditing ? (
+                                <>
+                                  <button
+                                    onClick={() => handleSaveItem(item.number)}
+                                    className="px-2 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-lg cursor-pointer"
+                                  >
+                                    שמור
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingNum(null)}
+                                    className="px-1.5 py-1 text-xs text-slate-400 hover:text-white cursor-pointer"
+                                  >
+                                    ביטול
+                                  </button>
+                                </>
+                              ) : (
+                                <>
+                                  <button
+                                    onClick={() => {
+                                      setEditingNum(item.number);
+                                      setEditWord(activeWord);
+                                      setEditConsonants(activeConsonants);
+                                      setEditHint(activeHint || '');
+                                    }}
+                                    className="p-1 text-slate-400 hover:text-amber-400 cursor-pointer"
+                                    title="ערוך שורה"
+                                  >
+                                    <Edit3 className="w-3.5 h-3.5" />
+                                  </button>
+                                  {isCustom && (
+                                    <button
+                                      onClick={() => onResetMajorItem(item.number)}
+                                      className="p-1 text-slate-500 hover:text-rose-400 cursor-pointer"
+                                      title="איפוס לברירת מחדל"
+                                    >
+                                      <Undo2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
 
             {/* Vertical Sticky Side Index for 1-100 */}
             <div className="hidden lg:flex flex-col gap-1 bg-slate-950 p-2 rounded-2xl border border-slate-800 max-h-[580px] overflow-y-auto no-scrollbar shrink-0 w-16 text-center shadow-inner">
-              <span className="text-[9px] font-bold text-slate-400 pb-1 border-b border-slate-800">מספר</span>
+              <span className="text-[10px] font-bold text-slate-400 pb-1 border-b border-slate-800">מספר</span>
               {majorItems.map((item) => (
                 <button
                   key={item.number}
                   onClick={() => scrollToNumber(item.number)}
                   title={`#${item.numberStr} - ${item.userWord || item.defaultWord}`}
-                  className={`text-[10px] font-mono py-1 rounded-lg transition-colors cursor-pointer ${
+                  className={`text-xs font-mono py-1 rounded-lg transition-colors cursor-pointer ${
                     highlightedNum === item.number
                       ? 'bg-amber-500 text-slate-950 font-black'
                       : 'text-slate-400 hover:text-amber-300 hover:bg-slate-900'
@@ -788,6 +1004,170 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                 </button>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* SUB-VIEW: DIGITS 0-9 MAPPING & LOGIC EDITOR */}
+      {subView === 'digits' && (
+        <div className="space-y-6 animate-fadeIn">
+          {/* Explanation Banner */}
+          <div className="bg-slate-950 border border-amber-500/30 rounded-3xl p-5 sm:p-6 space-y-3 shadow-md">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+              <div>
+                <h3 className="text-lg font-black text-amber-400 flex items-center gap-2">
+                  <Sliders className="w-5 h-5 text-amber-400" />
+                  <span>עריכה והתאמה אישית של ספרות היסוד (0-9)</span>
+                </h3>
+                <p className="text-xs sm:text-sm text-slate-400 mt-1">
+                  כל מילות ה-Major וה-PAO בכל האפליקציה נגזרות ממיפוי זה. ניתן להתאים אישית כל ספרה, ולאחר מכן לחשב מחדש את כל מאגר 00-99.
+                </p>
+              </div>
+
+              {onRecalculateMajor00_99FromDigits && (
+                <button
+                  onClick={() => {
+                    onRecalculateMajor00_99FromDigits(majorDigits);
+                    onEarnPoints(25, 'חישוב מחדש של מאגר 00-99 לפי מיפוי הספרות');
+                    setSyncToast('מאגר 00-99 חושב ועודכן בהצלחה!');
+                    setTimeout(() => setSyncToast(null), 3000);
+                  }}
+                  className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs sm:text-sm rounded-xl transition-all cursor-pointer shadow-md shrink-0 flex items-center gap-2"
+                >
+                  <Wand2 className="w-4 h-4" />
+                  <span>החל מיפוי על כל 00-99</span>
+                </button>
+              )}
+            </div>
+
+            {/* Connecting Letters Reminder */}
+            <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-right">
+              <div className="space-y-1">
+                <span className="text-xs font-bold text-sky-400 block">אותיות החיבור השקופות:</span>
+                <span className="font-mono font-black text-base text-sky-300">
+                  א', נ', י', ע', ו', ה' ("א-נ-י-ע-ו-נ-ה")
+                </span>
+                <p className="text-xs text-slate-400">
+                  אותיות אלו אינן מקושרות לאף ספרה, ומשמשות תמיד כדבק חיבור חופשי למילים ולדימויים.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Digits 0-9 Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+            {majorDigits.map((d) => {
+              const isEditing = editingDigitNum === d.number;
+              const activeConsonants = d.userConsonants || d.consonants;
+              const activeWord = d.userWord || d.defaultWord;
+              const activeHint = d.userImageHint || d.imageHint;
+
+              return (
+                <div
+                  key={d.number}
+                  className={`bg-slate-950 border rounded-2xl p-4 flex flex-col justify-between transition-all ${
+                    isEditing
+                      ? 'border-amber-400 ring-2 ring-amber-400/30'
+                      : 'border-slate-800 hover:border-slate-700'
+                  }`}
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 font-mono font-black text-xl flex items-center justify-center">
+                        {d.number}
+                      </span>
+                      <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => {
+                            if (isEditing) {
+                              setEditingDigitNum(null);
+                            } else {
+                              setEditingDigitNum(d.number);
+                              setEditDigitConsonants(activeConsonants);
+                              setEditDigitWord(activeWord);
+                              setEditDigitHint(activeHint);
+                            }
+                          }}
+                          className="p-1.5 text-slate-400 hover:text-amber-400 cursor-pointer"
+                          title="ערוך ספרה זו"
+                        >
+                          <Edit3 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => onResetMajorDigit(d.number)}
+                          className="p-1.5 text-slate-500 hover:text-rose-400 cursor-pointer"
+                          title="אפס ספרה זו לברירת מחדל"
+                        >
+                          <Undo2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {isEditing ? (
+                      <div className="space-y-2 text-right">
+                        <div>
+                          <label className="text-xs text-slate-400 font-bold block mb-1">עיצורים:</label>
+                          <input
+                            type="text"
+                            value={editDigitConsonants}
+                            onChange={(e) => setEditDigitConsonants(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-amber-300"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-slate-400 font-bold block mb-1">מילת עוגן:</label>
+                          <input
+                            type="text"
+                            value={editDigitWord}
+                            onChange={(e) => setEditDigitWord(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-slate-400 font-bold block mb-1">דימוי חושי:</label>
+                          <input
+                            type="text"
+                            value={editDigitHint}
+                            onChange={(e) => setEditDigitHint(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-300"
+                          />
+                        </div>
+                        <div className="flex justify-end gap-1.5 pt-1">
+                          <button
+                            onClick={() => setEditingDigitNum(null)}
+                            className="text-xs text-slate-400 px-2 py-1"
+                          >
+                            ביטול
+                          </button>
+                          <button
+                            onClick={() => handleSaveDigit(d.number)}
+                            className="text-xs bg-amber-500 text-slate-950 font-bold px-3 py-1 rounded-lg cursor-pointer"
+                          >
+                            שמור
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="space-y-2 text-right">
+                        <div>
+                          <span className="text-xs text-slate-400 font-bold block">עיצורים מקושרים:</span>
+                          <span className="text-sm font-black text-amber-300">{activeConsonants}</span>
+                        </div>
+                        <div>
+                          <span className="text-xs text-slate-400 font-bold block">מילה מנמונית:</span>
+                          <span className="text-base font-bold text-white">{activeWord}</span>
+                        </div>
+                        {activeHint && (
+                          <p className="text-xs text-slate-400 bg-slate-900/60 p-2 rounded-xl border border-slate-800">
+                            ⚡ {activeHint}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

@@ -95,22 +95,32 @@ export default function App() {
     updateMajorItem,
     deleteMajorItem,
     resetMajorItem,
+    toggleMajorReady,
+    setAllMajorReady,
     addPAOItem,
     updatePAOItem,
     deletePAOItem,
     resetPAOItem,
+    togglePAOReady,
+    setAllPAOReady,
     addShapePeg,
     updateShapePeg,
     deleteShapePeg,
     resetShapePeg,
+    toggleShapePegReady,
+    setAllShapePegsReady,
     addBodyPeg,
     updateBodyPeg,
     deleteBodyPeg,
     resetBodyPeg,
+    toggleBodyPegReady,
+    setAllBodyPegsReady,
     addPersonFaceCard,
     updatePersonFaceCard,
     deletePersonFaceCard,
     resetPersonFaceCards,
+    togglePersonReady,
+    setAllPeopleReady,
     addAbstractShape,
     updateAbstractShape,
     deleteAbstractShape,
@@ -127,6 +137,7 @@ export default function App() {
     addPalaceLocus,
     updatePalaceLocus,
     deletePalaceLocus,
+    setAllPalaceLociReady,
     addTestResult,
     addChatMessage,
     resetToDefaults,
@@ -138,7 +149,7 @@ export default function App() {
       : 0;
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-amber-500/20 selection:text-amber-900">
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-amber-500/20 selection:text-amber-900 w-full max-w-full overflow-x-hidden">
       {/* Navigation Header */}
       <Navbar
         currentTab={currentTab}
@@ -161,7 +172,7 @@ export default function App() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 pt-8 pb-12">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 pt-4 sm:pt-8 pb-12 overflow-x-hidden">
         {currentTab === 'workouts' && (
           <WorkoutsHub
             selectedSubModule={selectedWorkoutSubModule}
@@ -183,22 +194,32 @@ export default function App() {
             onUpdateMajorItem={updateMajorItem}
             onDeleteMajorItem={deleteMajorItem}
             onResetMajorItem={resetMajorItem}
+            onToggleMajorReady={toggleMajorReady}
+            onSetAllMajorReady={setAllMajorReady}
             onAddPAOItem={addPAOItem}
             onUpdatePAOItem={updatePAOItem}
             onDeletePAOItem={deletePAOItem}
             onResetPAOItem={resetPAOItem}
+            onTogglePAOReady={togglePAOReady}
+            onSetAllPAOReady={setAllPAOReady}
             onAddShapePeg={addShapePeg}
             onUpdateShapePeg={updateShapePeg}
             onDeleteShapePeg={deleteShapePeg}
             onResetShapePeg={resetShapePeg}
+            onToggleShapePegReady={toggleShapePegReady}
+            onSetAllShapePegsReady={setAllShapePegsReady}
             onAddBodyPeg={addBodyPeg}
             onUpdateBodyPeg={updateBodyPeg}
             onDeleteBodyPeg={deleteBodyPeg}
             onResetBodyPeg={resetBodyPeg}
+            onToggleBodyPegReady={toggleBodyPegReady}
+            onSetAllBodyPegsReady={setAllBodyPegsReady}
             onAddPersonFaceCard={addPersonFaceCard}
             onUpdatePersonFaceCard={updatePersonFaceCard}
             onDeletePersonFaceCard={deletePersonFaceCard}
             onResetPersonFaceCards={resetPersonFaceCards}
+            onTogglePersonReady={togglePersonReady}
+            onSetAllPeopleReady={setAllPeopleReady}
             onAddAbstractShape={addAbstractShape}
             onUpdateAbstractShape={updateAbstractShape}
             onDeleteAbstractShape={deleteAbstractShape}
@@ -219,6 +240,7 @@ export default function App() {
             onAddLocus={addPalaceLocus}
             onUpdateLocus={updatePalaceLocus}
             onDeleteLocus={deletePalaceLocus}
+            onSetAllLociReady={setAllPalaceLociReady}
             onEarnPoints={earnPoints}
             onUnlockBadge={unlockBadge}
             isAuthenticated={!!currentUser}
@@ -350,7 +372,7 @@ export default function App() {
       />
 
       {/* Footer */}
-      <footer className="border-t border-slate-200 bg-white/90 py-6 text-center text-xs text-slate-500 shadow-xs">
+      <footer className="border-t border-slate-200 bg-white/90 py-6 text-center text-xs text-slate-500 shadow-xs w-full max-w-full overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p className="font-medium text-slate-600">
             ממנטו (Memento) • מבוסס על מחקרי נובל 2014, פרופ' אלינור מגווייר (UCL) ותקן אלופי העולם בזיכרון (WMC)

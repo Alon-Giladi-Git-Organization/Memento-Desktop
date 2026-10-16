@@ -8,6 +8,7 @@ import {
   Sparkles,
   HelpCircle,
   CheckCircle2,
+  Check,
   XCircle,
   RotateCcw,
   BookOpen,
@@ -24,17 +25,21 @@ interface PegsModuleProps {
   onAddShapePeg?: (item: PegShapeItem) => void;
   onUpdateShapePeg: (
     number: number,
-    updates: { userObject?: string; userShapeName?: string; userKineticTip?: string }
+    updates: { userObject?: string; userShapeName?: string; userKineticTip?: string; is_ready_for_practice?: boolean }
   ) => void;
   onDeleteShapePeg?: (number: number) => void;
   onResetShapePeg: (number: number) => void;
+  onToggleShapePegReady?: (number: number, explicitState?: boolean) => void;
+  onSetAllShapePegsReady?: (ready: boolean) => void;
   onAddBodyPeg?: (item: BodyPegItem) => void;
   onUpdateBodyPeg: (
     index: number,
-    updates: { userObject?: string; userBodyPart?: string; userKineticTip?: string }
+    updates: { userObject?: string; userBodyPart?: string; userKineticTip?: string; is_ready_for_practice?: boolean }
   ) => void;
   onDeleteBodyPeg?: (index: number) => void;
   onResetBodyPeg: (index: number) => void;
+  onToggleBodyPegReady?: (index: number, explicitState?: boolean) => void;
+  onSetAllBodyPegsReady?: (ready: boolean) => void;
   onOpenSummary?: (techniqueId: string) => void;
 }
 
@@ -47,10 +52,14 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
   onUpdateShapePeg,
   onDeleteShapePeg,
   onResetShapePeg,
+  onToggleShapePegReady,
+  onSetAllShapePegsReady,
   onAddBodyPeg,
   onUpdateBodyPeg,
   onDeleteBodyPeg,
   onResetBodyPeg,
+  onToggleBodyPegReady,
+  onSetAllBodyPegsReady,
   onOpenSummary,
 }) => {
   const [activeTab, setActiveTab] = useState<'shape' | 'body' | 'quiz'>('shape');
@@ -67,6 +76,16 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
   const [newShapeName, setNewShapeName] = useState('');
   const [newShapeObj, setNewShapeObj] = useState('');
   const [newShapeTip, setNewShapeTip] = useState('');
+
+  // Filter states
+  const [onlyReadyShapeFilter, setOnlyReadyShapeFilter] = useState(false);
+  const [onlyReadyBodyFilter, setOnlyReadyBodyFilter] = useState(false);
+
+  const readyShapePegs = shapePegs.filter((p) => p.is_ready_for_practice !== false);
+  const filteredShapePegs = onlyReadyShapeFilter ? readyShapePegs : shapePegs;
+
+  const readyBodyPegs = bodyPegs.filter((b) => b.is_ready_for_practice !== false);
+  const filteredBodyPegs = onlyReadyBodyFilter ? readyBodyPegs : bodyPegs;
 
   const [showAddBodyForm, setShowAddBodyForm] = useState(false);
   const [newBodyIndex, setNewBodyIndex] = useState('');
@@ -234,10 +253,45 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
       {/* SUB-VIEW 1: SHAPE PEGS */}
       {activeTab === 'shape' && (
         <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <span className="text-xs text-slate-400">
-              התאם או הוסף מתלי צורת ספרה לפי הדימוי החזותי שמתאים לך
-            </span>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setOnlyReadyShapeFilter(!onlyReadyShapeFilter)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                  onlyReadyShapeFilter
+                    ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/50 shadow-xs'
+                    : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                }`}
+                title="הצג רק מתלים שסומנו כמוכנים לתרגול"
+              >
+                <CheckCircle2 className={`w-3.5 h-3.5 ${onlyReadyShapeFilter ? 'text-yellow-400' : 'text-slate-500'}`} />
+                <span>מוכנים בלבד ({readyShapePegs.length}/{shapePegs.length})</span>
+              </button>
+
+              {onSetAllShapePegsReady && (
+                <div className="flex items-center gap-1.5 text-xs bg-slate-950 p-1 rounded-xl border border-slate-800">
+                  <button
+                    onClick={() => {
+                      onSetAllShapePegsReady(true);
+                      onEarnPoints(10, 'סימון כל מתלי הצורה כמוכנים');
+                    }}
+                    className="text-xs font-bold text-yellow-400 hover:text-yellow-300 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/30 px-2.5 py-1 rounded-lg transition-all cursor-pointer"
+                    title="סמן את כל מתלי הצורה כמוכנים לתרגול (Select All)"
+                  >
+                    ✓ סמן הכל
+                  </button>
+                  <button
+                    onClick={() => onSetAllShapePegsReady(false)}
+                    className="text-xs font-medium text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 px-2.5 py-1 rounded-lg transition-all cursor-pointer"
+                    title="בטל את כל סימוני התרגול למתלי צורה (Deselect All)"
+                  >
+                    ✗ בטל הכל
+                  </button>
+                </div>
+              )}
+            </div>
+
             <button
               onClick={() => setShowAddShapeForm(!showAddShapeForm)}
               className="flex items-center gap-1.5 bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold text-xs px-3.5 py-1.5 rounded-xl transition-all cursor-pointer"
@@ -342,19 +396,20 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-            {shapePegs.map((peg) => {
+            {filteredShapePegs.map((peg) => {
               const isEditing = editingPegKey === peg.number;
               const activeObj = peg.userObject || peg.defaultObject;
               const isCustom = !!peg.userObject;
+              const isReady = peg.is_ready_for_practice !== false;
 
               return (
                 <div
                   key={peg.number}
                   className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-2 hover:border-yellow-500/40 transition-colors flex flex-col justify-between"
                 >
-                  <div className="space-y-2">
+                  <div className="space-y-2.5">
                     <div className="flex items-center justify-between">
-                      <span className="w-8 h-8 rounded-xl bg-yellow-500/20 text-yellow-400 font-black text-lg flex items-center justify-center border border-yellow-500/40">
+                      <span className="w-9 h-9 rounded-xl bg-yellow-500/20 text-yellow-400 font-black text-xl flex items-center justify-center border border-yellow-500/40 font-mono">
                         {peg.number}
                       </span>
                       <div className="flex items-center gap-1">
@@ -367,7 +422,7 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                             title="אפס לברירת מחדל"
                             className="p-1 text-slate-500 hover:text-rose-400 cursor-pointer"
                           >
-                            <Undo2 className="w-3 h-3" />
+                            <Undo2 className="w-3.5 h-3.5" />
                           </button>
                         )}
                         <button
@@ -384,7 +439,7 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                           className="p-1 text-slate-400 hover:text-yellow-400 cursor-pointer"
                           title="ערוך מתלה"
                         >
-                          <Edit3 className="w-3.5 h-3.5" />
+                          <Edit3 className="w-4 h-4" />
                         </button>
                         {onDeleteShapePeg && (
                           <button
@@ -392,7 +447,7 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                             className="p-1 text-slate-600 hover:text-rose-400 cursor-pointer"
                             title="מחק מתלה"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         )}
                       </div>
@@ -402,7 +457,7 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                       <div className="space-y-2 pt-1 text-right">
                         <div>
                           <div className="flex items-center justify-between mb-0.5">
-                            <label className="text-[9px] text-slate-400 font-bold">שם הצורה:</label>
+                            <label className="text-xs text-slate-400 font-bold">שם הצורה:</label>
                             <AIFieldGeneratorButton
                               promptType="shape_association"
                               inputContext={`ספרה ${peg.number}`}
@@ -427,13 +482,13 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                               }
                             }}
                             placeholder="שם הצורה..."
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white"
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
                           />
                         </div>
 
                         <div>
                           <div className="flex items-center justify-between mb-0.5">
-                            <label className="text-[9px] text-slate-400 font-bold">חפץ המתלה:</label>
+                            <label className="text-xs text-slate-400 font-bold">חפץ המתלה:</label>
                             <AIFieldGeneratorButton
                               promptType="shape_association"
                               inputContext={`ספרה ${peg.number}`}
@@ -459,13 +514,13 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                               }
                             }}
                             placeholder="חפץ המתלה..."
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white"
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
                           />
                         </div>
 
                         <div>
                           <div className="flex items-center justify-between mb-0.5">
-                            <label className="text-[9px] text-slate-400 font-bold">טיפ קינטי:</label>
+                            <label className="text-xs text-slate-400 font-bold">טיפ קינטי:</label>
                             <AIFieldGeneratorButton
                               promptType="shape_tip"
                               inputContext={editObject || `ספרה ${peg.number}`}
@@ -490,16 +545,16 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                               }
                             }}
                             placeholder="טיפ קינטי..."
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-[10px] text-slate-300"
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-300"
                           />
                         </div>
 
                         <div className="flex items-center justify-between gap-1 pt-1">
-                          <span className="text-[9px] text-slate-500 font-mono">↵ Enter לשמירה</span>
+                          <span className="text-[10px] text-slate-500 font-mono">↵ Enter לשמירה</span>
                           <div className="flex gap-1">
                             <button
                               onClick={() => setEditingPegKey(null)}
-                              className="text-[10px] text-slate-400 hover:text-slate-200 px-2"
+                              className="text-xs text-slate-400 hover:text-slate-200 px-2"
                             >
                               ביטול
                             </button>
@@ -512,7 +567,7 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                                 });
                                 setEditingPegKey(null);
                               }}
-                              className="text-[10px] bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold px-2.5 py-1 rounded cursor-pointer"
+                              className="text-xs bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold px-3 py-1 rounded-lg cursor-pointer"
                             >
                               שמור
                             </button>
@@ -521,13 +576,40 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                       </div>
                     ) : (
                       <>
-                        <div className="text-xs text-slate-400">{peg.userShapeName || peg.shapeName}</div>
-                        <div className="font-bold text-white text-sm">{activeObj}</div>
-                        <p className="text-[11px] text-slate-400">{peg.visualMetaphor}</p>
-                        <p className="text-[10px] text-yellow-300/80 bg-yellow-950/20 p-2 rounded-lg">
+                        <div className="text-xs font-bold text-yellow-400/90">{peg.userShapeName || peg.shapeName}</div>
+                        <div className="font-extrabold text-white text-base">{activeObj}</div>
+                        <p className="text-xs text-slate-300">{peg.visualMetaphor}</p>
+                        <p className="text-xs text-yellow-300/90 bg-yellow-950/30 border border-yellow-500/20 p-2.5 rounded-xl">
                           💡 {peg.userKineticTip || peg.kineticTip}
                         </p>
                       </>
+                    )}
+                  </div>
+
+                  {/* Ready for Practice Checkbox */}
+                  <div className="pt-2 mt-2 border-t border-slate-800/80 flex items-center justify-between">
+                    <label className="inline-flex items-center gap-2 cursor-pointer select-none py-1 px-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 transition-all">
+                      <input
+                        type="checkbox"
+                        checked={isReady}
+                        onChange={() => {
+                          if (onToggleShapePegReady) {
+                            onToggleShapePegReady(peg.number, !isReady);
+                          } else {
+                            onUpdateShapePeg(peg.number, { is_ready_for_practice: !isReady });
+                          }
+                        }}
+                        className="w-4 h-4 rounded text-yellow-500 focus:ring-yellow-500 cursor-pointer accent-yellow-500"
+                      />
+                      <span className={`text-xs font-bold ${isReady ? 'text-yellow-300' : 'text-slate-400'}`}>
+                        מוכן לתרגול
+                      </span>
+                    </label>
+                    {isReady && (
+                      <span className="text-[11px] bg-yellow-500/15 text-yellow-300 font-bold px-2 py-0.5 rounded-full border border-yellow-500/30 flex items-center gap-1">
+                        <Check className="w-3 h-3 text-yellow-400" />
+                        <span>מוכן</span>
+                      </span>
                     )}
                   </div>
                 </div>
@@ -540,10 +622,45 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
       {/* SUB-VIEW 2: BODY PEGS */}
       {activeTab === 'body' && (
         <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <span className="text-xs text-slate-400">
-              תחנות הגוף מהרגליים עד הראש: מיקום מושלם לרשימות קצרות ומיידיות
-            </span>
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setOnlyReadyBodyFilter(!onlyReadyBodyFilter)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                  onlyReadyBodyFilter
+                    ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/50 shadow-xs'
+                    : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                }`}
+                title="הצג רק תחנות גוף שסומנו כמוכנות לתרגול"
+              >
+                <CheckCircle2 className={`w-3.5 h-3.5 ${onlyReadyBodyFilter ? 'text-yellow-400' : 'text-slate-500'}`} />
+                <span>מוכנים בלבד ({readyBodyPegs.length}/{bodyPegs.length})</span>
+              </button>
+
+              {onSetAllBodyPegsReady && (
+                <div className="flex items-center gap-1.5 text-xs bg-slate-950 p-1 rounded-xl border border-slate-800">
+                  <button
+                    onClick={() => {
+                      onSetAllBodyPegsReady(true);
+                      onEarnPoints(10, 'סימון כל תחנות הגוף כמוכנות');
+                    }}
+                    className="text-xs font-bold text-yellow-400 hover:text-yellow-300 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/30 px-2.5 py-1 rounded-lg transition-all cursor-pointer"
+                    title="סמן את כל תחנות הגוף כמוכנות לתרגול (Select All)"
+                  >
+                    ✓ סמן הכל
+                  </button>
+                  <button
+                    onClick={() => onSetAllBodyPegsReady(false)}
+                    className="text-xs font-medium text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 px-2.5 py-1 rounded-lg transition-all cursor-pointer"
+                    title="בטל את כל סימוני התרגול לתחנות הגוף (Deselect All)"
+                  >
+                    ✗ בטל הכל
+                  </button>
+                </div>
+              )}
+            </div>
+
             <button
               onClick={() => setShowAddBodyForm(!showAddBodyForm)}
               className="flex items-center gap-1.5 bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold text-xs px-3.5 py-1.5 rounded-xl transition-all cursor-pointer"
@@ -650,19 +767,20 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
           )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-            {bodyPegs.map((bp) => {
+            {filteredBodyPegs.map((bp) => {
               const isEditing = editingPegKey === bp.index;
               const activeObj = bp.userObject || bp.defaultObject;
               const isCustom = !!bp.userObject;
+              const isReady = bp.is_ready_for_practice !== false;
 
               return (
                 <div
                   key={bp.index}
                   className="bg-slate-950 border border-slate-800 rounded-2xl p-4 space-y-2 hover:border-yellow-500/40 transition-colors flex flex-col justify-between"
                 >
-                  <div className="space-y-2">
+                  <div className="space-y-2.5">
                     <div className="flex items-center justify-between">
-                      <span className="w-8 h-8 rounded-xl bg-yellow-500/20 text-yellow-400 font-black text-sm flex items-center justify-center border border-yellow-500/40">
+                      <span className="w-9 h-9 rounded-xl bg-yellow-500/20 text-yellow-400 font-black text-sm flex items-center justify-center border border-yellow-500/40 font-mono">
                         #{bp.index}
                       </span>
                       <div className="flex items-center gap-1">
@@ -675,7 +793,7 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                             title="אפס לברירת מחדל"
                             className="p-1 text-slate-500 hover:text-rose-400 cursor-pointer"
                           >
-                            <Undo2 className="w-3 h-3" />
+                            <Undo2 className="w-3.5 h-3.5" />
                           </button>
                         )}
                         <button
@@ -692,7 +810,7 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                           className="p-1 text-slate-400 hover:text-yellow-400 cursor-pointer"
                           title="ערוך תחנת גוף"
                         >
-                          <Edit3 className="w-3.5 h-3.5" />
+                          <Edit3 className="w-4 h-4" />
                         </button>
                         {onDeleteBodyPeg && (
                           <button
@@ -700,7 +818,7 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                             className="p-1 text-slate-600 hover:text-rose-400 cursor-pointer"
                             title="מחק תחנה"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         )}
                       </div>
@@ -710,7 +828,7 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                       <div className="space-y-2 pt-1 text-right">
                         <div>
                           <div className="flex items-center justify-between mb-0.5">
-                            <label className="text-[9px] text-slate-400 font-bold">איבר גוף:</label>
+                            <label className="text-xs text-slate-400 font-bold">איבר גוף:</label>
                             <AIFieldGeneratorButton
                               promptType="body_peg"
                               inputContext={`תחנת גוף #${bp.index}`}
@@ -735,13 +853,13 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                               }
                             }}
                             placeholder="איבר גוף..."
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white"
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
                           />
                         </div>
 
                         <div>
                           <div className="flex items-center justify-between mb-0.5">
-                            <label className="text-[9px] text-slate-400 font-bold">חפץ תלוי:</label>
+                            <label className="text-xs text-slate-400 font-bold">חפץ תלוי:</label>
                             <AIFieldGeneratorButton
                               promptType="body_peg"
                               inputContext={`תחנת ${editTitle || bp.index}`}
@@ -767,13 +885,13 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                               }
                             }}
                             placeholder="חפץ תלוי..."
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white"
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
                           />
                         </div>
 
                         <div>
                           <div className="flex items-center justify-between mb-0.5">
-                            <label className="text-[9px] text-slate-400 font-bold">טיפ קינטי:</label>
+                            <label className="text-xs text-slate-400 font-bold">טיפ קינטי:</label>
                             <AIFieldGeneratorButton
                               promptType="shape_tip"
                               inputContext={editObject || editTitle}
@@ -798,16 +916,16 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                               }
                             }}
                             placeholder="טיפ קינטי..."
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-[10px] text-slate-300"
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-300"
                           />
                         </div>
 
                         <div className="flex items-center justify-between gap-1 pt-1">
-                          <span className="text-[9px] text-slate-500 font-mono">↵ Enter לשמירה</span>
+                          <span className="text-[10px] text-slate-500 font-mono">↵ Enter לשמירה</span>
                           <div className="flex gap-1">
                             <button
                               onClick={() => setEditingPegKey(null)}
-                              className="text-[10px] text-slate-400 hover:text-slate-200 px-2"
+                              className="text-xs text-slate-400 hover:text-slate-200 px-2"
                             >
                               ביטול
                             </button>
@@ -820,7 +938,7 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                                 });
                                 setEditingPegKey(null);
                               }}
-                              className="text-[10px] bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold px-2.5 py-1 rounded cursor-pointer"
+                              className="text-xs bg-yellow-500 hover:bg-yellow-400 text-slate-950 font-bold px-3 py-1 rounded-lg cursor-pointer"
                             >
                               שמור
                             </button>
@@ -829,12 +947,39 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                       </div>
                     ) : (
                       <>
-                        <div className="text-xs font-bold text-slate-300">{bp.userBodyPart || bp.bodyPartHebrew}</div>
-                        <div className="font-bold text-white text-sm">{activeObj}</div>
-                        <p className="text-[10px] text-yellow-300/80 bg-yellow-950/20 p-2 rounded-lg">
+                        <div className="text-xs font-bold text-yellow-400/90">{bp.userBodyPart || bp.bodyPartHebrew}</div>
+                        <div className="font-extrabold text-white text-base">{activeObj}</div>
+                        <p className="text-xs text-yellow-300/90 bg-yellow-950/30 border border-yellow-500/20 p-2.5 rounded-xl">
                           💡 {bp.userKineticTip || bp.kineticTip}
                         </p>
                       </>
+                    )}
+                  </div>
+
+                  {/* Ready for Practice Checkbox */}
+                  <div className="pt-2 mt-2 border-t border-slate-800/80 flex items-center justify-between">
+                    <label className="inline-flex items-center gap-2 cursor-pointer select-none py-1 px-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 transition-all">
+                      <input
+                        type="checkbox"
+                        checked={isReady}
+                        onChange={() => {
+                          if (onToggleBodyPegReady) {
+                            onToggleBodyPegReady(bp.index, !isReady);
+                          } else {
+                            onUpdateBodyPeg(bp.index, { is_ready_for_practice: !isReady });
+                          }
+                        }}
+                        className="w-4 h-4 rounded text-yellow-500 focus:ring-yellow-500 cursor-pointer accent-yellow-500"
+                      />
+                      <span className={`text-xs font-bold ${isReady ? 'text-yellow-300' : 'text-slate-400'}`}>
+                        מוכן לתרגול
+                      </span>
+                    </label>
+                    {isReady && (
+                      <span className="text-[11px] bg-yellow-500/15 text-yellow-300 font-bold px-2 py-0.5 rounded-full border border-yellow-500/30 flex items-center gap-1">
+                        <Check className="w-3 h-3 text-yellow-400" />
+                        <span>מוכן</span>
+                      </span>
                     )}
                   </div>
                 </div>

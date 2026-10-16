@@ -729,6 +729,11 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks): () => 
             object = data.userObject;
           }
 
+          let scene = (data.scene !== 'null' ? data.scene : '') || (data.userScene !== 'null' ? data.userScene : '') || '';
+          if (data.userScene && data.userScene !== 'null' && data.userScene !== data.scene) {
+            scene = data.userScene;
+          }
+
           items.push({
             id: d.id,
             number: isNaN(num) ? 0 : num,
@@ -736,9 +741,11 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks): () => 
             person,
             action,
             object,
+            scene,
             userPerson: person,
             userAction: action,
             userObject: object,
+            userScene: scene,
             is_ready_for_practice: Boolean(data.is_ready_for_practice),
             updatedAt: Math.max(
               getTimestampMillis(data.updatedAt),
