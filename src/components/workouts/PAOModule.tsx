@@ -70,7 +70,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
   // View mode: 'grid' (כוורת) or 'list' (רשימה)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
-  // Edit PAO Item
+  // Edit PAO Item (Draft State)
   const [editingNum, setEditingNum] = useState<number | null>(null);
   const [editPerson, setEditPerson] = useState('');
   const [editAction, setEditAction] = useState('');
@@ -103,6 +103,8 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
   const [userGuessInput, setUserGuessInput] = useState('');
   const [quizFeedback, setQuizFeedback] = useState<'idle' | 'correct' | 'incorrect'>('idle');
   const [revealQuizAnswer, setRevealQuizAnswer] = useState(false);
+  
+  // Quiz Inline Edit State
   const [isQuizEditing, setIsQuizEditing] = useState(false);
   const [quizEditPerson, setQuizEditPerson] = useState('');
   const [quizEditAction, setQuizEditAction] = useState('');
@@ -114,6 +116,17 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
 
   // Jump to specific number in registry
   const [highlightedNum, setHighlightedNum] = useState<number | null>(null);
+
+  // --- Core Save Logic (Lifting State Up) ---
+  const handleSaveItem = (itemNum: number) => {
+    onUpdatePAOItem(itemNum, {
+      userPerson: editPerson.trim(),
+      userAction: editAction.trim(),
+      userObject: editObject.trim(),
+      userScene: editScene.trim(),
+    });
+    setEditingNum(null);
+  };
 
   const handleTogglePaoReady = (itemNumber: number, currentState?: boolean) => {
     if (onTogglePAOReady) {
@@ -183,8 +196,8 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
     object: getPaoFor2Digits(pao6Digits.slice(4, 6)).object,
   };
 
-  const handleAddNewItem = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAddNewItem = (e?: React.FormEvent | React.KeyboardEvent) => {
+    if (e && e.preventDefault) e.preventDefault();
     const num = parseInt(newNumber, 10);
     if (isNaN(num)) return;
     const numStr = num < 10 && num >= 0 ? `0${num}` : `${num}`;
@@ -201,6 +214,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
         userObject: newObject.trim(),
         scene: newScene.trim(),
         userScene: newScene.trim(),
+        is_ready_for_practice: true,
       });
     }
 
@@ -220,7 +234,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
       const revs: PAOQuizQuestionType[] = ['personToNumber', 'actionToNumber', 'objectToNumber'];
       return revs[Math.floor(Math.random() * revs.length)];
     }
-    // Filter 'all' -> random question testing either Person (35%), Action (35%), Object (20%), or Reverse Number (10%)
+    // Filter 'all' -> random question
     const rand = Math.random();
     if (rand < 0.35) return 'numberToPerson';
     if (rand < 0.70) return 'numberToAction';
@@ -309,7 +323,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
       confetti({ particleCount: 40, spread: 60, origin: { y: 0.6 } });
     } else {
       setQuizFeedback('incorrect');
-      setRevealQuizAnswer(true); // Automatically reveal correct answer on error
+      setRevealQuizAnswer(true);
     }
   };
 
@@ -890,6 +904,15 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                     rows={2}
                     value={newScene}
                     onChange={(e) => setNewScene(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        const form = e.currentTarget.form;
+                        if (form && form.reportValidity()) {
+                          handleAddNewItem();
+                        }
+                      }
+                    }}
                     placeholder="סצנה מפורטת המשלבת את 3 השדות יחד בכל החושים (צבעים, ריחות, תחושות מגע וטמפרטורה)..."
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 leading-relaxed"
                   />
@@ -1062,6 +1085,9 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                               type="text"
                               value={editPerson}
                               onChange={(e) => setEditPerson(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') { e.preventDefault(); handleSaveItem(item.number); }
+                              }}
                               className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm text-white"
                             />
                           </div>
@@ -1082,6 +1108,9 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                               type="text"
                               value={editAction}
                               onChange={(e) => setEditAction(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') { e.preventDefault(); handleSaveItem(item.number); }
+                              }}
                               className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm text-white"
                             />
                           </div>
@@ -1102,6 +1131,9 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                               type="text"
                               value={editObject}
                               onChange={(e) => setEditObject(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') { e.preventDefault(); handleSaveItem(item.number); }
+                              }}
                               className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm text-white"
                             />
                           </div>
@@ -1126,6 +1158,9 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                               rows={2}
                               value={editScene}
                               onChange={(e) => setEditScene(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSaveItem(item.number); }
+                              }}
                               placeholder="סצנה מפורטת המשלבת את 3 השדות..."
                               className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
                             />
@@ -1141,15 +1176,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                                 ביטול
                               </button>
                               <button
-                                onClick={() => {
-                                  onUpdatePAOItem(item.number, {
-                                    userPerson: editPerson.trim(),
-                                    userAction: editAction.trim(),
-                                    userObject: editObject.trim(),
-                                    userScene: editScene.trim(),
-                                  });
-                                  setEditingNum(null);
-                                }}
+                                onClick={() => handleSaveItem(item.number)}
                                 className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3 py-1 rounded-lg cursor-pointer"
                               >
                                 שמור
@@ -1261,6 +1288,9 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                                   type="text"
                                   value={editPerson}
                                   onChange={(e) => setEditPerson(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') { e.preventDefault(); handleSaveItem(item.number); }
+                                  }}
                                   className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white"
                                   placeholder="דמות..."
                                 />
@@ -1270,6 +1300,9 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                                   type="text"
                                   value={editAction}
                                   onChange={(e) => setEditAction(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') { e.preventDefault(); handleSaveItem(item.number); }
+                                  }}
                                   className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white"
                                   placeholder="פעולה..."
                                 />
@@ -1279,6 +1312,9 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                                   type="text"
                                   value={editObject}
                                   onChange={(e) => setEditObject(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') { e.preventDefault(); handleSaveItem(item.number); }
+                                  }}
                                   className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white"
                                   placeholder="חפץ..."
                                 />
@@ -1288,6 +1324,9 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                                   type="text"
                                   value={editScene}
                                   onChange={(e) => setEditScene(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') { e.preventDefault(); handleSaveItem(item.number); }
+                                  }}
                                   className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white"
                                   placeholder="סצנה שלמה..."
                                 />
@@ -1325,15 +1364,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                               {isEditing ? (
                                 <>
                                   <button
-                                    onClick={() => {
-                                      onUpdatePAOItem(item.number, {
-                                        userPerson: editPerson.trim(),
-                                        userAction: editAction.trim(),
-                                        userObject: editObject.trim(),
-                                        userScene: editScene.trim(),
-                                      });
-                                      setEditingNum(null);
-                                    }}
+                                    onClick={() => handleSaveItem(item.number)}
                                     className="px-2 py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded cursor-pointer"
                                   >
                                     שמור
@@ -1490,7 +1521,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
 
               {currentQuizItem && quizMeta && (
                 <div className="max-w-xl mx-auto space-y-6 text-center">
-                  {/* Dynamic Themed Question Card (Orange for Person, Purple for Action, Teal for Object) */}
+                  {/* Dynamic Themed Question Card */}
                   <div className={`p-6 sm:p-8 rounded-3xl ${quizMeta.cardBg} border ${quizMeta.cardBorder} shadow-inner space-y-4`}>
                     <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
                       <span
@@ -1532,7 +1563,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                     )}
                   </div>
 
-                  {/* Real-Time PAO Edit Panel (similar to Major system quiz) */}
+                  {/* Real-Time PAO Edit Panel */}
                   {isQuizEditing && (
                     <div className="space-y-4 bg-slate-900/95 border border-amber-500/40 rounded-2xl p-5 text-right animate-fadeIn shadow-2xl">
                       <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
@@ -1547,9 +1578,8 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                         </span>
                       </div>
 
-                      {/* 3 Fields: Person (Orange), Action (Purple), Object (Teal) */}
+                      {/* 3 Fields */}
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        {/* 👤 Person - כתום */}
                         <div className="bg-slate-950/80 border border-orange-500/30 rounded-xl p-3 space-y-1.5">
                           <div className="flex items-center justify-between">
                             <label className="text-[10px] text-orange-400 font-bold flex items-center gap-1">
@@ -1573,7 +1603,6 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                           />
                         </div>
 
-                        {/* ⚡ Action - סגול */}
                         <div className="bg-slate-950/80 border border-purple-500/30 rounded-xl p-3 space-y-1.5">
                           <div className="flex items-center justify-between">
                             <label className="text-[10px] text-purple-400 font-bold flex items-center gap-1">
@@ -1598,7 +1627,6 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                           />
                         </div>
 
-                        {/* 📦 Object - טורקיז */}
                         <div className="bg-slate-950/80 border border-teal-500/30 rounded-xl p-3 space-y-1.5">
                           <div className="flex items-center justify-between">
                             <label className="text-[10px] text-teal-400 font-bold flex items-center gap-1">
@@ -1624,7 +1652,6 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                         </div>
                       </div>
 
-                      {/* 🎬 Full Scene - סצנה שלמה */}
                       <div className="bg-slate-950/80 border border-amber-500/30 rounded-xl p-3 space-y-1.5">
                         <div className="flex items-center justify-between">
                           <label className="text-[11px] text-amber-300 font-bold flex items-center gap-1">
@@ -1649,7 +1676,6 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                         />
                       </div>
 
-                      {/* Buttons: Cancel & Save in real-time */}
                       <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-800">
                         <button
                           type="button"
@@ -1664,7 +1690,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                           className="text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-md shadow-emerald-900/30 transition-all"
                         >
                           <Save className="w-3.5 h-3.5" />
-                          <span>שמור שינויים בזמן אמת (Firestore & Rowy)</span>
+                          <span>שמור שינויים בזמן אמת</span>
                         </button>
                       </div>
                     </div>
@@ -1677,6 +1703,11 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                         value={userGuessInput}
                         onChange={(e) => setUserGuessInput(e.target.value)}
                         onKeyDown={(e) => {
+                          if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                            e.preventDefault();
+                            setRevealQuizAnswer(true);
+                            return;
+                          }
                           if (e.key === 'Enter') {
                             e.preventDefault();
                             if (quizFeedback !== 'idle' || revealQuizAnswer) {
@@ -1751,9 +1782,8 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                           </div>
                         </div>
 
-                        {/* Triplet Grid with highlight for the tested dimension (Orange for Person, Purple for Action, Teal for Object) */}
+                        {/* Triplet Grid with highlight for the tested dimension */}
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-center pt-1">
-                          {/* Person Card - כתום */}
                           <div
                             className={`p-3 rounded-xl border transition-all ${
                               quizMeta.testedField === 'person'
@@ -1777,7 +1807,6 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                             </strong>
                           </div>
 
-                          {/* Action Card - סגול */}
                           <div
                             className={`p-3 rounded-xl border transition-all ${
                               quizMeta.testedField === 'action'
@@ -1801,7 +1830,6 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                             </strong>
                           </div>
 
-                          {/* Object Card - טורקיז */}
                           <div
                             className={`p-3 rounded-xl border transition-all ${
                               quizMeta.testedField === 'object'
