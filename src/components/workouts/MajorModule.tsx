@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { MajorItem } from '../../types/memory';
+import { isHebrewFuzzyMatch, isHebrewMultiFieldSearchMatch } from '../../lib/fuzzyMatch';
 import { AIFieldGeneratorButton } from '../AIFieldGeneratorButton';
 
 interface MajorModuleProps {
@@ -37,9 +38,9 @@ interface MajorModuleProps {
   onUpdateMajorItem: (
     number: number,
     updates: {
-      userWord?: string;
-      userConsonants?: string;
-      userImageHint?: string;
+      defaultWord?: string;
+      consonants?: string;
+      imageHint?: string;
       customNotes?: string;
       is_ready_for_practice?: boolean;
     }
@@ -102,9 +103,9 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
 
   const handleSaveItem = (itemNum: number) => {
     onUpdateMajorItem(itemNum, {
-      userWord: editWord.trim(),
-      userConsonants: editConsonants.trim(),
-      userImageHint: editHint.trim(),
+      defaultWord: editWord.trim(),
+      consonants: editConsonants.trim(),
+      imageHint: editHint.trim(),
     });
     setEditingNum(null);
   };
@@ -179,14 +180,11 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
 
   const handleCheckAnswer = () => {
     if (!currentQuizItem) return;
-    const guess = userGuess.trim().toLowerCase();
+    const guess = userGuess.trim();
     if (!guess) return;
 
-    const userWord = (currentQuizItem.userWord || '').trim().toLowerCase();
-    const defaultWord = (currentQuizItem.defaultWord || '').trim().toLowerCase();
-
-    // STRICT 100% EQUALITY MATCH ONLY - no substring / partial match allowed
-    const isExactMatch = (userWord && guess === userWord) || (defaultWord && guess === defaultWord);
+    const defaultWord = (currentQuizItem.defaultWord || '').trim();
+    const isExactMatch = isHebrewFuzzyMatch(guess, defaultWord);
 
     if (isExactMatch) {
       setQuizFeedback('correct');
@@ -201,9 +199,9 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
   const handleSaveQuizEdit = () => {
     if (!currentQuizItem) return;
     onUpdateMajorItem(currentQuizItem.number, {
-      userWord: quizEditWord.trim(),
-      userConsonants: quizEditConsonants.trim(),
-      userImageHint: quizEditHint.trim(),
+      defaultWord: quizEditWord.trim(),
+      consonants: quizEditConsonants.trim(),
+      imageHint: quizEditHint.trim(),
     });
     setIsQuizEditing(false);
     onEarnPoints(10, 'עדכון אסוציאציה מתוך מבחן השליפה');
@@ -220,11 +218,8 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
         number: num,
         numberStr: numStr,
         defaultWord: newWord.trim(),
-        userWord: newWord.trim(),
         consonants: newConsonants.trim(),
-        userConsonants: newConsonants.trim(),
         imageHint: newHint.trim(),
-        userImageHint: newHint.trim(),
         is_ready_for_practice: true, // Newly manually created item defaults to ready for practice
       });
     }
@@ -239,10 +234,14 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
   const filteredItems = majorItems.filter((item) => {
     if (onlyReadyFilter && !item.is_ready_for_practice) return false;
 
-    const matchesSearch =
-      item.numberStr.includes(search) ||
-      (item.userWord || item.defaultWord).toLowerCase().includes(search.toLowerCase()) ||
-      (item.userConsonants || item.consonants).includes(search);
+    const matchesSearch = isHebrewMultiFieldSearchMatch(
+      search,
+      item.numberStr,
+      item.number,
+      item.defaultWord,
+      item.consonants,
+      item.imageHint
+    );
 
     if (decadeFilter === 'all') return matchesSearch;
     const decade = parseInt(decadeFilter, 10);
@@ -517,7 +516,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                 <option value="" disabled>בחר מספר...</option>
                 {majorItems.map((item) => (
                   <option key={item.number} value={item.number}>
-                    #{item.numberStr} - {item.userWord || item.defaultWord}
+                    #{item.numberStr} - {item.defaultWord}
                   </option>
                 ))}
               </select>
@@ -632,10 +631,10 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
               <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5 max-h-[640px] overflow-y-auto pr-1 scroll-smooth">
                 {filteredItems.map((item) => {
                   const isEditing = editingNum === item.number;
-                  const activeWord = item.userWord || item.defaultWord || '';
-                  const activeConsonants = item.userConsonants || item.consonants || '';
-                  const activeHint = item.userImageHint || item.imageHint || '';
-                  const isCustom = Boolean(item.userWord && item.userWord !== item.defaultWord);
+                  const activeWord = item.defaultWord || '';
+                  const activeConsonants = item.consonants || '';
+                  const activeHint = item.imageHint || '';
+                  const isCustom = false;
                   const isHighlighted = highlightedNum === item.number;
 
                   return (
@@ -857,10 +856,10 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                   <tbody className="divide-y divide-slate-800/60 text-sm">
                     {filteredItems.map((item) => {
                       const isEditing = editingNum === item.number;
-                      const activeWord = item.userWord || item.defaultWord || '';
-                      const activeConsonants = item.userConsonants || item.consonants || '';
-                      const activeHint = item.userImageHint || item.imageHint || '';
-                      const isCustom = Boolean(item.userWord && item.userWord !== item.defaultWord);
+                      const activeWord = item.defaultWord || '';
+                      const activeConsonants = item.consonants || '';
+                      const activeHint = item.imageHint || '';
+                      const isCustom = false;
 
                       return (
                         <tr
@@ -993,7 +992,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                 <button
                   key={item.number}
                   onClick={() => scrollToNumber(item.number)}
-                  title={`#${item.numberStr} - ${item.userWord || item.defaultWord}`}
+                  title={`#${item.numberStr} - ${item.defaultWord}`}
                   className={`text-xs font-mono py-1 rounded-lg transition-colors cursor-pointer ${
                     highlightedNum === item.number
                       ? 'bg-amber-500 text-slate-950 font-black'
@@ -1058,9 +1057,9 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
             {majorDigits.map((d) => {
               const isEditing = editingDigitNum === d.number;
-              const activeConsonants = d.userConsonants || d.consonants;
-              const activeWord = d.userWord || d.defaultWord;
-              const activeHint = d.userImageHint || d.imageHint;
+              const activeConsonants = d.consonants;
+              const activeWord = d.defaultWord;
+              const activeHint = d.imageHint;
 
               return (
                 <div
@@ -1242,7 +1241,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                     <div className="text-xs text-slate-400">
                       עיצורים מנחים:{' '}
                       <strong className="text-slate-200">
-                        {currentQuizItem.userConsonants || currentQuizItem.consonants}
+                        {currentQuizItem.consonants}
                       </strong>
                     </div>
                   </div>
@@ -1334,9 +1333,9 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                             <button
                               onClick={() => {
                                 if (currentQuizItem) {
-                                  setQuizEditWord(currentQuizItem.userWord || currentQuizItem.defaultWord);
-                                  setQuizEditConsonants(currentQuizItem.userConsonants || currentQuizItem.consonants);
-                                  setQuizEditHint(currentQuizItem.userImageHint || currentQuizItem.imageHint || '');
+                                  setQuizEditWord(currentQuizItem.defaultWord);
+                                  setQuizEditConsonants(currentQuizItem.consonants);
+                                  setQuizEditHint(currentQuizItem.imageHint || '');
                                   setIsQuizEditing(!isQuizEditing);
                                 }
                               }}
@@ -1412,11 +1411,11 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                         ) : (
                           <>
                             <div className="text-amber-300 font-bold text-sm">
-                              מילה מנמונית: <span className="text-white text-base font-black">{currentQuizItem.defaultWord || currentQuizItem.userWord}</span>
+                              מילה מנמונית: <span className="text-white text-base font-black">{currentQuizItem.defaultWord}</span>
                             </div>
                             <div className="text-slate-200 bg-slate-900/90 p-3 rounded-xl border border-slate-800 text-xs leading-relaxed">
                               ⚡ <strong className="text-amber-400">סצנה קינטית מוקצנת:</strong>{' '}
-                              {currentQuizItem.imageHint || currentQuizItem.userImageHint || 'התנגשות קינטית עזה שצרובה בהיפוקמפוס.'}
+                              {currentQuizItem.imageHint || 'התנגשות קינטית עזה שצרובה בהיפוקמפוס.'}
                             </div>
                           </>
                         )}

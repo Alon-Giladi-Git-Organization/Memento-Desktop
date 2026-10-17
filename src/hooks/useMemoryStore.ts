@@ -921,11 +921,8 @@ export function useMemoryStore() {
           updatedItem = {
             ...d,
             consonants,
-            userConsonants: consonants,
             defaultWord,
-            userWord: defaultWord,
             imageHint,
-            userImageHint: imageHint,
             updatedAt: now,
           };
           return updatedItem;
@@ -956,8 +953,8 @@ export function useMemoryStore() {
       prev.map((item) => {
         const num = item.number;
         let newConsonants = '';
-        let newWord = item.userWord || item.defaultWord;
-        let newHint = item.userImageHint || item.imageHint;
+        let newWord = item.defaultWord;
+        let newHint = item.imageHint;
         let newNumberStr = item.numberStr;
 
         // Numbers 0 to 9 are single digits (1, 2, 3...) without prepending 0 or consonant 'ס'
@@ -965,15 +962,13 @@ export function useMemoryStore() {
           const singleDigitObj =
             activeDigits.find((d) => d.number === num) ||
             DEFAULT_MAJOR_DIGITS.find((d) => d.number === num);
-          const singleCons = singleDigitObj
-            ? singleDigitObj.userConsonants || singleDigitObj.consonants
-            : '';
+          const singleCons = singleDigitObj ? singleDigitObj.consonants : '';
           newConsonants = singleCons;
           newNumberStr = `${num}`;
           // For single digits, naturally use their direct word & visual hint (סוס, לב, פה, כוס וכו')
           if (singleDigitObj) {
-            newWord = singleDigitObj.userWord || singleDigitObj.defaultWord;
-            newHint = singleDigitObj.userImageHint || singleDigitObj.imageHint;
+            newWord = singleDigitObj.defaultWord;
+            newHint = singleDigitObj.imageHint;
           }
         } else if (num >= 10 && num <= 99) {
           const tens = Math.floor(num / 10);
@@ -988,8 +983,8 @@ export function useMemoryStore() {
           const defaultTensObj = DEFAULT_MAJOR_DIGITS.find((d) => d.number === tens);
           const defaultUnitsObj = DEFAULT_MAJOR_DIGITS.find((d) => d.number === units);
 
-          const tensCons = tensDigit ? tensDigit.userConsonants || tensDigit.consonants : '';
-          const unitsCons = unitsDigit ? unitsDigit.userConsonants || unitsDigit.consonants : '';
+          const tensCons = tensDigit ? tensDigit.consonants : '';
+          const unitsCons = unitsDigit ? unitsDigit.consonants : '';
           newConsonants = tensCons && unitsCons ? `${tensCons} + ${unitsCons}` : tensCons || unitsCons || '';
           newNumberStr = `${num}`;
 
@@ -1019,7 +1014,7 @@ export function useMemoryStore() {
               const digitObj =
                 activeDigits.find((d) => d.number === digit) ||
                 DEFAULT_MAJOR_DIGITS.find((d) => d.number === digit);
-              return digitObj ? digitObj.userConsonants || digitObj.consonants : '';
+              return digitObj ? digitObj.consonants : '';
             })
             .filter(Boolean);
           newConsonants = parts.join(' + ');
@@ -1029,11 +1024,8 @@ export function useMemoryStore() {
           ...item,
           numberStr: newNumberStr,
           consonants: newConsonants,
-          userConsonants: newConsonants,
           defaultWord: newWord,
-          userWord: newWord,
           imageHint: newHint,
-          userImageHint: newHint,
         };
       })
     );
@@ -1043,9 +1035,9 @@ export function useMemoryStore() {
   const updateMajorItem = (
     number: number,
     updates: {
-      userWord?: string;
-      userConsonants?: string;
-      userImageHint?: string;
+      defaultWord?: string;
+      consonants?: string;
+      imageHint?: string;
       customNotes?: string;
       is_ready_for_practice?: boolean;
     }
@@ -1056,15 +1048,12 @@ export function useMemoryStore() {
     const updatedItem: MajorItem = {
       ...(existing || { number, numberStr: numStr, consonants: '', defaultWord: '', imageHint: '' }),
       ...updates,
-      ...(updates.userWord !== undefined ? { defaultWord: updates.userWord, userWord: updates.userWord } : {}),
-      ...(updates.userConsonants !== undefined ? { consonants: updates.userConsonants, userConsonants: updates.userConsonants } : {}),
-      ...(updates.userImageHint !== undefined ? { imageHint: updates.userImageHint, userImageHint: updates.userImageHint } : {}),
       updatedAt: now,
     };
 
     setMajorItems((prev) => prev.map((item) => (item.number === number ? updatedItem : item)));
 
-    if (updates.userWord || updates.userImageHint) {
+    if (updates.defaultWord || updates.imageHint) {
       earnPoints(10, 'התאמת אסוציאציית Major אישית');
     }
 
@@ -1121,10 +1110,10 @@ export function useMemoryStore() {
   const updatePAOItem = (
     number: number,
     updates: {
-      userPerson?: string;
-      userAction?: string;
-      userObject?: string;
-      userScene?: string;
+      person?: string;
+      action?: string;
+      object?: string;
+      scene?: string;
       is_ready_for_practice?: boolean;
     }
   ) => {
@@ -1134,10 +1123,6 @@ export function useMemoryStore() {
     const updatedItem: PAOItem = {
       ...(existing || { number, numberStr: numStr, person: '', action: '', object: '' }),
       ...updates,
-      ...(updates.userPerson !== undefined ? { person: updates.userPerson, userPerson: updates.userPerson } : {}),
-      ...(updates.userAction !== undefined ? { action: updates.userAction, userAction: updates.userAction } : {}),
-      ...(updates.userObject !== undefined ? { object: updates.userObject, userObject: updates.userObject } : {}),
-      ...(updates.userScene !== undefined ? { scene: updates.userScene, userScene: updates.userScene } : {}),
       updatedAt: now,
     };
 
@@ -1149,7 +1134,7 @@ export function useMemoryStore() {
       return [...prev, updatedItem].sort((a, b) => a.number - b.number);
     });
 
-    if (updates.userPerson || updates.userAction || updates.userObject || updates.userScene) {
+    if (updates.person || updates.action || updates.object || updates.scene) {
       earnPoints(15, 'התאמת שלשת PAO אישית');
     }
 
@@ -1194,16 +1179,13 @@ export function useMemoryStore() {
 
   const updateBodyPeg = (
     index: number,
-    updates: { userObject?: string; userBodyPart?: string; userKineticTip?: string }
+    updates: { defaultObject?: string; bodyPartHebrew?: string; kineticTip?: string; is_ready_for_practice?: boolean }
   ) => {
     const now = Date.now();
     const existing = bodyPegs.find((bp) => bp.index === index);
     const updatedItem: BodyPegItem = {
       ...(existing || { index, bodyPartHebrew: '', defaultObject: '', kineticTip: '' }),
       ...updates,
-      ...(updates.userObject !== undefined ? { defaultObject: updates.userObject, userObject: updates.userObject } : {}),
-      ...(updates.userBodyPart !== undefined ? { bodyPartHebrew: updates.userBodyPart, userBodyPart: updates.userBodyPart } : {}),
-      ...(updates.userKineticTip !== undefined ? { kineticTip: updates.userKineticTip, userKineticTip: updates.userKineticTip } : {}),
       updatedAt: now,
     };
 
@@ -1226,16 +1208,13 @@ export function useMemoryStore() {
 
   const updateShapePeg = (
     number: number,
-    updates: { userObject?: string; userShapeName?: string; userKineticTip?: string }
+    updates: { defaultObject?: string; shapeName?: string; kineticTip?: string; is_ready_for_practice?: boolean }
   ) => {
     const now = Date.now();
     const existing = shapePegs.find((sp) => sp.number === number);
     const updatedItem: PegShapeItem = {
       ...(existing || { number, shapeName: '', defaultObject: '', visualMetaphor: '', kineticTip: '' }),
       ...updates,
-      ...(updates.userObject !== undefined ? { defaultObject: updates.userObject, userObject: updates.userObject } : {}),
-      ...(updates.userShapeName !== undefined ? { shapeName: updates.userShapeName, userShapeName: updates.userShapeName } : {}),
-      ...(updates.userKineticTip !== undefined ? { kineticTip: updates.userKineticTip, userKineticTip: updates.userKineticTip } : {}),
       updatedAt: now,
     };
 

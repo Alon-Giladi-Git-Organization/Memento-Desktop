@@ -17,7 +17,7 @@ export default function App() {
   const [currentTab, setCurrentTab] = useState<TabType>('workouts');
   const [selectedWorkoutSubModule, setSelectedWorkoutSubModule] = useState<
     'major' | 'pao' | 'names' | 'pegs' | 'academic' | undefined
-  >('major');
+  >('pao');
   const [activeSummaryTechnique, setActiveSummaryTechnique] = useState<string | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 

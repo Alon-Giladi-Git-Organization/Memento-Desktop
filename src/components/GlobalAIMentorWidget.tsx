@@ -27,8 +27,8 @@ interface GlobalAIMentorWidgetProps {
     contactsCount: number;
     recentPalaces?: Array<{ id: string; name: string; lociCount: number }>;
   };
-  onUpdateMajorItem?: (number: number, updates: { userWord?: string; userImageHint?: string }) => void;
-  onUpdatePAOItem?: (number: number, updates: { userPerson?: string; userAction?: string; userObject?: string }) => void;
+  onUpdateMajorItem?: (number: number, updates: { defaultWord?: string; imageHint?: string }) => void;
+  onUpdatePAOItem?: (number: number, updates: { person?: string; action?: string; object?: string; scene?: string }) => void;
   onAddPalace?: (name: string, description: string, icon: string) => void;
   onAddLocus?: (palaceId: string, locus: { title: string; roomName: string; positionDescription?: string; mnemonicScene?: string }) => void;
   onAddAcademicPoint?: (point: any) => void;
@@ -120,15 +120,16 @@ export const GlobalAIMentorWidget: React.FC<GlobalAIMentorWidgetProps> = ({
         const { type, payload } = data.action;
         if (type === 'UPDATE_MAJOR' && onUpdateMajorItem && payload.number !== undefined) {
           onUpdateMajorItem(payload.number, {
-            userWord: payload.userWord,
-            userImageHint: payload.userImageHint,
+            defaultWord: payload.defaultWord,
+            imageHint: payload.imageHint,
           });
           actionNotice = `⚡ עודכנה בהצלחה מילת Major עבור המספר ${payload.number}!`;
         } else if (type === 'UPDATE_PAO' && onUpdatePAOItem && payload.number !== undefined) {
           onUpdatePAOItem(payload.number, {
-            userPerson: payload.userPerson,
-            userAction: payload.userAction,
-            userObject: payload.userObject,
+            person: payload.person,
+            action: payload.action,
+            object: payload.object,
+            scene: payload.scene,
           });
           actionNotice = `⚡ עודכנה בהצלחה שלשת PAO עבור המספר ${payload.number}!`;
         } else if (type === 'ADD_PALACE' && onAddPalace && payload.name) {

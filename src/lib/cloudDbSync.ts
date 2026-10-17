@@ -85,9 +85,7 @@ export async function seedAllDefaultsToFirestore(): Promise<{ success: boolean; 
         numberStr: item.numberStr,
         consonants: item.consonants,
         defaultWord: item.defaultWord,
-        userWord: item.userWord || null,
         imageHint: item.imageHint,
-        userImageHint: item.userImageHint || null,
         customNotes: item.customNotes || null,
         is_ready_for_practice: item.is_ready_for_practice ?? false,
         updatedAt: now,
@@ -108,9 +106,7 @@ export async function seedAllDefaultsToFirestore(): Promise<{ success: boolean; 
         person: item.person,
         action: item.action,
         object: item.object,
-        userPerson: item.userPerson || null,
-        userAction: item.userAction || null,
-        userObject: item.userObject || null,
+        scene: item.scene || null,
         is_ready_for_practice: item.is_ready_for_practice ?? false,
         updatedAt: now,
       }, { merge: true });
@@ -129,11 +125,8 @@ export async function seedAllDefaultsToFirestore(): Promise<{ success: boolean; 
         id: docId,
         index: b.index,
         bodyPartHebrew: b.bodyPartHebrew,
-        userBodyPart: b.userBodyPart || null,
         defaultObject: b.defaultObject,
-        userObject: b.userObject || null,
         kineticTip: b.kineticTip,
-        userKineticTip: b.userKineticTip || null,
         is_ready_for_practice: b.is_ready_for_practice ?? false,
         updatedAt: now,
       }, { merge: true });
@@ -148,12 +141,9 @@ export async function seedAllDefaultsToFirestore(): Promise<{ success: boolean; 
         id: docId,
         number: s.number,
         shapeName: s.shapeName,
-        userShapeName: s.userShapeName || null,
         visualMetaphor: s.visualMetaphor,
         defaultObject: s.defaultObject,
-        userObject: s.userObject || null,
         kineticTip: s.kineticTip,
-        userKineticTip: s.userKineticTip || null,
         is_ready_for_practice: s.is_ready_for_practice ?? false,
         updatedAt: now,
       }, { merge: true });
@@ -388,11 +378,9 @@ async function syncCollectionBidirectional<T extends { id?: string | number; num
         const localTime = getTimestampMillis(localItem.updatedAt);
 
         // Check for content differences between remote (e.g. edited in Rowy) and local
-        const remoteUserWord = remoteItem.userWord !== undefined ? remoteItem.userWord : null;
-        const localUserWord = (localItem as any).userWord !== undefined ? (localItem as any).userWord : null;
         const remoteDefaultWord = remoteItem.defaultWord !== undefined ? remoteItem.defaultWord : null;
         const localDefaultWord = (localItem as any).defaultWord !== undefined ? (localItem as any).defaultWord : null;
-        const contentChangedInRowy = remoteUserWord !== localUserWord || remoteDefaultWord !== localDefaultWord;
+        const contentChangedInRowy = remoteDefaultWord !== localDefaultWord;
 
         if (remoteTime > localTime || (remoteTime === 0 && contentChangedInRowy) || (remoteTime === localTime && contentChangedInRowy)) {
           // Remote is newer or edited in Rowy: take remote
@@ -651,40 +639,17 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks): () => 
           const num = typeof data.number === 'number' ? data.number : parseInt(String(data.numberStr || d.id), 10);
           const numStr = String(data.numberStr ?? (num < 10 ? `0${num}` : String(num))).padStart(2, '0');
 
-          // Harmonize word between Rowy columns (defaultWord & userWord)
-          let word = '';
-          if (data.defaultWord && data.defaultWord !== 'null') word = data.defaultWord;
-          if (data.userWord && data.userWord !== 'null' && data.userWord !== data.defaultWord) {
-            word = data.userWord;
-          }
-          if (!word) word = (data.defaultWord !== 'null' ? data.defaultWord : '') || (data.userWord !== 'null' ? data.userWord : '') || '';
-
-          // Harmonize hint
-          let hint = '';
-          if (data.imageHint && data.imageHint !== 'null') hint = data.imageHint;
-          if (data.userImageHint && data.userImageHint !== 'null' && data.userImageHint !== data.imageHint) {
-            hint = data.userImageHint;
-          }
-          if (!hint) hint = (data.imageHint !== 'null' ? data.imageHint : '') || (data.userImageHint !== 'null' ? data.userImageHint : '') || '';
-
-          // Harmonize consonants
-          let cons = '';
-          if (data.consonants && data.consonants !== 'null') cons = data.consonants;
-          if (data.userConsonants && data.userConsonants !== 'null' && data.userConsonants !== data.consonants) {
-            cons = data.userConsonants;
-          }
-          if (!cons) cons = (data.consonants !== 'null' ? data.consonants : '') || (data.userConsonants !== 'null' ? data.userConsonants : '') || '';
+          let word = (data.defaultWord && data.defaultWord !== 'null') ? data.defaultWord : '';
+          let hint = (data.imageHint && data.imageHint !== 'null') ? data.imageHint : '';
+          let cons = (data.consonants && data.consonants !== 'null') ? data.consonants : '';
 
           items.push({
             id: d.id,
             number: isNaN(num) ? 0 : num,
             numberStr: numStr,
             consonants: cons,
-            userConsonants: cons,
             defaultWord: word,
-            userWord: word,
             imageHint: hint,
-            userImageHint: hint,
             customNotes: data.customNotes && data.customNotes !== 'null' ? data.customNotes : undefined,
             is_ready_for_practice: Boolean(data.is_ready_for_practice),
             updatedAt: Math.max(
@@ -714,25 +679,10 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks): () => 
           const num = typeof data.number === 'number' ? data.number : parseInt(String(data.numberStr || d.id), 10);
           const numStr = String(data.numberStr ?? (num < 10 ? `0${num}` : String(num))).padStart(2, '0');
 
-          let person = (data.person !== 'null' ? data.person : '') || (data.userPerson !== 'null' ? data.userPerson : '') || '';
-          if (data.userPerson && data.userPerson !== 'null' && data.userPerson !== data.person) {
-            person = data.userPerson;
-          }
-
-          let action = (data.action !== 'null' ? data.action : '') || (data.userAction !== 'null' ? data.userAction : '') || '';
-          if (data.userAction && data.userAction !== 'null' && data.userAction !== data.action) {
-            action = data.userAction;
-          }
-
-          let object = (data.object !== 'null' ? data.object : '') || (data.userObject !== 'null' ? data.userObject : '') || '';
-          if (data.userObject && data.userObject !== 'null' && data.userObject !== data.object) {
-            object = data.userObject;
-          }
-
-          let scene = (data.scene !== 'null' ? data.scene : '') || (data.userScene !== 'null' ? data.userScene : '') || '';
-          if (data.userScene && data.userScene !== 'null' && data.userScene !== data.scene) {
-            scene = data.userScene;
-          }
+          let person = (data.person && data.person !== 'null') ? data.person : '';
+          let action = (data.action && data.action !== 'null') ? data.action : '';
+          let object = (data.object && data.object !== 'null') ? data.object : '';
+          let scene = (data.scene && data.scene !== 'null') ? data.scene : '';
 
           items.push({
             id: d.id,
@@ -742,10 +692,6 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks): () => 
             action,
             object,
             scene,
-            userPerson: person,
-            userAction: action,
-            userObject: object,
-            userScene: scene,
             is_ready_for_practice: Boolean(data.is_ready_for_practice),
             updatedAt: Math.max(
               getTimestampMillis(data.updatedAt),
@@ -772,19 +718,16 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks): () => 
         snap.forEach((d) => {
           const data = d.data();
           const idx = typeof data.index === 'number' ? data.index : parseInt(d.id, 10);
-          const bodyPart = (data.bodyPartHebrew !== 'null' ? data.bodyPartHebrew : '') || (data.userBodyPart !== 'null' ? data.userBodyPart : '') || '';
-          const defaultObj = (data.defaultObject !== 'null' ? data.defaultObject : '') || (data.userObject !== 'null' ? data.userObject : '') || '';
-          const tip = (data.kineticTip !== 'null' ? data.kineticTip : '') || (data.userKineticTip !== 'null' ? data.userKineticTip : '') || '';
+          const bodyPart = (data.bodyPartHebrew && data.bodyPartHebrew !== 'null') ? data.bodyPartHebrew : '';
+          const defaultObj = (data.defaultObject && data.defaultObject !== 'null') ? data.defaultObject : '';
+          const tip = (data.kineticTip && data.kineticTip !== 'null') ? data.kineticTip : '';
 
           items.push({
             id: d.id,
             index: isNaN(idx) ? 1 : idx,
             bodyPartHebrew: bodyPart,
-            userBodyPart: bodyPart,
             defaultObject: defaultObj,
-            userObject: defaultObj,
             kineticTip: tip,
-            userKineticTip: tip,
             is_ready_for_practice: Boolean(data.is_ready_for_practice),
             updatedAt: Math.max(
               getTimestampMillis(data.updatedAt),
@@ -810,20 +753,17 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks): () => 
         snap.forEach((d) => {
           const data = d.data();
           const num = typeof data.number === 'number' ? data.number : parseInt(d.id, 10);
-          const shapeName = (data.shapeName !== 'null' ? data.shapeName : '') || (data.userShapeName !== 'null' ? data.userShapeName : '') || '';
-          const defaultObj = (data.defaultObject !== 'null' ? data.defaultObject : '') || (data.userObject !== 'null' ? data.userObject : '') || '';
-          const tip = (data.kineticTip !== 'null' ? data.kineticTip : '') || (data.userKineticTip !== 'null' ? data.userKineticTip : '') || '';
+          const shapeName = (data.shapeName && data.shapeName !== 'null') ? data.shapeName : '';
+          const defaultObj = (data.defaultObject && data.defaultObject !== 'null') ? data.defaultObject : '';
+          const tip = (data.kineticTip && data.kineticTip !== 'null') ? data.kineticTip : '';
 
           items.push({
             id: d.id,
             number: isNaN(num) ? 0 : num,
             shapeName,
-            userShapeName: shapeName,
             visualMetaphor: data.visualMetaphor || '',
             defaultObject: defaultObj,
-            userObject: defaultObj,
             kineticTip: tip,
-            userKineticTip: tip,
             is_ready_for_practice: Boolean(data.is_ready_for_practice),
             updatedAt: Math.max(
               getTimestampMillis(data.updatedAt),
@@ -917,7 +857,6 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks): () => 
             morphologicalAnchor: data.morphologicalAnchor || '',
             substituteWord: data.substituteWord || '',
             mnemonicScene: data.mnemonicScene || '',
-            userCustomScene: data.userCustomScene || undefined,
             is_ready_for_practice: data.is_ready_for_practice ?? false,
             updatedAt: Math.max(
               getTimestampMillis(data.updatedAt),

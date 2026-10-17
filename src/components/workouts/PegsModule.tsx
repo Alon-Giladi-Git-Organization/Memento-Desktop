@@ -12,10 +12,12 @@ import {
   XCircle,
   RotateCcw,
   BookOpen,
+  Search,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { PegShapeItem, BodyPegItem } from '../../types/memory';
 import { AIFieldGeneratorButton } from '../AIFieldGeneratorButton';
+import { isHebrewFuzzyMatch, isHebrewMultiFieldSearchMatch } from '../../lib/fuzzyMatch';
 
 interface PegsModuleProps {
   shapePegs: PegShapeItem[];
@@ -25,7 +27,7 @@ interface PegsModuleProps {
   onAddShapePeg?: (item: PegShapeItem) => void;
   onUpdateShapePeg: (
     number: number,
-    updates: { userObject?: string; userShapeName?: string; userKineticTip?: string; is_ready_for_practice?: boolean }
+    updates: { defaultObject?: string; shapeName?: string; kineticTip?: string; is_ready_for_practice?: boolean }
   ) => void;
   onDeleteShapePeg?: (number: number) => void;
   onResetShapePeg: (number: number) => void;
@@ -34,7 +36,7 @@ interface PegsModuleProps {
   onAddBodyPeg?: (item: BodyPegItem) => void;
   onUpdateBodyPeg: (
     index: number,
-    updates: { userObject?: string; userBodyPart?: string; userKineticTip?: string; is_ready_for_practice?: boolean }
+    updates: { defaultObject?: string; bodyPartHebrew?: string; kineticTip?: string; is_ready_for_practice?: boolean }
   ) => void;
   onDeleteBodyPeg?: (index: number) => void;
   onResetBodyPeg: (index: number) => void;
@@ -77,15 +79,35 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
   const [newShapeObj, setNewShapeObj] = useState('');
   const [newShapeTip, setNewShapeTip] = useState('');
 
-  // Filter states
+  // Filter & Search states
+  const [search, setSearch] = useState('');
   const [onlyReadyShapeFilter, setOnlyReadyShapeFilter] = useState(false);
   const [onlyReadyBodyFilter, setOnlyReadyBodyFilter] = useState(false);
 
   const readyShapePegs = shapePegs.filter((p) => p.is_ready_for_practice !== false);
-  const filteredShapePegs = onlyReadyShapeFilter ? readyShapePegs : shapePegs;
+  const filteredShapePegs = shapePegs.filter((p) => {
+    if (onlyReadyShapeFilter && p.is_ready_for_practice === false) return false;
+    return isHebrewMultiFieldSearchMatch(
+      search,
+      p.number,
+      p.shapeName,
+      p.defaultObject,
+      p.visualMetaphor,
+      p.kineticTip
+    );
+  });
 
   const readyBodyPegs = bodyPegs.filter((b) => b.is_ready_for_practice !== false);
-  const filteredBodyPegs = onlyReadyBodyFilter ? readyBodyPegs : bodyPegs;
+  const filteredBodyPegs = bodyPegs.filter((b) => {
+    if (onlyReadyBodyFilter && b.is_ready_for_practice === false) return false;
+    return isHebrewMultiFieldSearchMatch(
+      search,
+      b.index,
+      b.bodyPartHebrew,
+      b.defaultObject,
+      b.kineticTip
+    );
+  });
 
   const [showAddBodyForm, setShowAddBodyForm] = useState(false);
   const [newBodyIndex, setNewBodyIndex] = useState('');
@@ -110,17 +132,20 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
   };
 
   const handleCheckQuiz = () => {
-    const guess = quizGuess.trim().toLowerCase();
+    const guess = quizGuess.trim();
     if (!guess) return;
 
     if (quizTarget === 'shape') {
       const current = shapePegs[quizIndex];
       if (!current) return;
-      const targetUser = (current.userObject || '').trim().toLowerCase();
-      const targetDef = (current.defaultObject || '').trim().toLowerCase();
-      const isExact = (targetUser && guess === targetUser) || (targetDef && guess === targetDef);
+      const targetObj = (current.defaultObject || '').trim();
+      const targetShape = (current.shapeName || '').trim();
+      const isMatch =
+        isHebrewFuzzyMatch(guess, targetObj) ||
+        isHebrewFuzzyMatch(guess, targetShape) ||
+        guess === current.number.toString();
 
-      if (isExact) {
+      if (isMatch) {
         setQuizFeedback('correct');
         onEarnPoints(15, 'מענה נכון במבחן מתלי צורה');
         confetti({ particleCount: 35, spread: 60, origin: { y: 0.6 } });
@@ -130,11 +155,14 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
     } else {
       const current = bodyPegs[quizIndex];
       if (!current) return;
-      const targetUser = (current.userObject || '').trim().toLowerCase();
-      const targetDef = (current.defaultObject || '').trim().toLowerCase();
-      const isExact = (targetUser && guess === targetUser) || (targetDef && guess === targetDef);
+      const targetObj = (current.defaultObject || '').trim();
+      const targetBody = (current.bodyPartHebrew || '').trim();
+      const isMatch =
+        isHebrewFuzzyMatch(guess, targetObj) ||
+        isHebrewFuzzyMatch(guess, targetBody) ||
+        guess === current.index.toString();
 
-      if (isExact) {
+      if (isMatch) {
         setQuizFeedback('correct');
         onEarnPoints(15, 'מענה נכון במבחן מתלי גוף');
         confetti({ particleCount: 35, spread: 60, origin: { y: 0.6 } });
@@ -152,12 +180,10 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
       onAddShapePeg({
         number: num,
         shapeName: newShapeName.trim(),
-        userShapeName: newShapeName.trim(),
         defaultObject: newShapeObj.trim(),
-        userObject: newShapeObj.trim(),
         visualMetaphor: `דמיון חזותי לספרה ${num}`,
         kineticTip: newShapeTip.trim() || 'הדבקה מנטלית חזקה',
-        userKineticTip: newShapeTip.trim() || 'הדבקה מנטלית חזקה',
+        is_ready_for_practice: true,
       });
     }
     setNewShapeNum('');
@@ -175,11 +201,9 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
       onAddBodyPeg({
         index: idx,
         bodyPartHebrew: newBodyPart.trim(),
-        userBodyPart: newBodyPart.trim(),
         defaultObject: newBodyObj.trim(),
-        userObject: newBodyObj.trim(),
         kineticTip: newBodyTip.trim() || 'תחושה פיזית חזקה באיבר',
-        userKineticTip: newBodyTip.trim() || 'תחושה פיזית חזקה באיבר',
+        is_ready_for_practice: true,
       });
     }
     setNewBodyIndex('');
@@ -255,6 +279,17 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
             <div className="flex items-center gap-2 flex-wrap">
+              <div className="relative w-full sm:w-56">
+                <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-500" />
+                <input
+                  type="text"
+                  placeholder="חיפוש צורה, חפץ או טיפ..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-yellow-500"
+                />
+              </div>
+
               <button
                 type="button"
                 onClick={() => setOnlyReadyShapeFilter(!onlyReadyShapeFilter)}
@@ -398,8 +433,6 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             {filteredShapePegs.map((peg) => {
               const isEditing = editingPegKey === peg.number;
-              const activeObj = peg.userObject || peg.defaultObject;
-              const isCustom = !!peg.userObject;
               const isReady = peg.is_ready_for_practice !== false;
 
               return (
@@ -413,27 +446,15 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                         {peg.number}
                       </span>
                       <div className="flex items-center gap-1">
-                        {isCustom && (
-                          <button
-                            onClick={() => {
-                              onResetShapePeg(peg.number);
-                              if (isEditing) setEditingPegKey(null);
-                            }}
-                            title="אפס לברירת מחדל"
-                            className="p-1 text-slate-500 hover:text-rose-400 cursor-pointer"
-                          >
-                            <Undo2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
                         <button
                           onClick={() => {
                             if (isEditing) {
                               setEditingPegKey(null);
                             } else {
                               setEditingPegKey(peg.number);
-                              setEditObject(activeObj);
-                              setEditTitle(peg.userShapeName || peg.shapeName);
-                              setEditTip(peg.userKineticTip || peg.kineticTip);
+                              setEditObject(peg.defaultObject);
+                              setEditTitle(peg.shapeName);
+                              setEditTip(peg.kineticTip);
                             }
                           }}
                           className="p-1 text-slate-400 hover:text-yellow-400 cursor-pointer"
@@ -474,9 +495,9 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                               if (e.key === 'Enter') {
                                 e.preventDefault();
                                 onUpdateShapePeg(peg.number, {
-                                  userShapeName: editTitle.trim(),
-                                  userObject: editObject.trim(),
-                                  userKineticTip: editTip.trim(),
+                                  shapeName: editTitle.trim(),
+                                  defaultObject: editObject.trim(),
+                                  kineticTip: editTip.trim(),
                                 });
                                 setEditingPegKey(null);
                               }
@@ -506,9 +527,9 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                               if (e.key === 'Enter') {
                                 e.preventDefault();
                                 onUpdateShapePeg(peg.number, {
-                                  userShapeName: editTitle.trim(),
-                                  userObject: editObject.trim(),
-                                  userKineticTip: editTip.trim(),
+                                  shapeName: editTitle.trim(),
+                                  defaultObject: editObject.trim(),
+                                  kineticTip: editTip.trim(),
                                 });
                                 setEditingPegKey(null);
                               }
@@ -537,9 +558,9 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                               if (e.key === 'Enter') {
                                 e.preventDefault();
                                 onUpdateShapePeg(peg.number, {
-                                  userShapeName: editTitle.trim(),
-                                  userObject: editObject.trim(),
-                                  userKineticTip: editTip.trim(),
+                                  shapeName: editTitle.trim(),
+                                  defaultObject: editObject.trim(),
+                                  kineticTip: editTip.trim(),
                                 });
                                 setEditingPegKey(null);
                               }
@@ -561,9 +582,9 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                             <button
                               onClick={() => {
                                 onUpdateShapePeg(peg.number, {
-                                  userShapeName: editTitle.trim(),
-                                  userObject: editObject.trim(),
-                                  userKineticTip: editTip.trim(),
+                                  shapeName: editTitle.trim(),
+                                  defaultObject: editObject.trim(),
+                                  kineticTip: editTip.trim(),
                                 });
                                 setEditingPegKey(null);
                               }}
@@ -576,11 +597,11 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                       </div>
                     ) : (
                       <>
-                        <div className="text-xs font-bold text-yellow-400/90">{peg.userShapeName || peg.shapeName}</div>
-                        <div className="font-extrabold text-white text-base">{activeObj}</div>
+                        <div className="text-xs font-bold text-yellow-400/90">{peg.shapeName}</div>
+                        <div className="font-extrabold text-white text-base">{peg.defaultObject}</div>
                         <p className="text-xs text-slate-300">{peg.visualMetaphor}</p>
                         <p className="text-xs text-yellow-300/90 bg-yellow-950/30 border border-yellow-500/20 p-2.5 rounded-xl">
-                          💡 {peg.userKineticTip || peg.kineticTip}
+                          💡 {peg.kineticTip}
                         </p>
                       </>
                     )}
@@ -624,6 +645,17 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
             <div className="flex items-center gap-2 flex-wrap">
+              <div className="relative w-full sm:w-56">
+                <Search className="w-4 h-4 absolute right-3 top-2.5 text-slate-500" />
+                <input
+                  type="text"
+                  placeholder="חיפוש איבר גוף, חפץ או טיפ..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl pr-9 pl-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-yellow-500"
+                />
+              </div>
+
               <button
                 type="button"
                 onClick={() => setOnlyReadyBodyFilter(!onlyReadyBodyFilter)}
@@ -769,8 +801,6 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             {filteredBodyPegs.map((bp) => {
               const isEditing = editingPegKey === bp.index;
-              const activeObj = bp.userObject || bp.defaultObject;
-              const isCustom = !!bp.userObject;
               const isReady = bp.is_ready_for_practice !== false;
 
               return (
@@ -784,27 +814,15 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                         #{bp.index}
                       </span>
                       <div className="flex items-center gap-1">
-                        {isCustom && (
-                          <button
-                            onClick={() => {
-                              onResetBodyPeg(bp.index);
-                              if (isEditing) setEditingPegKey(null);
-                            }}
-                            title="אפס לברירת מחדל"
-                            className="p-1 text-slate-500 hover:text-rose-400 cursor-pointer"
-                          >
-                            <Undo2 className="w-3.5 h-3.5" />
-                          </button>
-                        )}
                         <button
                           onClick={() => {
                             if (isEditing) {
                               setEditingPegKey(null);
                             } else {
                               setEditingPegKey(bp.index);
-                              setEditTitle(bp.userBodyPart || bp.bodyPartHebrew);
-                              setEditObject(activeObj);
-                              setEditTip(bp.userKineticTip || bp.kineticTip);
+                              setEditTitle(bp.bodyPartHebrew);
+                              setEditObject(bp.defaultObject);
+                              setEditTip(bp.kineticTip);
                             }
                           }}
                           className="p-1 text-slate-400 hover:text-yellow-400 cursor-pointer"
@@ -845,9 +863,9 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                               if (e.key === 'Enter') {
                                 e.preventDefault();
                                 onUpdateBodyPeg(bp.index, {
-                                  userBodyPart: editTitle.trim(),
-                                  userObject: editObject.trim(),
-                                  userKineticTip: editTip.trim(),
+                                  bodyPartHebrew: editTitle.trim(),
+                                  defaultObject: editObject.trim(),
+                                  kineticTip: editTip.trim(),
                                 });
                                 setEditingPegKey(null);
                               }
@@ -877,9 +895,9 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                               if (e.key === 'Enter') {
                                 e.preventDefault();
                                 onUpdateBodyPeg(bp.index, {
-                                  userBodyPart: editTitle.trim(),
-                                  userObject: editObject.trim(),
-                                  userKineticTip: editTip.trim(),
+                                  bodyPartHebrew: editTitle.trim(),
+                                  defaultObject: editObject.trim(),
+                                  kineticTip: editTip.trim(),
                                 });
                                 setEditingPegKey(null);
                               }
@@ -908,9 +926,9 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                               if (e.key === 'Enter') {
                                 e.preventDefault();
                                 onUpdateBodyPeg(bp.index, {
-                                  userBodyPart: editTitle.trim(),
-                                  userObject: editObject.trim(),
-                                  userKineticTip: editTip.trim(),
+                                  bodyPartHebrew: editTitle.trim(),
+                                  defaultObject: editObject.trim(),
+                                  kineticTip: editTip.trim(),
                                 });
                                 setEditingPegKey(null);
                               }
@@ -932,9 +950,9 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                             <button
                               onClick={() => {
                                 onUpdateBodyPeg(bp.index, {
-                                  userBodyPart: editTitle.trim(),
-                                  userObject: editObject.trim(),
-                                  userKineticTip: editTip.trim(),
+                                  bodyPartHebrew: editTitle.trim(),
+                                  defaultObject: editObject.trim(),
+                                  kineticTip: editTip.trim(),
                                 });
                                 setEditingPegKey(null);
                               }}
@@ -947,10 +965,10 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                       </div>
                     ) : (
                       <>
-                        <div className="text-xs font-bold text-yellow-400/90">{bp.userBodyPart || bp.bodyPartHebrew}</div>
-                        <div className="font-extrabold text-white text-base">{activeObj}</div>
+                        <div className="text-xs font-bold text-yellow-400/90">{bp.bodyPartHebrew}</div>
+                        <div className="font-extrabold text-white text-base">{bp.defaultObject}</div>
                         <p className="text-xs text-yellow-300/90 bg-yellow-950/30 border border-yellow-500/20 p-2.5 rounded-xl">
-                          💡 {bp.userKineticTip || bp.kineticTip}
+                          💡 {bp.kineticTip}
                         </p>
                       </>
                     )}
@@ -1046,7 +1064,7 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                     {shapePegs[quizIndex]?.number}
                   </div>
                   <div className="text-xs text-slate-400">
-                    צורה: {shapePegs[quizIndex]?.userShapeName || shapePegs[quizIndex]?.shapeName}
+                    צורה: {shapePegs[quizIndex]?.shapeName}
                   </div>
                 </>
               ) : (
@@ -1055,7 +1073,7 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                     מה החפץ התלוי בתחנת הגוף:
                   </span>
                   <div className="text-4xl font-black text-white">
-                    #{bodyPegs[quizIndex]?.index} - {bodyPegs[quizIndex]?.userBodyPart || bodyPegs[quizIndex]?.bodyPartHebrew}
+                    #{bodyPegs[quizIndex]?.index} - {bodyPegs[quizIndex]?.bodyPartHebrew}
                   </div>
                 </>
               )}
@@ -1123,23 +1141,23 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                     </span>
                     <span className="text-[11px] font-mono text-slate-400">
                       {quizTarget === 'shape'
-                        ? `ספרה ${shapePegs[quizIndex]?.number} (${shapePegs[quizIndex]?.userShapeName || shapePegs[quizIndex]?.shapeName})`
-                        : `תחנת גוף #${bodyPegs[quizIndex]?.index} (${bodyPegs[quizIndex]?.userBodyPart || bodyPegs[quizIndex]?.bodyPartHebrew})`}
+                        ? `ספרה ${shapePegs[quizIndex]?.number} (${shapePegs[quizIndex]?.shapeName})`
+                        : `תחנת גוף #${bodyPegs[quizIndex]?.index} (${bodyPegs[quizIndex]?.bodyPartHebrew})`}
                     </span>
                   </div>
                   <div className="text-yellow-300 font-bold text-sm">
                     חפץ תלוי:{' '}
                     <span className="text-white text-base font-black">
                       {quizTarget === 'shape'
-                        ? shapePegs[quizIndex]?.userObject || shapePegs[quizIndex]?.defaultObject
-                        : bodyPegs[quizIndex]?.userObject || bodyPegs[quizIndex]?.defaultObject}
+                        ? shapePegs[quizIndex]?.defaultObject
+                        : bodyPegs[quizIndex]?.defaultObject}
                     </span>
                   </div>
                   <div className="text-slate-200 bg-slate-900/90 p-3 rounded-xl border border-slate-800 text-xs leading-relaxed">
                     💡 <strong className="text-yellow-400">טיפ קינטי:</strong>{' '}
                     {quizTarget === 'shape'
-                      ? shapePegs[quizIndex]?.userKineticTip || shapePegs[quizIndex]?.kineticTip
-                      : bodyPegs[quizIndex]?.userKineticTip || bodyPegs[quizIndex]?.kineticTip}
+                      ? shapePegs[quizIndex]?.kineticTip
+                      : bodyPegs[quizIndex]?.kineticTip}
                   </div>
                   {quizFeedback === 'correct' && (
                     <div className="flex justify-center pt-1">

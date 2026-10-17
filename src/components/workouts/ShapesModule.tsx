@@ -15,6 +15,7 @@ import {
 import confetti from 'canvas-confetti';
 import { AbstractShapeCard } from '../../types/memory';
 import { AIFieldGeneratorButton } from '../AIFieldGeneratorButton';
+import { isHebrewFuzzyMatch, isHebrewMultiFieldSearchMatch } from '../../lib/fuzzyMatch';
 
 interface ShapesModuleProps {
   abstractShapes: AbstractShapeCard[];
@@ -97,15 +98,15 @@ export const ShapesModule: React.FC<ShapesModuleProps> = ({
   const handleCheckQuiz = () => {
     const current = abstractShapes[quizIndex];
     if (!current) return;
-    const target = current.mnemonicCode.trim().toLowerCase();
-    const hint = current.pareidoliaHint.trim().toLowerCase();
-    const title = current.title.trim().toLowerCase();
-    const guess = quizGuess.trim().toLowerCase();
+    const guess = quizGuess.trim();
     if (!guess) return;
 
-    const isExact = guess === target || guess === hint || guess === title;
+    const isMatch =
+      isHebrewFuzzyMatch(guess, current.mnemonicCode) ||
+      isHebrewFuzzyMatch(guess, current.pareidoliaHint) ||
+      isHebrewFuzzyMatch(guess, current.title);
 
-    if (isExact) {
+    if (isMatch) {
       setQuizFeedback('correct');
       onEarnPoints(20, 'זיהוי קוד צורה ומרקם במבחן');
       confetti({ particleCount: 35, spread: 60, origin: { y: 0.6 } });
@@ -159,11 +160,15 @@ export const ShapesModule: React.FC<ShapesModuleProps> = ({
     );
   };
 
-  const filtered = abstractShapes.filter(
-    (s) =>
-      s.title.toLowerCase().includes(search.toLowerCase()) ||
-      s.pareidoliaHint.toLowerCase().includes(search.toLowerCase()) ||
-      s.mnemonicCode.toLowerCase().includes(search.toLowerCase())
+  const filtered = abstractShapes.filter((s) =>
+    isHebrewMultiFieldSearchMatch(
+      search,
+      s.title,
+      s.pareidoliaHint,
+      s.mnemonicCode,
+      s.svgShapeType,
+      s.textureType
+    )
   );
 
   return (

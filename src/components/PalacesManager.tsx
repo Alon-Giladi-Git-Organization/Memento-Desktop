@@ -27,6 +27,7 @@ import {
 import confetti from 'canvas-confetti';
 import { MemoryPalace, PalaceLocus } from '../types/memory';
 import { AIFieldGeneratorButton } from './AIFieldGeneratorButton';
+import { isHebrewFuzzyMatch, isHebrewSearchMatch } from '../lib/fuzzyMatch';
 
 interface PalacesManagerProps {
   palaces: MemoryPalace[];
@@ -793,17 +794,19 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
                         <div className="mt-6 pt-6 border-t border-slate-800 space-y-4 animate-fadeIn text-right">
                           {/* Answer Evaluation Feedback Badge */}
                           {(() => {
-                            const guess = userRecallGuess.trim().toLowerCase();
-                            const targetContent = (locus.storedContent || '').trim().toLowerCase();
-                            const targetScene = (locus.mnemonicScene || '').trim().toLowerCase();
-                            const targetTitle = (locus.title || '').trim().toLowerCase();
+                            const guess = userRecallGuess.trim();
+                            const storedContent = locus.storedContent || '';
+                            const mnemonicScene = locus.mnemonicScene || '';
+                            const title = locus.title || '';
 
                             const isCorrectMatch =
                               guess.length > 0 &&
-                              (targetContent.includes(guess) ||
-                                guess.includes(targetContent) ||
-                                targetScene.includes(guess) ||
-                                targetTitle.includes(guess));
+                              (isHebrewFuzzyMatch(guess, storedContent) ||
+                                isHebrewFuzzyMatch(guess, mnemonicScene) ||
+                                isHebrewFuzzyMatch(guess, title) ||
+                                isHebrewSearchMatch(guess, storedContent) ||
+                                isHebrewSearchMatch(guess, mnemonicScene) ||
+                                isHebrewSearchMatch(guess, title));
 
                             return (
                               <div

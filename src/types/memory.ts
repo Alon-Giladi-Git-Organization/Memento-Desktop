@@ -3,11 +3,8 @@ export interface MajorItem {
   number: number; // 0 - 99 or 0 - 9
   numberStr: string; // "00" - "99" or "0" - "9"
   consonants: string; // e.g. "ס/ז + מ"
-  userConsonants?: string; // personal consonants override
   defaultWord: string; // e.g. "סם"
-  userWord?: string; // personal override
   imageHint: string; // e.g. "בקבוק רעל זוהר"
-  userImageHint?: string; // personal kinetic hint override
   customNotes?: string;
   is_ready_for_practice?: boolean; // Flag: ready for testing & practice
   updatedAt?: number;
@@ -21,10 +18,6 @@ export interface PAOItem {
   action: string; // Kinetic action
   object: string; // Passive distinctive object
   scene?: string; // 4th field: "סצנה שלמה" (complete mnemonic scene)
-  userPerson?: string;
-  userAction?: string;
-  userObject?: string;
-  userScene?: string;
   is_ready_for_practice?: boolean; // Flag: ready for testing & practice
   updatedAt?: number;
 }
@@ -33,12 +26,9 @@ export interface PegShapeItem {
   id?: string;
   number: number;
   shapeName: string;
-  userShapeName?: string;
   visualMetaphor: string;
   defaultObject: string;
-  userObject?: string;
   kineticTip: string;
-  userKineticTip?: string;
   is_ready_for_practice?: boolean;
   updatedAt?: number;
 }
@@ -47,11 +37,8 @@ export interface BodyPegItem {
   id?: string;
   index: number; // 1 - 10 or 1-20
   bodyPartHebrew: string;
-  userBodyPart?: string;
   defaultObject: string;
-  userObject?: string;
   kineticTip: string;
-  userKineticTip?: string;
   is_ready_for_practice?: boolean;
   updatedAt?: number;
 }
@@ -90,7 +77,6 @@ export interface PersonFaceCard {
   morphologicalAnchor: string; // e.g. "אף נשרי חד", "גבות עבות מחוברות", "סנטר כפול", "קמטי צחוק בולטים"
   substituteWord: string; // e.g. "רונית -> מונית", "חיים -> לחם חי"
   mnemonicScene: string; // e.g. "מונית צהובה דוהרת ומתנגשת ישירות באף הנשרי שלה"
-  userCustomScene?: string;
   is_ready_for_practice?: boolean; // Flag: ready for face recognition quiz
   updatedAt?: number;
 }

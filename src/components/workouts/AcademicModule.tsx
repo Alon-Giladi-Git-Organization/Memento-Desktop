@@ -16,6 +16,7 @@ import {
 import confetti from 'canvas-confetti';
 import { AcademicKeyPoint } from '../../types/memory';
 import { AIFieldGeneratorButton } from '../AIFieldGeneratorButton';
+import { isHebrewFuzzyMatch, isHebrewMultiFieldSearchMatch } from '../../lib/fuzzyMatch';
 
 interface AcademicModuleProps {
   academicPoints: AcademicKeyPoint[];
@@ -106,18 +107,16 @@ export const AcademicModule: React.FC<AcademicModuleProps> = ({
   const handleCheckQuiz = () => {
     const current = academicPoints[quizIndex];
     if (!current) return;
-    const targetAnchor = current.visualAnchor.trim().toLowerCase();
-    const targetWord = current.keyWord.trim().toLowerCase();
-    const targetTitle = current.conceptTitle.trim().toLowerCase();
-    const guess = quizGuess.trim().toLowerCase();
+    const guess = quizGuess.trim();
     if (!guess) return;
 
-    const isExact =
-      guess === targetAnchor ||
-      guess === targetWord ||
-      guess === targetTitle;
+    const isFuzzy =
+      isHebrewFuzzyMatch(guess, current.visualAnchor) ||
+      isHebrewFuzzyMatch(guess, current.keyWord) ||
+      isHebrewFuzzyMatch(guess, current.conceptTitle) ||
+      (current.mnemonicScene ? isHebrewFuzzyMatch(guess, current.mnemonicScene) : false);
 
-    if (isExact) {
+    if (isFuzzy) {
       setQuizFeedback('correct');
       onEarnPoints(25, 'שליפה מוצלחת של מושג אקדמי');
       onUnlockBadge('פרופסור מנמוני');
@@ -128,11 +127,16 @@ export const AcademicModule: React.FC<AcademicModuleProps> = ({
   };
 
   const filtered = academicPoints.filter((ap) => {
-    const matchesSearch =
-      ap.conceptTitle.toLowerCase().includes(search.toLowerCase()) ||
-      ap.sourceSummary.toLowerCase().includes(search.toLowerCase()) ||
-      ap.visualAnchor.toLowerCase().includes(search.toLowerCase()) ||
-      ap.discipline.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = isHebrewMultiFieldSearchMatch(
+      search,
+      ap.conceptTitle,
+      ap.sourceSummary,
+      ap.visualAnchor,
+      ap.keyWord,
+      ap.discipline,
+      ap.palaceLocusInfo,
+      ap.mnemonicScene
+    );
 
     const matchesDiscipline =
       disciplineFilter === 'all' || ap.discipline === disciplineFilter;

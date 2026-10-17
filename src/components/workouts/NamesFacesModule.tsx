@@ -20,6 +20,7 @@ import {
 import confetti from 'canvas-confetti';
 import { PersonFaceCard } from '../../types/memory';
 import { AIFieldGeneratorButton } from '../AIFieldGeneratorButton';
+import { isHebrewFuzzyMatch, isHebrewMultiFieldSearchMatch } from '../../lib/fuzzyMatch';
 
 interface NamesFacesModuleProps {
   peopleCards: PersonFaceCard[];
@@ -130,17 +131,17 @@ export const NamesFacesModule: React.FC<NamesFacesModuleProps> = ({
 
   const handleCheckQuiz = () => {
     if (!currentQuizPerson) return;
-    const target = currentQuizPerson.name.trim().toLowerCase();
-    const guess = quizGuessName.trim().toLowerCase();
+    const target = currentQuizPerson.name.trim();
+    const guess = quizGuessName.trim();
     if (!guess) return;
 
-    // Strict exact match on full name or single first/last name if multi-part
     const targetParts = target.split(/\s+/).filter(Boolean);
-    const isExact =
-      guess === target ||
-      (targetParts.length > 1 && targetParts.some((part) => part === guess));
+    const isFuzzy =
+      isHebrewFuzzyMatch(guess, target) ||
+      isHebrewFuzzyMatch(guess, currentQuizPerson.substituteWord || '') ||
+      (targetParts.length > 1 && targetParts.some((part) => isHebrewFuzzyMatch(guess, part)));
 
-    if (isExact) {
+    if (isFuzzy) {
       setQuizFeedback('correct');
       onEarnPoints(20, 'זיהוי שם ופנים במבחן');
       onUnlockBadge('מזהה עוגנים ושמות');
@@ -152,11 +153,13 @@ export const NamesFacesModule: React.FC<NamesFacesModuleProps> = ({
 
   const filteredPeople = peopleCards.filter((p) => {
     if (onlyReadyFilter && !p.is_ready_for_practice) return false;
-    return (
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.roleOrJob.toLowerCase().includes(search.toLowerCase()) ||
-      p.morphologicalAnchor.toLowerCase().includes(search.toLowerCase()) ||
-      p.substituteWord.toLowerCase().includes(search.toLowerCase())
+    return isHebrewMultiFieldSearchMatch(
+      search,
+      p.name,
+      p.roleOrJob,
+      p.morphologicalAnchor,
+      p.substituteWord,
+      p.mnemonicScene
     );
   });
 

@@ -301,28 +301,36 @@ function generateHebrewMnemonicFallback(
   let contextAction = '';
   let contextObject = '';
 
+  const cleanPrefix = (str: string) =>
+    str
+      .replace(/^(?:אדם|דמות|פעולה|חפץ|סצנה|person|action|object|scene)[:=\s-]+/i, '')
+      .replace(/^["'״׳]|["'״׳]$/g, '')
+      .trim();
+
   try {
     if (extraStr.startsWith('{')) {
       const parsedJson = JSON.parse(extraStr);
-      contextPerson = parsedJson.person || parsedJson.userPerson || '';
-      contextAction = parsedJson.action || parsedJson.userAction || '';
-      contextObject = parsedJson.object || parsedJson.userObject || '';
+      contextPerson = cleanPrefix(parsedJson.person || parsedJson.userPerson || '');
+      contextAction = cleanPrefix(parsedJson.action || parsedJson.userAction || '');
+      contextObject = cleanPrefix(parsedJson.object || parsedJson.userObject || '');
     }
   } catch {}
 
   if (!contextPerson || !contextAction || !contextObject) {
-    const parts = extraStr.split('|').map((s) => s.trim());
+    const pMatch = extraStr.match(/(?:דמות|אדם|person)[:=]\s*([^,\n|]+)/i);
+    const aMatch = extraStr.match(/(?:פעולה|action)[:=]\s*([^,\n|]+)/i);
+    const oMatch = extraStr.match(/(?:חפץ|object)[:=]\s*([^,\n|]+)/i);
+    if (pMatch) contextPerson = cleanPrefix(pMatch[1]);
+    if (aMatch) contextAction = cleanPrefix(aMatch[1]);
+    if (oMatch) contextObject = cleanPrefix(oMatch[1]);
+  }
+
+  if (!contextPerson || !contextAction || !contextObject) {
+    const parts = extraStr.split('|').map((s) => cleanPrefix(s.trim()));
     if (parts.length >= 3) {
-      contextPerson = parts[0];
-      contextAction = parts[1];
-      contextObject = parts[2];
-    } else {
-      const pMatch = extraStr.match(/(?:דמות|אדם|person)[:=]\s*([^,\n|]+)/i);
-      const aMatch = extraStr.match(/(?:פעולה|action)[:=]\s*([^,\n|]+)/i);
-      const oMatch = extraStr.match(/(?:חפץ|object)[:=]\s*([^,\n|]+)/i);
-      if (pMatch) contextPerson = pMatch[1].trim();
-      if (aMatch) contextAction = aMatch[1].trim();
-      if (oMatch) contextObject = oMatch[1].trim();
+      if (!contextPerson) contextPerson = parts[0];
+      if (!contextAction) contextAction = parts[1];
+      if (!contextObject) contextObject = parts[2];
     }
   }
 
@@ -477,14 +485,15 @@ function generateHebrewMnemonicFallback(
   const selPerson = contextPerson || chosenPersons[idx % chosenPersons.length];
   const selAction = contextAction || sensoryActionsList[idx % sensoryActionsList.length];
 
-  // Dynamic Multisensory Full Scenes (Colors, Smells, Textures, Emotions, Sounds)
+  // Dynamic Multisensory Full Scenes tailored strictly to the selected person, action, and object
   const multisensoryScenes = [
-    `${selPerson} בגלימת משי אדומה זוהרת, צורח מזעם ו${selAction} בחזה של ${selObject} באורווה חשוכה שמריחה מחציר לח ואוכל לסוסים!`,
-    `${selPerson} עם סרט בד אדום של רוקי על המצח, מזיע ומריח מאבקת שריפה חריפה, מרים את ${selObject} כמו משקולת ברזל בחדר כושר מאובק לקראת קרב בג'ונגל!`,
-    `בפריים קולנועי מועצם בצבעי ניאון סגולים וזהב: ${selPerson} ${selAction} בעוצמה מסחררת את ${selObject}, ורסיסי קרח קרים ניתזים לכל עבר בריח מנטה עז!`,
-    `${selPerson} שרירי ומבריק משמן גוף שמדיף ריח ורדים ושרף אורנים, לוכד בידיים חשופות את ${selObject} המבעבע ו${selAction} לקול תשואות מחרישות אוזניים!`,
-    `סצנה חושית בלתי נשכחת: ${selPerson} עוטה מעיל עור שחור גס וקר, שואג בלהט ומבצע ${selAction} ישירות על ${selObject} שמצלצל ברעש מתכתי רועם!`,
-    `${selPerson} בעיניים בורקות ושיניים חשוקות, מזנק מעל להבות צהובות ומטיח בעוצמה את ${selObject} שמדיף ריח מלוח של ים ופולט עשן סמיך!`,
+    `${selPerson} בעיניים דרוכות ורוויות נחישות, מפעיל כוח אדיר ומבצע ${selAction} בעוצמה מסחררת ישירות על גבי ${selObject}, בעוד רסיסי אור זוהרים בצבע ניאון סגול ניתזים סביב בריח מנטה עז וקריר!`,
+    `בפריים קולנועי דרמטי ובלתי נשכח: ${selPerson} מזנק קדימה ומבצע ${selAction} על ${selObject}, כשגל עשן סמיך בריח שרף אורנים מתפשט וצליל שבירה מתכתי רועם מהדהד בחלל!`,
+    `${selPerson} מוקף בהילה מוזהבת זוהרת וחמה, תופס עמדה מרכזית ו${selAction} את ${selObject} שמסתחרר באוויר ופולט ניחוח שוקולד מתוק לקול תשואות מחרישות אוזניים!`,
+    `סצנה רב-חושית עשירה: ${selPerson} פועל בריכוז מוחלט כשבידיו הוא ${selAction} את ${selObject}, תוך שרוח קרירה מפיצה ריח ים מלוח ולהבות כחולות מרצדות מסביב!`,
+    `${selPerson} עוטה בגד מבריק בצבעי אש זוהרים, שואג בתנופה קינטית אדירה ו${selAction} מעל ${selObject} שמצלצל בהד פעמונים צלול ומשאיר שובל ניצוצות מרהיב!`,
+    `תמונת זיכרון חדה ומוחשית: ${selPerson} מתקרב במהירות שיא ומבצע ${selAction} מול ${selObject} הלוהט, כשטיפות טל קפואות מתיזות לכל עבר בריח ורדים רענן ותחושת חשמל באוויר!`,
+    `${selPerson} בריכוז שיא ובעוצמה בלתי ניתנת לעצירה, מבצע ${selAction} על ${selObject}, בעוד האור מסביב מתחלף לטורקיז זוהר וריח הדרים מרענן ממלא את הסצנה!`
   ];
 
   const fullScene = multisensoryScenes[idx % multisensoryScenes.length];
@@ -592,10 +601,11 @@ ${majorConstraints}
 4. עבור pao_action: פעולה קינטית מוגזמת עם תנועה, רגש והשפעה חושית.
 5. עבור pao_person: דמות מפורסמת או מוכרת שראשי התיבות של שמה תואמים בדיוק את אותיות הספרות.
 6. עבור pao_scene (סצנה שלמה):
-   - קח את שלושת השדות: הדמות (Person), הפעולה (Action) והחפץ (Object) המוגדרים בקלט/מידע הנוסף (אפילו אם היוזר טרם שמר אותם).
-   - צור סצנה עלילתית שלמה, קולנועית ורב-חושית בפריים דרמטי יחיד, המשלבת את שלושתם יחד עם צבעים, ריחות ורגש עז.
-   - דוגמה 1 (עבור סילבסטר סטאלון, מתאגרף, סוס): "סילבסטר סטאלון בגלימת מתאגרף אדומה צורח מזעם ומכה בחזה של סוס באורווה שמריחה מאוכל לסוסים"
-   - דוגמה 2 (איטרציה הבאה): "סילבסטר סטלון עם סרט של רוקי על המצח, מזיע ומריח מאבקת שריפה, מרים סוס כמו משקולת בחדר הכושר תוך כדי שהוא מתכונן לקרב בג'ונגל"
+   - קח את שלושת השדות הייחודיים שהמשתמש הזין: הדמות (Person), הפעולה (Action) והחפץ (Object) המוגדרים בקלט/מידע הנוסף (אפילו אם היוזר טרם שמר אותם).
+   - חובה מוחלטת: הסצנה חייבת להתמקד אך ורק בדמות הספציפית שהוזנה, בפעולה הספציפית שהוזנה ובחפץ הספציפי שהוזן!
+   - אל תשתמש בשום אופן בסילבסטר סטאלון, כפפות אגרוף או אורוות סוסים אלא אם כן אלו בדיוק הערכים שהוזנו!
+   - שלב את שלושתם בפריים קולנועי חי, דרמטי ורב-חושי (צבעים עזים, ריחות מוחשיים, טמפרטורה, קולות ותנועה קינטית מוגזמת).
+   - בכל איטרציה (איטרציה מספר ${cycleNum + 1}), הצע תיאור חדש, מרענן ושונה לחלוטין!
 
 השב אך ורק בפורמט JSON תקני:
 {

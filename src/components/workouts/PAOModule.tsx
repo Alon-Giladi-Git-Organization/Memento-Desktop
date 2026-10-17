@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   User,
   Search,
@@ -19,12 +19,33 @@ import {
   Filter,
   Zap,
   Package,
+  GripVertical,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { PAOItem, MajorItem } from '../../types/memory';
 import { getPAOInitials } from '../../lib/paoInitials';
-import { isHebrewFuzzyMatch } from '../../lib/fuzzyMatch';
+import { isHebrewFuzzyMatch, isHebrewSearchMatch, isHebrewMultiFieldSearchMatch } from '../../lib/fuzzyMatch';
 import { AIFieldGeneratorButton } from '../AIFieldGeneratorButton';
+
+export type PAOColumnKey = 'number' | 'person' | 'action' | 'object' | 'scene' | 'ready' | 'actions';
+
+export interface PAOColumnDef {
+  key: PAOColumnKey;
+  label: string;
+  defaultWidth: number;
+  minWidth: number;
+  headerColorClass: string;
+}
+
+export const DEFAULT_PAO_COLUMNS: PAOColumnDef[] = [
+  { key: 'number', label: 'מספר', defaultWidth: 95, minWidth: 70, headerColorClass: 'text-indigo-400' },
+  { key: 'person', label: '👤 אדם', defaultWidth: 160, minWidth: 90, headerColorClass: 'text-amber-400' },
+  { key: 'action', label: '⚡ פעולה', defaultWidth: 160, minWidth: 90, headerColorClass: 'text-purple-400' },
+  { key: 'object', label: '📦 חפץ', defaultWidth: 160, minWidth: 90, headerColorClass: 'text-teal-400' },
+  { key: 'scene', label: '🎬 סצנה שלמה', defaultWidth: 260, minWidth: 130, headerColorClass: 'text-amber-300' },
+  { key: 'ready', label: 'מוכן לתרגול', defaultWidth: 105, minWidth: 80, headerColorClass: 'text-center' },
+  { key: 'actions', label: 'פעולות', defaultWidth: 95, minWidth: 75, headerColorClass: 'text-center' },
+];
 
 interface PAOModuleProps {
   paoItems: PAOItem[];
@@ -34,7 +55,7 @@ interface PAOModuleProps {
   onAddPAOItem?: (item: PAOItem) => void;
   onUpdatePAOItem: (
     number: number,
-    updates: { userPerson?: string; userAction?: string; userObject?: string; userScene?: string; is_ready_for_practice?: boolean }
+    updates: { person?: string; action?: string; object?: string; scene?: string; is_ready_for_practice?: boolean }
   ) => void;
   onDeletePAOItem?: (number: number) => void;
   onResetPAOItem: (number: number) => void;
@@ -56,7 +77,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
   onTogglePAOReady,
   onSetAllPAOReady,
 }) => {
-  const [subView, setSubView] = useState<'sixDigits' | 'registry' | 'quiz'>('sixDigits');
+  const [subView, setSubView] = useState<'registry' | 'quiz'>('registry');
   const [search, setSearch] = useState('');
   const [onlyReadyFilter, setOnlyReadyFilter] = useState(false);
 
@@ -69,6 +90,150 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
 
   // View mode: 'grid' (כוורת) or 'list' (רשימה)
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+
+  // Excel-style customizable column order & widths for List View
+  const [columnOrder, setColumnOrder] = useState<PAOColumnKey[]>(() => {
+    try {
+      const saved = localStorage.getItem('pao_table_col_order_v2');
+      if (saved) {
+        const parsed: PAOColumnKey[] = JSON.parse(saved);
+        const allKeys: PAOColumnKey[] = ['number', 'person', 'action', 'object', 'scene', 'ready', 'actions'];
+        if (allKeys.every((k) => parsed.includes(k)) && parsed.length === allKeys.length) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return ['number', 'person', 'action', 'object', 'scene', 'ready', 'actions'];
+  });
+
+  const [columnWidths, setColumnWidths] = useState<Record<PAOColumnKey, number>>(() => {
+    try {
+      const saved = localStorage.getItem('pao_table_col_widths_v2');
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch {}
+    return {
+      number: 95,
+      person: 160,
+      action: 160,
+      object: 160,
+      scene: 260,
+      ready: 105,
+      actions: 95,
+    };
+  });
+
+  // Drag-and-drop state for column reordering
+  const [draggedCol, setDraggedCol] = useState<PAOColumnKey | null>(null);
+  const [dragOverCol, setDragOverCol] = useState<PAOColumnKey | null>(null);
+
+  const handleDragStart = (e: React.DragEvent, colKey: PAOColumnKey) => {
+    setDraggedCol(colKey);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', colKey);
+  };
+
+  const handleDragOver = (e: React.DragEvent, colKey: PAOColumnKey) => {
+    e.preventDefault();
+    if (draggedCol && draggedCol !== colKey) {
+      setDragOverCol(colKey);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, targetColKey: PAOColumnKey) => {
+    e.preventDefault();
+    if (!draggedCol || draggedCol === targetColKey) {
+      setDraggedCol(null);
+      setDragOverCol(null);
+      return;
+    }
+    const newOrder = [...columnOrder];
+    const fromIndex = newOrder.indexOf(draggedCol);
+    const toIndex = newOrder.indexOf(targetColKey);
+    if (fromIndex !== -1 && toIndex !== -1) {
+      newOrder.splice(fromIndex, 1);
+      newOrder.splice(toIndex, 0, draggedCol);
+      setColumnOrder(newOrder);
+      try {
+        localStorage.setItem('pao_table_col_order_v2', JSON.stringify(newOrder));
+      } catch {}
+    }
+    setDraggedCol(null);
+    setDragOverCol(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedCol(null);
+    setDragOverCol(null);
+  };
+
+  // Excel-style mouse drag resize logic (adapted for RTL table direction)
+  const resizingRef = useRef<{
+    colKey: PAOColumnKey;
+    startX: number;
+    startWidth: number;
+  } | null>(null);
+
+  const handleResizeMouseDown = (colKey: PAOColumnKey, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    resizingRef.current = {
+      colKey,
+      startX: e.clientX,
+      startWidth: columnWidths[colKey] || 150,
+    };
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      if (!resizingRef.current) return;
+      const { colKey, startX, startWidth } = resizingRef.current;
+      // In RTL, resizing the left border of a column: dragging left (smaller clientX) widens the column
+      const delta = startX - moveEvent.clientX;
+      const colDef = DEFAULT_PAO_COLUMNS.find((c) => c.key === colKey);
+      const minW = colDef?.minWidth || 70;
+      const newWidth = Math.max(minW, Math.min(800, startWidth + delta));
+      setColumnWidths((prev) => ({
+        ...prev,
+        [colKey]: newWidth,
+      }));
+    };
+
+    const handleMouseUp = () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      if (resizingRef.current) {
+        setColumnWidths((currentWidths) => {
+          try {
+            localStorage.setItem('pao_table_col_widths_v2', JSON.stringify(currentWidths));
+          } catch {}
+          return currentWidths;
+        });
+        resizingRef.current = null;
+      }
+    };
+
+    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleResetTableLayout = () => {
+    const defaultOrder: PAOColumnKey[] = ['number', 'person', 'action', 'object', 'scene', 'ready', 'actions'];
+    const defaultWidths: Record<PAOColumnKey, number> = {
+      number: 95,
+      person: 160,
+      action: 160,
+      object: 160,
+      scene: 260,
+      ready: 105,
+      actions: 95,
+    };
+    setColumnOrder(defaultOrder);
+    setColumnWidths(defaultWidths);
+    try {
+      localStorage.removeItem('pao_table_col_order_v2');
+      localStorage.removeItem('pao_table_col_widths_v2');
+    } catch {}
+  };
 
   // Edit PAO Item (Draft State)
   const [editingNum, setEditingNum] = useState<number | null>(null);
@@ -92,9 +257,10 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
     | 'numberToObject'
     | 'personToNumber'
     | 'actionToNumber'
-    | 'objectToNumber';
+    | 'objectToNumber'
+    | 'fullScene';
 
-  type PAOQuizFilter = 'all' | 'person' | 'action' | 'object' | 'reverse';
+  type PAOQuizFilter = 'all' | 'fullScene' | 'person' | 'action' | 'object' | 'reverse';
 
   // PAO Quiz state (Strictly over readyPaoItems)
   const [quizIndex, setQuizIndex] = useState(0);
@@ -103,6 +269,11 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
   const [userGuessInput, setUserGuessInput] = useState('');
   const [quizFeedback, setQuizFeedback] = useState<'idle' | 'correct' | 'incorrect'>('idle');
   const [revealQuizAnswer, setRevealQuizAnswer] = useState(false);
+  const [quizSceneTriplet, setQuizSceneTriplet] = useState<{
+    p: PAOItem;
+    a: PAOItem;
+    o: PAOItem;
+  } | null>(null);
   
   // Quiz Inline Edit State
   const [isQuizEditing, setIsQuizEditing] = useState(false);
@@ -120,10 +291,10 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
   // --- Core Save Logic (Lifting State Up) ---
   const handleSaveItem = (itemNum: number) => {
     onUpdatePAOItem(itemNum, {
-      userPerson: editPerson.trim(),
-      userAction: editAction.trim(),
-      userObject: editObject.trim(),
-      userScene: editScene.trim(),
+      person: editPerson.trim(),
+      action: editAction.trim(),
+      object: editObject.trim(),
+      scene: editScene.trim(),
     });
     setEditingNum(null);
   };
@@ -184,9 +355,9 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
       };
     }
     return {
-      person: item.userPerson || item.person,
-      action: item.userAction || item.action,
-      object: item.userObject || item.object,
+      person: item.person,
+      action: item.action,
+      object: item.object,
     };
   };
 
@@ -207,13 +378,9 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
         number: num,
         numberStr: numStr,
         person: newPerson.trim(),
-        userPerson: newPerson.trim(),
         action: newAction.trim(),
-        userAction: newAction.trim(),
         object: newObject.trim(),
-        userObject: newObject.trim(),
         scene: newScene.trim(),
-        userScene: newScene.trim(),
         is_ready_for_practice: true,
       });
     }
@@ -227,6 +394,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
   };
 
   const pickNextQuestionType = (filter: PAOQuizFilter): PAOQuizQuestionType => {
+    if (filter === 'fullScene') return 'fullScene';
     if (filter === 'person') return 'numberToPerson';
     if (filter === 'action') return 'numberToAction';
     if (filter === 'object') return 'numberToObject';
@@ -234,11 +402,12 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
       const revs: PAOQuizQuestionType[] = ['personToNumber', 'actionToNumber', 'objectToNumber'];
       return revs[Math.floor(Math.random() * revs.length)];
     }
-    // Filter 'all' -> random question
+    // Filter 'all' -> random question including fullScene
     const rand = Math.random();
-    if (rand < 0.35) return 'numberToPerson';
+    if (rand < 0.25) return 'fullScene';
+    if (rand < 0.50) return 'numberToPerson';
     if (rand < 0.70) return 'numberToAction';
-    if (rand < 0.90) return 'numberToObject';
+    if (rand < 0.85) return 'numberToObject';
     const revs: PAOQuizQuestionType[] = ['personToNumber', 'actionToNumber', 'objectToNumber'];
     return revs[Math.floor(Math.random() * revs.length)];
   };
@@ -251,76 +420,122 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
     setQuizFeedback('idle');
     setRevealQuizAnswer(false);
     setIsQuizEditing(false);
+
+    // Pick 3 ready items for 6-digit full scene triplet training
+    const p = readyPaoItems[Math.floor(Math.random() * readyPaoItems.length)];
+    const a = readyPaoItems[Math.floor(Math.random() * readyPaoItems.length)];
+    const o = readyPaoItems[Math.floor(Math.random() * readyPaoItems.length)];
+    setQuizSceneTriplet({ p, a, o });
+
     const activeFilter = customFilter !== undefined ? customFilter : quizFilter;
     setQuestionType(pickNextQuestionType(activeFilter));
   };
 
+  React.useEffect(() => {
+    if (readyPaoItems.length > 0 && !quizSceneTriplet) {
+      const p = readyPaoItems[Math.floor(Math.random() * readyPaoItems.length)];
+      const a = readyPaoItems[Math.floor(Math.random() * readyPaoItems.length)];
+      const o = readyPaoItems[Math.floor(Math.random() * readyPaoItems.length)];
+      setQuizSceneTriplet({ p, a, o });
+    }
+  }, [readyPaoItems.length]);
+
   const handleStartQuizEdit = () => {
     if (!currentQuizItem) return;
-    setQuizEditPerson(currentQuizItem.userPerson || currentQuizItem.person || '');
-    setQuizEditAction(currentQuizItem.userAction || currentQuizItem.action || '');
-    setQuizEditObject(currentQuizItem.userObject || currentQuizItem.object || '');
-    setQuizEditScene(currentQuizItem.userScene || currentQuizItem.scene || '');
+    setQuizEditPerson(currentQuizItem.person || '');
+    setQuizEditAction(currentQuizItem.action || '');
+    setQuizEditObject(currentQuizItem.object || '');
+    setQuizEditScene(currentQuizItem.scene || '');
     setIsQuizEditing((prev) => !prev);
   };
 
   const handleSaveQuizEdit = () => {
     if (!currentQuizItem) return;
     onUpdatePAOItem(currentQuizItem.number, {
-      userPerson: quizEditPerson.trim(),
-      userAction: quizEditAction.trim(),
-      userObject: quizEditObject.trim(),
-      userScene: quizEditScene.trim(),
+      person: quizEditPerson.trim(),
+      action: quizEditAction.trim(),
+      object: quizEditObject.trim(),
+      scene: quizEditScene.trim(),
     });
     setIsQuizEditing(false);
     onEarnPoints(10, 'עדכון שלשת PAO מתוך מבחן השליפה');
   };
 
   const handleCheckQuiz = () => {
-    if (!currentQuizItem) return;
     const guess = userGuessInput.trim();
     if (!guess) return;
 
     let isMatch = false;
     let successReason = '';
 
-    switch (questionType) {
-      case 'numberToPerson': {
-        const target = currentQuizItem.userPerson || currentQuizItem.person || '';
-        const fallback = currentQuizItem.person || '';
-        isMatch = isHebrewFuzzyMatch(guess, target) || isHebrewFuzzyMatch(guess, fallback);
-        successReason = 'שליפת דמות PAO';
-        break;
-      }
-      case 'numberToAction': {
-        const target = currentQuizItem.userAction || currentQuizItem.action || '';
-        const fallback = currentQuizItem.action || '';
-        isMatch = isHebrewFuzzyMatch(guess, target) || isHebrewFuzzyMatch(guess, fallback);
-        successReason = 'שליפת פעולת PAO';
-        break;
-      }
-      case 'numberToObject': {
-        const target = currentQuizItem.userObject || currentQuizItem.object || '';
-        const fallback = currentQuizItem.object || '';
-        isMatch = isHebrewFuzzyMatch(guess, target) || isHebrewFuzzyMatch(guess, fallback);
-        successReason = 'שליפת חפץ PAO';
-        break;
-      }
-      case 'personToNumber':
-      case 'actionToNumber':
-      case 'objectToNumber': {
-        isMatch = guess === currentQuizItem.numberStr || parseInt(guess, 10) === currentQuizItem.number;
-        successReason = 'שליפת מספר משלשת PAO';
-        break;
+    if (questionType === 'fullScene') {
+      const p = quizSceneTriplet?.p || currentQuizItem;
+      const a = quizSceneTriplet?.a || currentQuizItem;
+      const o = quizSceneTriplet?.o || currentQuizItem;
+      if (!p || !a || !o) return;
+
+      const targetScene = `${p.person} ${a.action} ${o.object}`;
+      const customScene = p.scene || '';
+
+      // 1. Direct Hebrew fuzzy match on full scene or custom scene
+      const matchFull =
+        isHebrewFuzzyMatch(guess, targetScene) ||
+        (customScene ? isHebrewFuzzyMatch(guess, customScene) : false);
+
+      // 2. Component-by-component recognition: does user guess mention the person, action, and object?
+      // e.g. "סטאלון נותן אגרוף לסוס" vs "סילבסטר סטאלון" + "מתאגרף" + "סוס"
+      const matchP =
+        isHebrewSearchMatch(p.person, guess) ||
+        isHebrewFuzzyMatch(guess, p.person) ||
+        isHebrewSearchMatch(guess, p.person);
+      const matchA =
+        isHebrewSearchMatch(a.action, guess) ||
+        isHebrewFuzzyMatch(guess, a.action) ||
+        isHebrewSearchMatch(guess, a.action);
+      const matchO =
+        isHebrewSearchMatch(o.object, guess) ||
+        isHebrewFuzzyMatch(guess, o.object) ||
+        isHebrewSearchMatch(guess, o.object);
+
+      isMatch = Boolean(matchFull || (matchP && matchA && matchO));
+      successReason = 'שליפת סצנת PAO מלאה';
+    } else {
+      if (!currentQuizItem) return;
+      switch (questionType) {
+        case 'numberToPerson': {
+          const target = currentQuizItem.person || '';
+          isMatch = isHebrewFuzzyMatch(guess, target);
+          successReason = 'שליפת דמות PAO';
+          break;
+        }
+        case 'numberToAction': {
+          const target = currentQuizItem.action || '';
+          isMatch = isHebrewFuzzyMatch(guess, target);
+          successReason = 'שליפת פעולת PAO';
+          break;
+        }
+        case 'numberToObject': {
+          const target = currentQuizItem.object || '';
+          isMatch = isHebrewFuzzyMatch(guess, target);
+          successReason = 'שליפת חפץ PAO';
+          break;
+        }
+        case 'personToNumber':
+        case 'actionToNumber':
+        case 'objectToNumber': {
+          isMatch = guess === currentQuizItem.numberStr || parseInt(guess, 10) === currentQuizItem.number;
+          successReason = 'שליפת מספר משלשת PAO';
+          break;
+        }
       }
     }
 
     if (isMatch) {
       setQuizFeedback('correct');
       setRevealQuizAnswer(true);
-      onEarnPoints(20, successReason);
+      onEarnPoints(questionType === 'fullScene' ? 30 : 20, successReason);
       onUnlockBadge('שלשת אלופים (PAO)');
-      confetti({ particleCount: 40, spread: 60, origin: { y: 0.6 } });
+      confetti({ particleCount: 45, spread: 65, origin: { y: 0.6 } });
     } else {
       setQuizFeedback('incorrect');
       setRevealQuizAnswer(true);
@@ -329,21 +544,52 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
 
   const filteredItems = paoItems.filter((item) => {
     if (onlyReadyFilter && !item.is_ready_for_practice) return false;
-
-    const p = item.userPerson || item.person;
-    const a = item.userAction || item.action;
-    const o = item.userObject || item.object;
-    const s = item.userScene || item.scene || '';
-    return (
-      item.numberStr.includes(search) ||
-      p.toLowerCase().includes(search.toLowerCase()) ||
-      a.toLowerCase().includes(search.toLowerCase()) ||
-      o.toLowerCase().includes(search.toLowerCase()) ||
-      s.toLowerCase().includes(search.toLowerCase())
+    return isHebrewMultiFieldSearchMatch(
+      search,
+      item.numberStr,
+      item.number,
+      item.person,
+      item.action,
+      item.object,
+      item.scene
     );
   });
 
   const getQuizMeta = () => {
+    if (questionType === 'fullScene') {
+      const p = quizSceneTriplet?.p || currentQuizItem;
+      const a = quizSceneTriplet?.a || currentQuizItem;
+      const o = quizSceneTriplet?.o || currentQuizItem;
+      const pDigits = p?.numberStr || '00';
+      const aDigits = a?.numberStr || '00';
+      const oDigits = o?.numberStr || '00';
+      return {
+        theme: 'indigo' as const,
+        badgeIcon: <Sparkles className="w-3.5 h-3.5 text-indigo-400" />,
+        badgeText: '🎬 שאלה: סצנה שלמה (איחוד 6 ספרות / דמות+פעולה+חפץ)',
+        badgeColor: 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30',
+        title: 'שלוף והקלד את הסצנה המאוחדת:',
+        titleColor: 'text-indigo-400',
+        cardBorder: 'border-indigo-500/40',
+        cardBg: 'bg-gradient-to-b from-indigo-950/20 via-slate-950 to-slate-950 shadow-xl shadow-indigo-500/5',
+        inputBorder: 'border-indigo-500/40 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-500/30',
+        btnColor: 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/30',
+        tagColor: 'text-indigo-300 bg-indigo-500/10 border-indigo-500/25',
+        mainValue: `${pDigits} - ${aDigits} - ${oDigits}`,
+        isNumberMain: false,
+        isFullScene: true,
+        digitsP: pDigits,
+        digitsA: aDigits,
+        digitsO: oDigits,
+        pItem: p,
+        aItem: a,
+        oItem: o,
+        testedField: 'scene' as const,
+        placeholder: 'הקלד את הסצנה השלמה (למשל: סילבסטר סטאלון מתאגרף עם סוס)...',
+        correctTarget: `${p?.person || ''} ${a?.action || ''} ${o?.object || ''}`.trim(),
+      };
+    }
+
     if (!currentQuizItem) return null;
     switch (questionType) {
       case 'numberToPerson':
@@ -361,9 +607,10 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
           tagColor: 'text-orange-300 bg-orange-500/10 border-orange-500/25',
           mainValue: currentQuizItem.numberStr,
           isNumberMain: true,
+          isFullScene: false,
           testedField: 'person' as const,
           placeholder: 'הקלד את שם הדמות (למשל סילבסטר סטאלון)...',
-          correctTarget: currentQuizItem.userPerson || currentQuizItem.person,
+          correctTarget: currentQuizItem.person,
         };
       case 'numberToAction':
         return {
@@ -382,7 +629,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
           isNumberMain: true,
           testedField: 'action' as const,
           placeholder: 'הקלד את הפעולה (למשל הקלדה / מקליד)...',
-          correctTarget: currentQuizItem.userAction || currentQuizItem.action,
+          correctTarget: currentQuizItem.action,
         };
       case 'numberToObject':
         return {
@@ -401,7 +648,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
           isNumberMain: true,
           testedField: 'object' as const,
           placeholder: 'הקלד את שם החפץ (למשל חוברת / כפפות)...',
-          correctTarget: currentQuizItem.userObject || currentQuizItem.object,
+          correctTarget: currentQuizItem.object,
         };
       case 'personToNumber':
         return {
@@ -416,7 +663,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
           inputBorder: 'border-orange-500/40 focus:border-orange-400 focus:ring-1 focus:ring-orange-500/30',
           btnColor: 'bg-orange-600 hover:bg-orange-500 text-white shadow-md shadow-orange-600/30',
           tagColor: 'text-orange-300 bg-orange-500/10 border-orange-500/25',
-          mainValue: currentQuizItem.userPerson || currentQuizItem.person,
+          mainValue: currentQuizItem.person,
           isNumberMain: false,
           testedField: 'person' as const,
           placeholder: 'הקלד את המספר (למשל 23)...',
@@ -435,7 +682,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
           inputBorder: 'border-purple-500/40 focus:border-purple-400 focus:ring-1 focus:ring-purple-500/30',
           btnColor: 'bg-purple-600 hover:bg-purple-500 text-white shadow-md shadow-purple-600/30',
           tagColor: 'text-purple-300 bg-purple-500/10 border-purple-500/25',
-          mainValue: currentQuizItem.userAction || currentQuizItem.action,
+          mainValue: currentQuizItem.action,
           isNumberMain: false,
           testedField: 'action' as const,
           placeholder: 'הקלד את המספר (למשל 23)...',
@@ -454,7 +701,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
           inputBorder: 'border-teal-500/40 focus:border-teal-400 focus:ring-1 focus:ring-teal-500/30',
           btnColor: 'bg-teal-600 hover:bg-teal-500 text-white shadow-md shadow-teal-600/30',
           tagColor: 'text-teal-300 bg-teal-500/10 border-teal-500/25',
-          mainValue: currentQuizItem.userObject || currentQuizItem.object,
+          mainValue: currentQuizItem.object,
           isNumberMain: false,
           testedField: 'object' as const,
           placeholder: 'הקלד את המספר (למשל 23)...',
@@ -493,17 +740,6 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
 
         <div className="flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-2xl border-2 border-slate-200 self-stretch md:self-auto justify-center">
           <button
-            onClick={() => setSubView('sixDigits')}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
-              subView === 'sixDigits'
-                ? 'bg-[#1CB0F6] text-white border-b-2 border-[#1899d6] shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <Layers className="w-3.5 h-3.5" />
-            <span>אימון 6 ספרות</span>
-          </button>
-          <button
             onClick={() => setSubView('registry')}
             className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
               subView === 'registry'
@@ -523,175 +759,17 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
             }`}
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span>מבחן שליפה ({readyPaoItems.length} מוכנים)</span>
+            <span>מבחן שליפה</span>
+            {readyPaoItems.length > 0 && (
+              <span className="bg-white/20 text-white text-[10px] px-1.5 py-0.5 rounded-full font-black">
+                {readyPaoItems.length} מוכנים
+              </span>
+            )}
           </button>
         </div>
       </div>
 
-      {/* SUB-VIEW 1: SIX DIGITS TRAINER */}
-      {subView === 'sixDigits' && (
-        <div className="space-y-6">
-          {readyPaoItems.length === 0 ? (
-            <div className="bg-amber-50 border-2 border-dashed border-amber-300 rounded-3xl p-8 sm:p-12 text-center space-y-4 max-w-xl mx-auto my-6 text-slate-900 animate-fadeIn">
-              <div className="w-16 h-16 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center mx-auto shadow-sm">
-                <CheckCircle2 className="w-8 h-8" />
-              </div>
-              <div className="space-y-2">
-                <h3 className="text-base sm:text-lg font-black text-slate-900">
-                  טרם סימנת פריטים כמוכנים לתרגול במודולה זו. סמן מספר אסוציאציות כדי להתחיל.
-                </h3>
-                <p className="text-xs text-slate-600 leading-relaxed max-w-md mx-auto">
-                  אימון 6 ספרות מבוסס על שילוב 3 שלשות PAO שלמדת והטמעת. עקומת הלמידה נמצאת בשליטתך המלאה – סמן שלשות כמוכנות לתרגול במאגר כדי להתחיל.
-                </p>
-              </div>
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-3">
-                <button
-                  onClick={() => setSubView('registry')}
-                  className="btn-duo-primary px-5 py-2.5 text-xs font-bold inline-flex items-center gap-2 cursor-pointer"
-                >
-                  <span>מעבר למאגר השלשות לסימון פריטים</span>
-                  <ArrowLeft className="w-4 h-4" />
-                </button>
-                {onSetAllPAOReady && (
-                  <button
-                    onClick={() => {
-                      onSetAllPAOReady(true, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
-                      onEarnPoints(15, 'סימון 10 שלשות ראשונות כמוכנות');
-                    }}
-                    className="btn-duo-neutral px-4 py-2.5 text-xs font-bold cursor-pointer"
-                  >
-                    <span>סמן שלשות 00-09 והתחל</span>
-                  </button>
-                )}
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-3 py-1.5 rounded-xl border border-emerald-300 flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>מתרגל {readyPaoItems.length} שלשות שסומנו כמוכנות (מתוך {paoItems.length})</span>
-                </span>
-                <button
-                  onClick={handleGeneratePao6}
-                  className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 bg-slate-800 px-3.5 py-1.5 rounded-xl cursor-pointer"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>הגרל רצף 6 ספרות חדש</span>
-                </button>
-              </div>
-
-          <div className="max-w-2xl mx-auto space-y-6 text-center">
-            <div className="p-8 rounded-3xl bg-slate-950 border border-slate-800 shadow-inner space-y-3">
-              <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest">
-                רצף 6 ספרות לאיחוד PAO:
-              </span>
-              <div className="flex items-center justify-center gap-3 font-mono text-4xl sm:text-5xl font-black text-white">
-                <div className="flex flex-col items-center">
-                  <span className="bg-slate-900 px-3 py-1 rounded-xl text-amber-400 border border-amber-500/30">
-                    {pao6Digits.slice(0, 2)}
-                  </span>
-                  <span className="text-[11px] font-sans font-bold text-amber-300/90 mt-1 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                    ר"ת: {getPAOInitials(parseInt(pao6Digits.slice(0, 2), 10) || 0).initials}
-                  </span>
-                </div>
-                <span className="text-slate-600 self-center">-</span>
-                <div className="flex flex-col items-center">
-                  <span className="bg-slate-900 px-3 py-1 rounded-xl text-indigo-400 border border-indigo-500/30">
-                    {pao6Digits.slice(2, 4)}
-                  </span>
-                  <span className="text-[11px] font-sans font-bold text-indigo-300/90 mt-1 bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
-                    ר"ת: {getPAOInitials(parseInt(pao6Digits.slice(2, 4), 10) || 0).initials}
-                  </span>
-                </div>
-                <span className="text-slate-600 self-center">-</span>
-                <div className="flex flex-col items-center">
-                  <span className="bg-slate-900 px-3 py-1 rounded-xl text-teal-400 border border-teal-500/30">
-                    {pao6Digits.slice(4, 6)}
-                  </span>
-                  <span className="text-[11px] font-sans font-bold text-teal-300/90 mt-1 bg-teal-500/10 px-2 py-0.5 rounded border border-teal-500/20">
-                    ר"ת: {getPAOInitials(parseInt(pao6Digits.slice(4, 6), 10) || 0).initials}
-                  </span>
-                </div>
-              </div>
-              <div className="flex items-center justify-center gap-6 text-xs text-slate-400 pt-2 font-semibold">
-                <span className="text-amber-400">דמות (P)</span>
-                <span className="text-indigo-400">פעולה קינטית (A)</span>
-                <span className="text-teal-400">חפץ פסיבי (O)</span>
-              </div>
-            </div>
-
-            {!sceneRevealed ? (
-              <div className="space-y-3">
-                <p className="text-xs text-slate-400">
-                  דמיין במוחך: מיהי הדמות לפי ראשי התיבות? מה הפעולה הדינמית שהיא עושה? ועל איזה חפץ?
-                </p>
-                <button
-                  onClick={() => {
-                    setSceneRevealed(true);
-                    onEarnPoints(25, 'פענוח שלשת PAO');
-                    onUnlockBadge('שלשת אלופים (PAO)');
-                    confetti({ particleCount: 50, spread: 70, origin: { y: 0.6 } });
-                  }}
-                  className="px-6 py-2.5 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs shadow-md shadow-indigo-600/20 cursor-pointer"
-                >
-                  חשוף את הסצנה המאוחדת (+25 XP)
-                </button>
-              </div>
-            ) : (
-              <div className="bg-slate-950/80 border border-indigo-500/40 rounded-2xl p-6 space-y-4 text-right animate-fadeIn">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-center">
-                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30">
-                    <div className="flex items-center justify-between mb-0.5">
-                      <span className="text-[10px] text-amber-400 font-bold block">דמות (P):</span>
-                      <span className="text-[10px] text-amber-300 font-mono font-bold">
-                        [{getPAOInitials(parseInt(pao6Digits.slice(0, 2), 10) || 0).initials}]
-                      </span>
-                    </div>
-                    <strong className="text-white text-sm">{parsedPao.person}</strong>
-                  </div>
-                  <div className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/30">
-                    <div className="flex items-center justify-between mb-0.5">
-                      <span className="text-[10px] text-indigo-400 font-bold block">פעולה (A):</span>
-                      <span className="text-[10px] text-indigo-300 font-mono font-bold">
-                        [{getPAOInitials(parseInt(pao6Digits.slice(2, 4), 10) || 0).initials}]
-                      </span>
-                    </div>
-                    <strong className="text-white text-sm">{parsedPao.action}</strong>
-                  </div>
-                  <div className="p-3 rounded-xl bg-teal-500/10 border border-teal-500/30">
-                    <div className="flex items-center justify-between mb-0.5">
-                      <span className="text-[10px] text-teal-400 font-bold block">חפץ (O):</span>
-                      <span className="text-[10px] text-teal-300 font-mono font-bold">
-                        [{getPAOInitials(parseInt(pao6Digits.slice(4, 6), 10) || 0).initials}]
-                      </span>
-                    </div>
-                    <strong className="text-white text-sm">{parsedPao.object}</strong>
-                  </div>
-                </div>
-
-                <div className="p-4 rounded-xl bg-indigo-950/40 border border-indigo-500/30 text-xs sm:text-sm text-indigo-200 leading-relaxed font-medium">
-                  ⚡ <strong className="text-amber-400">הסצנה המנמונית הסופית: </strong>
-                  "{parsedPao.person} {parsedPao.action} {parsedPao.object}!"
-                </div>
-
-                <div className="flex justify-end">
-                  <button
-                    onClick={handleGeneratePao6}
-                    className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-bold"
-                  >
-                    הגרל רצף נוסף
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* SUB-VIEW 2: REGISTRY 00-99 & CUSTOM */}
+      {/* SUB-VIEW 1: REGISTRY 00-99 & CUSTOM */}
       {subView === 'registry' && (
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
@@ -979,7 +1057,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                 <option value="" disabled>בחר מספר...</option>
                 {paoItems.map((item) => (
                   <option key={item.number} value={item.number}>
-                    #{item.numberStr} - {item.userPerson || item.person}
+                    #{item.numberStr} - {item.person}
                   </option>
                 ))}
               </select>
@@ -993,11 +1071,11 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
               <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 max-h-[620px] overflow-y-auto pr-1 scroll-smooth">
                 {filteredItems.map((item) => {
                   const isEditing = editingNum === item.number;
-                  const p = item.userPerson || item.person;
-                  const a = item.userAction || item.action;
-                  const o = item.userObject || item.object;
-                  const s = item.userScene || item.scene || '';
-                  const isCustom = Boolean(item.userPerson || item.userAction || item.userObject || item.userScene);
+                  const p = item.person;
+                  const a = item.action;
+                  const o = item.object;
+                  const s = item.scene || '';
+                  const isCustom = Boolean(item.scene);
                   const isHighlighted = highlightedNum === item.number;
 
                   return (
@@ -1251,11 +1329,11 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                   <tbody className="divide-y divide-slate-800/60">
                     {filteredItems.map((item) => {
                       const isEditing = editingNum === item.number;
-                      const p = item.userPerson || item.person;
-                      const a = item.userAction || item.action;
-                      const o = item.userObject || item.object;
-                      const s = item.userScene || item.scene || '';
-                      const isCustom = Boolean(item.userPerson || item.userAction || item.userObject || item.userScene);
+                      const p = item.person;
+                      const a = item.action;
+                      const o = item.object;
+                      const s = item.scene || '';
+                      const isCustom = Boolean(item.scene);
                       const isHighlighted = highlightedNum === item.number;
 
                       return (
@@ -1419,7 +1497,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                 <button
                   key={item.number}
                   onClick={() => scrollToNumber(item.number)}
-                  title={`#${item.numberStr} - ${item.userPerson || item.person}`}
+                  title={`#${item.numberStr} - ${item.person}`}
                   className={`text-[10px] font-mono py-1 rounded-lg transition-colors cursor-pointer ${
                     highlightedNum === item.number
                       ? 'bg-indigo-600 text-white font-black'
@@ -1482,6 +1560,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                   </span>
                   {[
                     { id: 'all', label: '🎯 הכל מעורב (אקראי)', activeCls: 'bg-indigo-600 text-white shadow-sm' },
+                    { id: 'fullScene', label: '🎬 סצנה כולה (6 ספרות / דמות+פעולה+חפץ)', activeCls: 'bg-indigo-600 text-white shadow-sm' },
                     { id: 'person', label: '👤 דמויות (P)', activeCls: 'bg-orange-600 text-white shadow-sm shadow-orange-500/30' },
                     { id: 'action', label: '⚡ פעולות (A)', activeCls: 'bg-purple-600 text-white shadow-sm shadow-purple-500/30' },
                     { id: 'object', label: '📦 חפצים (O)', activeCls: 'bg-teal-600 text-white shadow-sm shadow-teal-500/30' },
@@ -1547,13 +1626,49 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                       {quizMeta.title}
                     </span>
 
-                    {quizMeta.isNumberMain ? (
+                    {quizMeta.isFullScene ? (
+                      <div className="flex flex-col items-center justify-center gap-2 py-2">
+                        <div className="flex items-center justify-center gap-2.5 sm:gap-4 font-mono text-3xl sm:text-5xl font-black text-white">
+                          <div className="flex flex-col items-center">
+                            <span className="bg-slate-900 px-3 py-1 rounded-xl text-amber-400 border border-amber-500/30">
+                              {quizMeta.digitsP}
+                            </span>
+                            <span className="text-[10px] font-sans font-bold text-amber-300/90 mt-1 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                              👤 P: {getPAOInitials(parseInt(quizMeta.digitsP || '0', 10) || 0).initials}
+                            </span>
+                          </div>
+                          <span className="text-slate-600 self-center">-</span>
+                          <div className="flex flex-col items-center">
+                            <span className="bg-slate-900 px-3 py-1 rounded-xl text-purple-400 border border-purple-500/30">
+                              {quizMeta.digitsA}
+                            </span>
+                            <span className="text-[10px] font-sans font-bold text-purple-300/90 mt-1 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20">
+                              ⚡ A: {getPAOInitials(parseInt(quizMeta.digitsA || '0', 10) || 0).initials}
+                            </span>
+                          </div>
+                          <span className="text-slate-600 self-center">-</span>
+                          <div className="flex flex-col items-center">
+                            <span className="bg-slate-900 px-3 py-1 rounded-xl text-teal-400 border border-teal-500/30">
+                              {quizMeta.digitsO}
+                            </span>
+                            <span className="text-[10px] font-sans font-bold text-teal-300/90 mt-1 bg-teal-500/10 px-2 py-0.5 rounded border border-teal-500/20">
+                              📦 O: {getPAOInitials(parseInt(quizMeta.digitsO || '0', 10) || 0).initials}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-center gap-6 text-[11px] text-slate-400 pt-1 font-semibold">
+                          <span className="text-amber-400">דמות (P)</span>
+                          <span className="text-purple-400">פעולה קינטית (A)</span>
+                          <span className="text-teal-400">חפץ פסיבי (O)</span>
+                        </div>
+                      </div>
+                    ) : quizMeta.isNumberMain ? (
                       <div className="flex flex-col items-center justify-center gap-1.5">
                         <div className="text-6xl font-black text-white tracking-wider font-mono">
                           {quizMeta.mainValue}
                         </div>
                         <span className={`text-[11px] font-sans font-bold ${quizMeta.tagColor} px-2.5 py-0.5 rounded-lg border`}>
-                          ר"ת: {getPAOInitials(currentQuizItem.number).initials}
+                          ר"ת: {getPAOInitials(currentQuizItem?.number || 0).initials}
                         </span>
                       </div>
                     ) : (
@@ -1765,28 +1880,32 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                         <div className="flex items-center justify-between border-b border-slate-800 pb-2">
                           <span className="text-slate-200 font-bold flex items-center gap-1.5">
                             <Sparkles className="w-4 h-4 text-amber-400" />
-                            שלשת PAO המלאה למספר {currentQuizItem.numberStr}:
+                            {quizMeta.isFullScene
+                              ? `שלשת PAO המאוחדת לרצף ${quizMeta.digitsP}-${quizMeta.digitsA}-${quizMeta.digitsO}:`
+                              : `שלשת PAO המלאה למספר ${currentQuizItem?.numberStr}:`}
                           </span>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={handleStartQuizEdit}
-                              className="text-[11px] text-amber-300 hover:text-white bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 cursor-pointer transition-all"
-                              title="ערוך שלשת PAO זו בזמן אמת"
-                            >
-                              <Edit3 className="w-3 h-3 text-amber-300" />
-                              <span>{isQuizEditing ? 'סגור עריכה' : 'שנה שלשה'}</span>
-                            </button>
-                            <span className="text-[11px] font-mono text-amber-300 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                              ר"ת: {getPAOInitials(currentQuizItem.number).initials}
-                            </span>
-                          </div>
+                          {!quizMeta.isFullScene && currentQuizItem && (
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={handleStartQuizEdit}
+                                className="text-[11px] text-amber-300 hover:text-white bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1 cursor-pointer transition-all"
+                                title="ערוך שלשת PAO זו בזמן אמת"
+                              >
+                                <Edit3 className="w-3 h-3 text-amber-300" />
+                                <span>{isQuizEditing ? 'סגור עריכה' : 'שנה שלשה'}</span>
+                              </button>
+                              <span className="text-[11px] font-mono text-amber-300 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                                ר"ת: {getPAOInitials(currentQuizItem.number).initials}
+                              </span>
+                            </div>
+                          )}
                         </div>
 
                         {/* Triplet Grid with highlight for the tested dimension */}
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-center pt-1">
                           <div
                             className={`p-3 rounded-xl border transition-all ${
-                              quizMeta.testedField === 'person'
+                              quizMeta.testedField === 'person' || quizMeta.isFullScene
                                 ? 'bg-orange-500/25 border-orange-400 ring-2 ring-orange-400/40 shadow-md shadow-orange-500/10'
                                 : 'bg-orange-500/10 border-orange-500/30 opacity-80'
                             }`}
@@ -1796,20 +1915,18 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                                 <User className="w-3 h-3 text-orange-400" />
                                 <span>דמות (P):</span>
                               </span>
-                              {quizMeta.testedField === 'person' && (
-                                <span className="text-[9px] bg-orange-500 text-white font-black px-1.5 py-0.2 rounded-md">
-                                  נבדק בשאלה
-                                </span>
-                              )}
+                              <span className="text-[9px] font-mono text-orange-300 font-bold">
+                                #{quizMeta.isFullScene ? quizMeta.digitsP : currentQuizItem?.numberStr}
+                              </span>
                             </div>
                             <strong className="text-white text-xs block mt-1.5">
-                              {currentQuizItem.userPerson || currentQuizItem.person}
+                              {quizMeta.isFullScene ? quizMeta.pItem?.person : currentQuizItem?.person}
                             </strong>
                           </div>
 
                           <div
                             className={`p-3 rounded-xl border transition-all ${
-                              quizMeta.testedField === 'action'
+                              quizMeta.testedField === 'action' || quizMeta.isFullScene
                                 ? 'bg-purple-500/25 border-purple-400 ring-2 ring-purple-400/40 shadow-md shadow-purple-500/10'
                                 : 'bg-purple-500/10 border-purple-500/30 opacity-80'
                             }`}
@@ -1819,20 +1936,18 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                                 <Zap className="w-3 h-3 text-purple-400" />
                                 <span>פעולה (A):</span>
                               </span>
-                              {quizMeta.testedField === 'action' && (
-                                <span className="text-[9px] bg-purple-500 text-white font-black px-1.5 py-0.2 rounded-md">
-                                  נבדק בשאלה
-                                </span>
-                              )}
+                              <span className="text-[9px] font-mono text-purple-300 font-bold">
+                                #{quizMeta.isFullScene ? quizMeta.digitsA : currentQuizItem?.numberStr}
+                              </span>
                             </div>
                             <strong className="text-white text-xs block mt-1.5">
-                              {currentQuizItem.userAction || currentQuizItem.action}
+                              {quizMeta.isFullScene ? quizMeta.aItem?.action : currentQuizItem?.action}
                             </strong>
                           </div>
 
                           <div
                             className={`p-3 rounded-xl border transition-all ${
-                              quizMeta.testedField === 'object'
+                              quizMeta.testedField === 'object' || quizMeta.isFullScene
                                 ? 'bg-teal-500/25 border-teal-400 ring-2 ring-teal-400/40 shadow-md shadow-teal-500/10'
                                 : 'bg-teal-500/10 border-teal-500/30 opacity-80'
                             }`}
@@ -1842,23 +1957,21 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                                 <Package className="w-3 h-3 text-teal-400" />
                                 <span>חפץ (O):</span>
                               </span>
-                              {quizMeta.testedField === 'object' && (
-                                <span className="text-[9px] bg-teal-500 text-white font-black px-1.5 py-0.2 rounded-md">
-                                  נבדק בשאלה
-                                </span>
-                              )}
+                              <span className="text-[9px] font-mono text-teal-300 font-bold">
+                                #{quizMeta.isFullScene ? quizMeta.digitsO : currentQuizItem?.numberStr}
+                              </span>
                             </div>
                             <strong className="text-white text-xs block mt-1.5">
-                              {currentQuizItem.userObject || currentQuizItem.object}
+                              {quizMeta.isFullScene ? quizMeta.oItem?.object : currentQuizItem?.object}
                             </strong>
                           </div>
                         </div>
 
                         <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 text-xs text-slate-200">
                           ⚡ <strong className="text-amber-400">סצנה מנטלית:</strong>{' '}
-                          "{currentQuizItem.userPerson || currentQuizItem.person}{' '}
-                          {currentQuizItem.userAction || currentQuizItem.action}{' '}
-                          {currentQuizItem.userObject || currentQuizItem.object}"
+                          "{quizMeta.isFullScene
+                            ? `${quizMeta.pItem?.person} ${quizMeta.aItem?.action} ${quizMeta.oItem?.object}`
+                            : `${currentQuizItem?.person} ${currentQuizItem?.action} ${currentQuizItem?.object}`}"
                         </div>
 
                         <div className="flex justify-center pt-1">

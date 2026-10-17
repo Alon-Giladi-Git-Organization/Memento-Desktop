@@ -48,7 +48,7 @@ export interface PAOInitialsResult {
  */
 export function getPAOInitials(
   number: number,
-  customDigits?: Array<{ number: number; consonants?: string; userConsonants?: string }>
+  customDigits?: Array<{ number: number; consonants?: string }>
 ): PAOInitialsResult {
   const absNum = Math.abs(number);
   const tensDigit = Math.floor(absNum / 10) % 10;
@@ -73,7 +73,7 @@ export function getPAOInitials(
   if (customDigits && customDigits.length > 0) {
     const customTensObj = customDigits.find((d) => d.number === tensDigit);
     if (customTensObj) {
-      const cons = (customTensObj.userConsonants || customTensObj.consonants || '').trim();
+      const cons = (customTensObj.consonants || '').trim();
       if (cons) {
         tensConsonants = cons;
         const firstHebrew = cons.match(/[\u0590-\u05FF]/);
@@ -83,7 +83,7 @@ export function getPAOInitials(
 
     const customUnitsObj = customDigits.find((d) => d.number === unitsDigit);
     if (customUnitsObj) {
-      const cons = (customUnitsObj.userConsonants || customUnitsObj.consonants || '').trim();
+      const cons = (customUnitsObj.consonants || '').trim();
       if (cons) {
         unitsConsonants = cons;
         const firstHebrew = cons.match(/[\u0590-\u05FF]/);

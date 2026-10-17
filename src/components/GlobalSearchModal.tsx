@@ -23,6 +23,7 @@ import {
 } from '../types/memory';
 import { TECHNIQUE_SUMMARIES } from '../data/techniqueSummaries';
 import { TabType } from './Navbar';
+import { isHebrewMultiFieldSearchMatch } from '../lib/fuzzyMatch';
 
 interface GlobalSearchModalProps {
   isOpen: boolean;
@@ -91,24 +92,27 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
   const results: SearchResultItem[] = [];
 
-  if (q.length > 0) {
+  if (query.trim().length > 0) {
     // 1. Major System
     majorItems.forEach((item) => {
-      const numStr = item.numberStr;
-      const num = item.number.toString();
-      const word = (item.userWord || item.defaultWord).toLowerCase();
-      const consonants = (item.userConsonants || item.consonants).toLowerCase();
-      const hint = (item.userImageHint || item.imageHint || '').toLowerCase();
-
-      if (num.includes(q) || numStr.includes(q) || word.includes(q) || consonants.includes(q) || hint.includes(q)) {
+      if (
+        isHebrewMultiFieldSearchMatch(
+          query,
+          item.numberStr,
+          item.number,
+          item.defaultWord,
+          item.consonants,
+          item.imageHint
+        )
+      ) {
         results.push({
           id: `major-${item.number}`,
           category: 'major',
           categoryLabel: 'Major System',
           categoryColor: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
           categoryIcon: <Dumbbell className="w-3.5 h-3.5 text-amber-400" />,
-          title: `#${item.numberStr} - ${item.userWord || item.defaultWord}`,
-          subtitle: `עיצורים: ${item.userConsonants || item.consonants} ${hint ? `| ⚡ ${hint.slice(0, 40)}...` : ''}`,
+          title: `#${item.numberStr} - ${item.defaultWord}`,
+          subtitle: `עיצורים: ${item.consonants} ${item.imageHint ? `| ⚡ ${item.imageHint.slice(0, 40)}...` : ''}`,
           tag: 'מספרים 1-100',
           action: () => {
             onNavigate('workouts', 'major', item.number);
@@ -120,18 +124,16 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
     // 2. PAO
     paoItems.forEach((item) => {
-      const numStr = item.numberStr;
-      const num = item.number.toString();
-      const person = (item.userPerson || item.person).toLowerCase();
-      const action = (item.userAction || item.action).toLowerCase();
-      const object = (item.userObject || item.object).toLowerCase();
-
       if (
-        num.includes(q) ||
-        numStr.includes(q) ||
-        person.includes(q) ||
-        action.includes(q) ||
-        object.includes(q)
+        isHebrewMultiFieldSearchMatch(
+          query,
+          item.numberStr,
+          item.number,
+          item.person,
+          item.action,
+          item.object,
+          item.scene
+        )
       ) {
         results.push({
           id: `pao-${item.number}`,
@@ -139,8 +141,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
           categoryLabel: 'PAO (אדם-פעולה-חפץ)',
           categoryColor: 'text-indigo-400 bg-indigo-500/10 border-indigo-500/30',
           categoryIcon: <Sparkles className="w-3.5 h-3.5 text-indigo-400" />,
-          title: `#${item.numberStr}: ${item.userPerson || item.person}`,
-          subtitle: `⚡ ${item.userAction || item.action} | 📦 ${item.userObject || item.object}`,
+          title: `#${item.numberStr}: ${item.person}`,
+          subtitle: `⚡ ${item.action} | 📦 ${item.object}${item.scene ? ` | 🎬 ${item.scene.slice(0, 40)}...` : ''}`,
           tag: 'שלשות PAO',
           action: () => {
             onNavigate('workouts', 'pao', item.number);
@@ -150,13 +152,9 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
       }
     });
 
-    // 3. Palaces
+    // 3. Palaces & Loci
     palaces.forEach((palace) => {
-      const pName = palace.name.toLowerCase();
-      const pDesc = (palace.description || '').toLowerCase();
-      let matchedInPalace = pName.includes(q) || pDesc.includes(q);
-
-      if (matchedInPalace) {
+      if (isHebrewMultiFieldSearchMatch(query, palace.name, palace.description)) {
         results.push({
           id: `palace-${palace.id}`,
           category: 'palace',
@@ -175,10 +173,16 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
       // Check loci inside palace
       palace.loci.forEach((locus: PalaceLocus) => {
-        const lTitle = locus.title.toLowerCase();
-        const lRoom = (locus.roomName || '').toLowerCase();
-        const lScene = (locus.mnemonicScene || '').toLowerCase();
-        if (lTitle.includes(q) || lRoom.includes(q) || lScene.includes(q)) {
+        if (
+          isHebrewMultiFieldSearchMatch(
+            query,
+            locus.title,
+            locus.roomName,
+            locus.storedContent,
+            locus.mnemonicScene,
+            locus.positionDescription
+          )
+        ) {
           results.push({
             id: `locus-${locus.id}`,
             category: 'palace',
@@ -186,7 +190,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
             categoryColor: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/30',
             categoryIcon: <Compass className="w-3.5 h-3.5 text-cyan-400" />,
             title: `📍 ${locus.title} [${locus.roomName || 'חדר'}]`,
-            subtitle: locus.mnemonicScene || 'ללא סצנה מוגדרת',
+            subtitle: locus.mnemonicScene || locus.storedContent || 'ללא סצנה מוגדרת',
             tag: palace.name,
             action: () => {
               onNavigate('palaces', undefined, palace.id);
@@ -199,18 +203,15 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
     // 4. Names & Faces
     peopleCards.forEach((person) => {
-      const name = person.name.toLowerCase();
-      const role = person.roleOrJob.toLowerCase();
-      const anchor = person.morphologicalAnchor.toLowerCase();
-      const sub = person.substituteWord.toLowerCase();
-      const scene = person.mnemonicScene.toLowerCase();
-
       if (
-        name.includes(q) ||
-        role.includes(q) ||
-        anchor.includes(q) ||
-        sub.includes(q) ||
-        scene.includes(q)
+        isHebrewMultiFieldSearchMatch(
+          query,
+          person.name,
+          person.roleOrJob,
+          person.morphologicalAnchor,
+          person.substituteWord,
+          person.mnemonicScene
+        )
       ) {
         results.push({
           id: `person-${person.id}`,
@@ -231,12 +232,15 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
     // 5. Theory & Summaries
     Object.values(TECHNIQUE_SUMMARIES).forEach((tech) => {
-      const tTitle = tech.title.toLowerCase();
-      const tSubtitle = tech.subtitle.toLowerCase();
-      const tDesc = (tech.scientificBasis || '').toLowerCase();
-      const tRules = (tech.coreRules || []).join(' ').toLowerCase();
-
-      if (tTitle.includes(q) || tSubtitle.includes(q) || tDesc.includes(q) || tRules.includes(q)) {
+      if (
+        isHebrewMultiFieldSearchMatch(
+          query,
+          tech.title,
+          tech.subtitle,
+          tech.scientificBasis,
+          ...(tech.coreRules || [])
+        )
+      ) {
         results.push({
           id: `theory-${tech.id}`,
           category: 'theory',
@@ -256,15 +260,15 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
 
     // 6. Pegs
     shapePegs.forEach((peg) => {
-      const sName = (peg.userShapeName || peg.shapeName).toLowerCase();
-      const sObj = (peg.userObject || peg.defaultObject).toLowerCase();
-      const sMetaphor = (peg.visualMetaphor || '').toLowerCase();
-
       if (
-        peg.number.toString().includes(q) ||
-        sName.includes(q) ||
-        sObj.includes(q) ||
-        sMetaphor.includes(q)
+        isHebrewMultiFieldSearchMatch(
+          query,
+          peg.number,
+          peg.shapeName,
+          peg.defaultObject,
+          peg.visualMetaphor,
+          peg.kineticTip
+        )
       ) {
         results.push({
           id: `shape-peg-${peg.number}`,
@@ -272,8 +276,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
           categoryLabel: 'יתדות צורה',
           categoryColor: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
           categoryIcon: <Dumbbell className="w-3.5 h-3.5 text-amber-400" />,
-          title: `🔢 יתד #${peg.number} - ${peg.userShapeName || peg.shapeName}`,
-          subtitle: `${peg.userObject || peg.defaultObject} | ${peg.visualMetaphor}`,
+          title: `🔢 יתד #${peg.number} - ${peg.shapeName}`,
+          subtitle: `${peg.defaultObject} | ${peg.visualMetaphor}`,
           tag: 'יתדות',
           action: () => {
             onNavigate('workouts', 'pegs', peg.number);
@@ -284,15 +288,14 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     });
 
     bodyPegs.forEach((peg) => {
-      const bPart = (peg.userBodyPart || peg.bodyPartHebrew).toLowerCase();
-      const bObj = (peg.userObject || peg.defaultObject).toLowerCase();
-      const bTip = (peg.userKineticTip || peg.kineticTip).toLowerCase();
-
       if (
-        peg.index.toString().includes(q) ||
-        bPart.includes(q) ||
-        bObj.includes(q) ||
-        bTip.includes(q)
+        isHebrewMultiFieldSearchMatch(
+          query,
+          peg.index,
+          peg.bodyPartHebrew,
+          peg.defaultObject,
+          peg.kineticTip
+        )
       ) {
         results.push({
           id: `body-peg-${peg.index}`,
@@ -300,8 +303,8 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
           categoryLabel: 'יתדות גוף',
           categoryColor: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
           categoryIcon: <Dumbbell className="w-3.5 h-3.5 text-emerald-400" />,
-          title: `🦶 יתד גוף #${peg.index} - ${peg.userBodyPart || peg.bodyPartHebrew}`,
-          subtitle: `${peg.userObject || peg.defaultObject} | ${peg.userKineticTip || peg.kineticTip}`,
+          title: `🦶 יתד גוף #${peg.index} - ${peg.bodyPartHebrew}`,
+          subtitle: `${peg.defaultObject} | ${peg.kineticTip}`,
           tag: 'יתדות',
           action: () => {
             onNavigate('workouts', 'pegs', peg.index);
@@ -314,10 +317,15 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     // 7. Academic
     academicPoints.forEach((point) => {
       if (
-        point.conceptTitle.toLowerCase().includes(q) ||
-        point.discipline.toLowerCase().includes(q) ||
-        point.sourceSummary.toLowerCase().includes(q) ||
-        point.mnemonicScene.toLowerCase().includes(q)
+        isHebrewMultiFieldSearchMatch(
+          query,
+          point.conceptTitle,
+          point.discipline,
+          point.sourceSummary,
+          point.keyWord,
+          point.visualAnchor,
+          point.mnemonicScene
+        )
       ) {
         results.push({
           id: `academic-${point.id}`,

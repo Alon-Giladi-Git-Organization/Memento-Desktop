@@ -82,29 +82,36 @@ const HEBREW_STOP_WORDS = new Set([
   'של', 'על', 'את', 'עם', 'אל', 'ב', 'ל', 'מ', 'כ', 'ש', 'הוא', 'היא', 'הם', 'הן',
   'זה', 'זו', 'אלה', 'עבור', 'לתוך', 'מתוך', 'מעל', 'תחת', 'ליד', 'בתוך', 'מול',
   'לעבר', 'בין', 'אשר', 'שלו', 'שלה', 'שלהם', 'שלהן', 'אודות', 'בלי', 'ללא', 'כמו',
-  'אך', 'רק', 'גם', 'כל'
+  'אך', 'רק', 'גם', 'כל', 'נותן', 'לתת', 'עושה', 'לעשות', 'מבצע', 'לבצע', 'שם', 'לשים'
 ]);
 
 /**
  * Extracts the Hebrew morphological root/stem skeleton:
- * - Strips verb/noun prefixes (ה, מ, ל, ת, נ, ו, ש, ב, כ)
- * - Strips common suffixes (ות, ים, ית, יה, ון, ה, ת, י)
- * - Strips vowel letters (אהו"י)
+ * - Strips multi-letter verb prefixes (מת-, הת-, לת-, נת-, כש-, וש-)
+ * - Strips single-letter prefixes (ה, מ, ל, ת, נ, ו, ש, ב, כ)
+ * - Strips common suffixes (ות, ים, ית, יה, ון, ה, ת, י, נו)
+ * - Strips internal vowel letters (אהו"י) to reveal consonant root skeleton
  *
  * Example:
- * "הקלדה" -> "קלד"
- * "מקליד" -> "קלד"
- * "מניף"   -> "נפ"
- * "הנפה"   -> "נפ"
+ * "מתאגרף" -> "גרפ"
+ * "אגרוף"   -> "גרפ"
+ * "הקלדה"  -> "קלד"
+ * "מקליד"  -> "קלד"
  */
 export function getHebrewStem(word: string): string {
   let w = normalizeHebrewText(word);
   if (w.length <= 2) return w;
 
-  // Leading conjunctions & prepositions
-  if (w.startsWith('ו') && w.length >= 4) w = w.slice(1);
+  // Leading multi-letter conjunctions & binyan prefixes
   if (w.startsWith('כש') && w.length >= 5) w = w.slice(2);
-  if (w.startsWith('ש') && w.length >= 4) w = w.slice(1);
+  else if (w.startsWith('וש') && w.length >= 5) w = w.slice(2);
+  else if ((w.startsWith('מת') || w.startsWith('הת') || w.startsWith('לת') || w.startsWith('נת')) && w.length >= 5) {
+    w = w.slice(2);
+  } else if ((w.startsWith('ו') || w.startsWith('ש')) && w.length >= 4) {
+    w = w.slice(1);
+  }
+
+  // Single-letter prefixes
   if (
     (w.startsWith('ה') ||
       w.startsWith('מ') ||
@@ -124,6 +131,7 @@ export function getHebrewStem(word: string): string {
   else if (w.endsWith('ית') && w.length >= 4) w = w.slice(0, -2);
   else if (w.endsWith('יה') && w.length >= 4) w = w.slice(0, -2);
   else if (w.endsWith('ון') && w.length >= 4) w = w.slice(0, -2);
+  else if (w.endsWith('נו') && w.length >= 4) w = w.slice(0, -2);
   else if (w.endsWith('ה') && w.length >= 4) w = w.slice(0, -1);
   else if (w.endsWith('ת') && w.length >= 4) w = w.slice(0, -1);
   else if (w.endsWith('י') && w.length >= 4) w = w.slice(0, -1);
@@ -134,7 +142,7 @@ export function getHebrewStem(word: string): string {
 
 /**
  * Checks whether an individual guess word matches an individual target word
- * using exact, substring, typo (Levenshtein), or Hebrew morphological stem.
+ * using exact, substring, typo (Levenshtein), or Hebrew morphological root stem.
  */
 export function isHebrewWordMatch(guessWord: string, targetWord: string): boolean {
   if (!guessWord || !targetWord) return false;
@@ -152,13 +160,57 @@ export function isHebrewWordMatch(guessWord: string, targetWord: string): boolea
   if (maxLen > 8 && dist <= 3) return true;
   if (maxLen >= 7 && dist <= 3) return true;
 
-  // Hebrew morphological stem match (e.g. "הקלדה" vs "מקליד")
+  // Hebrew morphological stem match (e.g. "הקלדה" vs "מקליד", "אגרוף" vs "מתאגרף")
   const stemG = getHebrewStem(guessWord);
   const stemT = getHebrewStem(targetWord);
   if (stemG.length >= 2 && stemG === stemT) return true;
   if (stemG.length >= 3 && (stemT.includes(stemG) || stemG.includes(stemT))) return true;
 
   return false;
+}
+
+/**
+ * Global Hebrew Morphological Search Matcher:
+ * Operates across all search bars and filters in the app.
+ * Matches exact, prefixes, stems, roots, and substrings.
+ * Example: Searching "אגרוף" matches "סילבסטר סטאלון מתאגרף עם סוס" (root א.ג.ר.פ).
+ */
+export function isHebrewSearchMatch(query: string, targetContent: string): boolean {
+  if (!query || !query.trim()) return true;
+  if (!targetContent) return false;
+
+  const rawQ = query.trim().toLowerCase();
+  const rawT = targetContent.toLowerCase();
+
+  // 1. Direct substring match
+  if (rawT.includes(rawQ)) return true;
+
+  // 2. Normalized substring match
+  const normQ = normalizeHebrewText(rawQ);
+  const normT = normalizeHebrewText(rawT);
+  if (!normQ) return true;
+  if (normT.includes(normQ)) return true;
+
+  // 3. Multi-word & root/stem match
+  const qWords = normQ.split(' ').filter(Boolean);
+  const tWords = normT.split(' ').filter(Boolean);
+
+  // Every word in query must have a match or stem match in target
+  return qWords.every((qw) => {
+    // Exact or substring in any target word
+    if (tWords.some((tw) => tw.includes(qw) || isHebrewWordMatch(qw, tw))) return true;
+
+    // Root stem match
+    const qStem = getHebrewStem(qw);
+    if (qStem.length >= 2) {
+      return tWords.some((tw) => {
+        const tStem = getHebrewStem(tw);
+        return tStem === qStem || (tStem.length >= 3 && (tStem.includes(qStem) || qStem.includes(tStem)));
+      });
+    }
+
+    return false;
+  });
 }
 
 /**
@@ -221,3 +273,34 @@ export function isHebrewFuzzyMatch(guess: string, target: string): boolean {
 
   return false;
 }
+
+/**
+ * Searches across multiple entity fields using Hebrew morphological roots,
+ * stems, exact matching, and substring filtering.
+ */
+export function isHebrewMultiFieldSearchMatch(
+  query: string,
+  ...fields: (string | number | undefined | null)[]
+): boolean {
+  if (!query || !query.trim()) return true;
+  const q = query.trim().toLowerCase();
+
+  // 1. Direct match on any field (fast path)
+  for (const field of fields) {
+    if (field === undefined || field === null) continue;
+    const str = String(field);
+    if (str.toLowerCase().includes(q)) return true;
+  }
+
+  // 2. Morphological root match on any individual field
+  for (const field of fields) {
+    if (field === undefined || field === null) continue;
+    const str = String(field);
+    if (isHebrewSearchMatch(query, str)) return true;
+  }
+
+  // 3. Morphological check on combined text of all fields
+  const combined = fields.filter((f) => f !== undefined && f !== null).map(String).join(' ');
+  return isHebrewSearchMatch(query, combined);
+}
+

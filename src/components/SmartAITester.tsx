@@ -120,7 +120,7 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
     } else if (effectiveCat === 'major') {
       const pool = readyMajor.length > 0 ? readyMajor : majorItems;
       const item = pool[Math.floor(Math.random() * pool.length)];
-      const targetWord = item.userWord || item.defaultWord;
+      const targetWord = item.defaultWord;
       setCurrentQuestion({
         id: `major-${item.number}`,
         category: 'major',
@@ -132,9 +132,9 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
     } else if (effectiveCat === 'pao') {
       const pool = readyPAO.length > 0 ? readyPAO : paoItems;
       const item = pool[Math.floor(Math.random() * pool.length)];
-      const person = item.userPerson || item.person;
-      const action = item.userAction || item.action;
-      const obj = item.userObject || item.object;
+      const person = item.person;
+      const action = item.action;
+      const obj = item.object;
       setCurrentQuestion({
         id: `pao-${item.number}`,
         category: 'pao',

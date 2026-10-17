@@ -43,9 +43,9 @@ export interface WorkoutsHubProps {
   onUpdateMajorItem: (
     number: number,
     updates: {
-      userWord?: string;
-      userConsonants?: string;
-      userImageHint?: string;
+      defaultWord?: string;
+      consonants?: string;
+      imageHint?: string;
       customNotes?: string;
       is_ready_for_practice?: boolean;
     }
@@ -57,7 +57,7 @@ export interface WorkoutsHubProps {
   onAddPAOItem?: (item: PAOItem) => void;
   onUpdatePAOItem: (
     number: number,
-    updates: { userPerson?: string; userAction?: string; userObject?: string; userScene?: string; is_ready_for_practice?: boolean }
+    updates: { person?: string; action?: string; object?: string; scene?: string; is_ready_for_practice?: boolean }
   ) => void;
   onDeletePAOItem?: (number: number) => void;
   onResetPAOItem: (number: number) => void;
@@ -66,7 +66,7 @@ export interface WorkoutsHubProps {
   onAddShapePeg?: (item: PegShapeItem) => void;
   onUpdateShapePeg: (
     number: number,
-    updates: { userObject?: string; userShapeName?: string; userKineticTip?: string; is_ready_for_practice?: boolean }
+    updates: { defaultObject?: string; shapeName?: string; kineticTip?: string; is_ready_for_practice?: boolean }
   ) => void;
   onDeleteShapePeg?: (number: number) => void;
   onResetShapePeg: (number: number) => void;
@@ -75,7 +75,7 @@ export interface WorkoutsHubProps {
   onAddBodyPeg?: (item: BodyPegItem) => void;
   onUpdateBodyPeg: (
     index: number,
-    updates: { userObject?: string; userBodyPart?: string; userKineticTip?: string; is_ready_for_practice?: boolean }
+    updates: { defaultObject?: string; bodyPartHebrew?: string; kineticTip?: string; is_ready_for_practice?: boolean }
   ) => void;
   onDeleteBodyPeg?: (index: number) => void;
   onResetBodyPeg: (index: number) => void;
@@ -151,7 +151,7 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
   onResetAcademicPoints,
   onOpenSummary,
 }) => {
-  const [activeModule, setActiveModule] = useState<WorkoutCategory>(selectedSubModule || 'major');
+  const [activeModule, setActiveModule] = useState<WorkoutCategory>(selectedSubModule || 'pao');
 
   React.useEffect(() => {
     if (selectedSubModule && selectedSubModule !== activeModule) {
@@ -166,24 +166,24 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
 
   const modulesList = [
     {
-      id: 'major' as const,
-      title: '1. שיטת Major',
-      subtitle: 'מספרים ועיצורים',
-      icon: Hash,
-      color: '#58CC02',
-      bgActive: 'bg-[#58CC02]/10 border-[#58CC02] border-b-4 border-b-[#46a302] text-slate-900 shadow-sm',
-      badgeBg: 'bg-[#58CC02]/20 text-[#2e6e01]',
-      count: majorItems.length,
-    },
-    {
       id: 'pao' as const,
-      title: '2. שיטת PAO',
+      title: '1. שיטת PAO',
       subtitle: 'אדם - פעולה - חפץ',
       icon: User,
       color: '#1CB0F6',
       bgActive: 'bg-[#1CB0F6]/10 border-[#1CB0F6] border-b-4 border-b-[#1899d6] text-slate-900 shadow-sm',
       badgeBg: 'bg-[#1CB0F6]/20 text-[#0d7bb0]',
       count: paoItems.length,
+    },
+    {
+      id: 'major' as const,
+      title: '2. שיטת Major',
+      subtitle: 'מספרים ועיצורים',
+      icon: Hash,
+      color: '#58CC02',
+      bgActive: 'bg-[#58CC02]/10 border-[#58CC02] border-b-4 border-b-[#46a302] text-slate-900 shadow-sm',
+      badgeBg: 'bg-[#58CC02]/20 text-[#2e6e01]',
+      count: majorItems.length,
     },
     {
       id: 'names' as const,
