@@ -272,7 +272,9 @@ export function mergeWithRemoteItems<T extends { updatedAt?: number }>(
 
   const remoteMap = new Map<string, T>();
   for (const item of remoteList) {
-    remoteMap.set(getId(item), item);
+    const id = getId(item);
+    if (!id || id === 'NaN' || id === 'nan' || id === 'undefined' || id === 'null') continue;
+    remoteMap.set(id, item);
   }
 
   let hasAnyChanges = false;
@@ -281,6 +283,10 @@ export function mergeWithRemoteItems<T extends { updatedAt?: number }>(
 
   for (const prevItem of prev) {
     const id = getId(prevItem);
+    if (!id || id === 'NaN' || id === 'nan' || id === 'undefined' || id === 'null') {
+      hasAnyChanges = true;
+      continue;
+    }
     processedIds.add(id);
     const remoteItem = remoteMap.get(id);
 
@@ -335,6 +341,12 @@ async function syncCollectionBidirectional<T extends { id?: string | number; num
 
     const remoteMap = new Map<string, any>();
     snap.forEach((d) => {
+      // Check for corrupted NaN/undefined/null document in remote Firestore
+      if (d.id === 'NaN' || d.id === 'nan' || d.id === 'undefined' || d.id === 'null') {
+        // Automatically purge rogue document from Firestore
+        deleteDoc(doc(db, collectionName, d.id)).catch(() => {});
+        return;
+      }
       remoteMap.set(d.id, { ...d.data(), id: d.id });
     });
 
@@ -343,6 +355,7 @@ async function syncCollectionBidirectional<T extends { id?: string | number; num
       const batch = writeBatch(db);
       for (const item of localItems) {
         const id = getId(item);
+        if (!id || id === 'NaN' || id === 'nan' || id === 'undefined' || id === 'null') continue;
         const docRef = doc(db, collectionName, id);
         batch.set(docRef, cleanForFirestore({ ...item, id, updatedAt: item.updatedAt || Date.now() }), { merge: true });
         uploadedCount++;
@@ -353,7 +366,9 @@ async function syncCollectionBidirectional<T extends { id?: string | number; num
 
     const localMap = new Map<string, T>();
     for (const item of localItems) {
-      localMap.set(getId(item), item);
+      const id = getId(item);
+      if (!id || id === 'NaN' || id === 'nan' || id === 'undefined' || id === 'null') continue;
+      localMap.set(id, item);
     }
 
     const mergedList: T[] = [];
@@ -362,6 +377,7 @@ async function syncCollectionBidirectional<T extends { id?: string | number; num
 
     // Check all remote items
     for (const [id, remoteItem] of remoteMap.entries()) {
+      if (!id || id === 'NaN' || id === 'nan' || id === 'undefined' || id === 'null') continue;
       const localItem = localMap.get(id);
 
       if (!localItem) {
@@ -402,6 +418,7 @@ async function syncCollectionBidirectional<T extends { id?: string | number; num
 
     // Check if any local items were created locally and don't exist remotely
     for (const [id, localItem] of localMap.entries()) {
+      if (!id || id === 'NaN' || id === 'nan' || id === 'undefined' || id === 'null') continue;
       if (!remoteMap.has(id)) {
         const docRef = doc(db, collectionName, id);
         uploadBatch.set(docRef, cleanForFirestore({ ...localItem, id, updatedAt: localItem.updatedAt || Date.now() }), { merge: true });
@@ -459,20 +476,34 @@ export async function performFullBidirectionalSync(currentData: {
     };
 
     // 1. Major Items 00-99
+    const validMajor = (currentData.majorItems || []).filter(
+      (item) => typeof item?.number === 'number' && !isNaN(item.number) && isFinite(item.number) && item.numberStr !== 'NaN' && item.number >= 0 && item.number <= 99
+    );
     const majorRes = await syncCollectionBidirectional(
       'major_items',
-      currentData.majorItems,
-      (item) => item.numberStr.padStart(2, '0')
+      validMajor,
+      (item) => {
+        const n = typeof item.number === 'number' && !isNaN(item.number) ? item.number : parseInt(item.numberStr, 10);
+        if (isNaN(n)) return '';
+        return (n < 10 && n >= 0 ? `0${n}` : `${n}`).padStart(2, '0');
+      }
     );
     stats.uploaded += majorRes.uploadedCount;
     stats.downloaded += majorRes.downloadedCount;
     if (majorRes.uploadedCount > 0 || majorRes.downloadedCount > 0) stats.collectionsUpdated.push('שיטת מז\'ור');
 
     // 2. PAO Items 00-99
+    const validPao = (currentData.paoItems || []).filter(
+      (item) => typeof item?.number === 'number' && !isNaN(item.number) && isFinite(item.number) && item.numberStr !== 'NaN' && item.number >= 0 && item.number <= 99
+    );
     const paoRes = await syncCollectionBidirectional(
       'pao_items',
-      currentData.paoItems,
-      (item) => item.numberStr.padStart(2, '0')
+      validPao,
+      (item) => {
+        const n = typeof item.number === 'number' && !isNaN(item.number) ? item.number : parseInt(item.numberStr, 10);
+        if (isNaN(n)) return '';
+        return (n < 10 && n >= 0 ? `0${n}` : `${n}`).padStart(2, '0');
+      }
     );
     stats.uploaded += paoRes.uploadedCount;
     stats.downloaded += paoRes.downloadedCount;
@@ -635,17 +666,25 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks): () => 
         if (snap.empty) return;
         const items: MajorItem[] = [];
         snap.forEach((d) => {
+          if (d.id === 'NaN' || d.id === 'nan' || d.id === 'undefined' || d.id === 'null') {
+            deleteDoc(doc(db, 'major_items', d.id)).catch(() => {});
+            return;
+          }
           const data = d.data();
-          const num = typeof data.number === 'number' ? data.number : parseInt(String(data.numberStr || d.id), 10);
-          const numStr = String(data.numberStr ?? (num < 10 ? `0${num}` : String(num))).padStart(2, '0');
+          const parsedNum = typeof data.number === 'number' ? data.number : parseInt(String(data.numberStr || d.id), 10);
+          if (isNaN(parsedNum) || parsedNum < 0 || parsedNum > 99) {
+            return;
+          }
+          const num = parsedNum;
+          const numStr = (num < 10 ? `0${num}` : String(num)).padStart(2, '0');
 
           let word = (data.defaultWord && data.defaultWord !== 'null') ? data.defaultWord : '';
           let hint = (data.imageHint && data.imageHint !== 'null') ? data.imageHint : '';
           let cons = (data.consonants && data.consonants !== 'null') ? data.consonants : '';
 
           items.push({
-            id: d.id,
-            number: isNaN(num) ? 0 : num,
+            id: numStr,
+            number: num,
             numberStr: numStr,
             consonants: cons,
             defaultWord: word,
@@ -675,9 +714,17 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks): () => 
         if (snap.empty) return;
         const items: PAOItem[] = [];
         snap.forEach((d) => {
+          if (d.id === 'NaN' || d.id === 'nan' || d.id === 'undefined' || d.id === 'null') {
+            deleteDoc(doc(db, 'pao_items', d.id)).catch(() => {});
+            return;
+          }
           const data = d.data();
-          const num = typeof data.number === 'number' ? data.number : parseInt(String(data.numberStr || d.id), 10);
-          const numStr = String(data.numberStr ?? (num < 10 ? `0${num}` : String(num))).padStart(2, '0');
+          const parsedNum = typeof data.number === 'number' ? data.number : parseInt(String(data.numberStr || d.id), 10);
+          if (isNaN(parsedNum) || parsedNum < 0 || parsedNum > 99) {
+            return;
+          }
+          const num = parsedNum;
+          const numStr = (num < 10 ? `0${num}` : String(num)).padStart(2, '0');
 
           let person = (data.person && data.person !== 'null') ? data.person : '';
           let action = (data.action && data.action !== 'null') ? data.action : '';
@@ -685,8 +732,8 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks): () => 
           let scene = (data.scene && data.scene !== 'null') ? data.scene : '';
 
           items.push({
-            id: d.id,
-            number: isNaN(num) ? 0 : num,
+            id: numStr,
+            number: num,
             numberStr: numStr,
             person,
             action,

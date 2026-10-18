@@ -290,6 +290,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
 
   // --- Core Save Logic (Lifting State Up) ---
   const handleSaveItem = (itemNum: number) => {
+    if (typeof itemNum !== 'number' || isNaN(itemNum)) return;
     onUpdatePAOItem(itemNum, {
       person: editPerson.trim(),
       action: editAction.trim(),
@@ -300,6 +301,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
   };
 
   const handleTogglePaoReady = (itemNumber: number, currentState?: boolean) => {
+    if (typeof itemNumber !== 'number' || isNaN(itemNumber)) return;
     if (onTogglePAOReady) {
       onTogglePAOReady(itemNumber, !currentState);
     } else {
@@ -369,9 +371,9 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
 
   const handleAddNewItem = (e?: React.FormEvent | React.KeyboardEvent) => {
     if (e && e.preventDefault) e.preventDefault();
-    const num = parseInt(newNumber, 10);
-    if (isNaN(num)) return;
-    const numStr = num < 10 && num >= 0 ? `0${num}` : `${num}`;
+    const num = parseInt(newNumber.trim(), 10);
+    if (isNaN(num) || num < 0 || num > 99) return;
+    const numStr = (num < 10 ? `0${num}` : `${num}`).padStart(2, '0');
 
     if (onAddPAOItem) {
       onAddPAOItem({
@@ -1233,14 +1235,14 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                               />
                             </div>
                             <textarea
-                              rows={2}
+                              rows={5}
                               value={editScene}
                               onChange={(e) => setEditScene(e.target.value)}
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSaveItem(item.number); }
                               }}
                               placeholder="סצנה מפורטת המשלבת את 3 השדות..."
-                              className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                              className="w-full min-h-[120px] bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
                             />
                           </div>
 

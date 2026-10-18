@@ -167,7 +167,16 @@ export function useMemoryStore() {
   const [majorItems, setMajorItems] = useState<MajorItem[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.MAJOR);
-      return saved ? JSON.parse(saved) : DEFAULT_MAJOR_00_99;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          const valid = parsed.filter(
+            (x: any) => typeof x?.number === 'number' && !isNaN(x.number) && isFinite(x.number) && x.numberStr !== 'NaN' && x.id !== 'NaN'
+          );
+          if (valid.length > 0) return valid;
+        }
+      }
+      return DEFAULT_MAJOR_00_99;
     } catch {
       return DEFAULT_MAJOR_00_99;
     }
@@ -177,7 +186,16 @@ export function useMemoryStore() {
   const [paoItems, setPaoItems] = useState<PAOItem[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.PAO);
-      return saved ? JSON.parse(saved) : DEFAULT_PAO_ITEMS;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          const valid = parsed.filter(
+            (x: any) => typeof x?.number === 'number' && !isNaN(x.number) && isFinite(x.number) && x.numberStr !== 'NaN' && x.id !== 'NaN'
+          );
+          if (valid.length > 0) return valid;
+        }
+      }
+      return DEFAULT_PAO_ITEMS;
     } catch {
       return DEFAULT_PAO_ITEMS;
     }
@@ -301,11 +319,13 @@ export function useMemoryStore() {
   }, [majorDigits]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.MAJOR, JSON.stringify(majorItems));
+    const valid = majorItems.filter((x) => typeof x?.number === 'number' && !isNaN(x.number) && isFinite(x.number) && x.numberStr !== 'NaN');
+    localStorage.setItem(STORAGE_KEYS.MAJOR, JSON.stringify(valid));
   }, [majorItems]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.PAO, JSON.stringify(paoItems));
+    const valid = paoItems.filter((x) => typeof x?.number === 'number' && !isNaN(x.number) && isFinite(x.number) && x.numberStr !== 'NaN');
+    localStorage.setItem(STORAGE_KEYS.PAO, JSON.stringify(valid));
   }, [paoItems]);
 
   useEffect(() => {
@@ -1117,46 +1137,65 @@ export function useMemoryStore() {
       is_ready_for_practice?: boolean;
     }
   ) => {
+    if (typeof number !== 'number' || isNaN(number) || !isFinite(number) || number < 0 || number > 99) {
+      console.warn('Rejected invalid updatePAOItem call with number:', number);
+      return;
+    }
+    const num = Math.floor(Math.abs(number));
     const now = Date.now();
-    const existing = paoItems.find((p) => p.number === number);
-    const numStr = number < 10 ? `0${number}` : `${number}`;
+    const existing = paoItems.find((p) => p.number === num);
+    const numStr = (num < 10 ? `0${num}` : `${num}`).padStart(2, '0');
     const updatedItem: PAOItem = {
-      ...(existing || { number, numberStr: numStr, person: '', action: '', object: '' }),
+      ...(existing || { number: num, numberStr: numStr, person: '', action: '', object: '' }),
       ...updates,
+      number: num,
+      numberStr: numStr,
       updatedAt: now,
     };
 
     setPaoItems((prev) => {
-      const exists = prev.some((p) => p.number === number);
+      const filtered = prev.filter((p) => typeof p?.number === 'number' && !isNaN(p.number) && p.numberStr !== 'NaN');
+      const exists = filtered.some((p) => p.number === num);
       if (exists) {
-        return prev.map((p) => (p.number === number ? updatedItem : p));
+        return filtered.map((p) => (p.number === num ? updatedItem : p));
       }
-      return [...prev, updatedItem].sort((a, b) => a.number - b.number);
+      return [...filtered, updatedItem].sort((a, b) => a.number - b.number);
     });
 
     if (updates.person || updates.action || updates.object || updates.scene) {
       earnPoints(15, 'התאמת שלשת PAO אישית');
     }
 
-    const docId = numStr.padStart(2, '0');
+    const docId = numStr;
     setDoc(doc(db, 'pao_items', docId), cleanForFirestore(updatedItem), { merge: true })
       .catch((err) => console.error('Error saving pao_item to Firestore:', err));
   };
 
   const togglePAOReady = (number: number, explicitState?: boolean) => {
+    if (typeof number !== 'number' || isNaN(number) || !isFinite(number) || number < 0 || number > 99) {
+      console.warn('Rejected invalid togglePAOReady call with number:', number);
+      return;
+    }
+    const num = Math.floor(Math.abs(number));
     const now = Date.now();
-    const existing = paoItems.find((p) => p.number === number);
-    const numStr = number < 10 ? `0${number}` : `${number}`;
+    const existing = paoItems.find((p) => p.number === num);
+    const numStr = (num < 10 ? `0${num}` : `${num}`).padStart(2, '0');
     const nextState = explicitState !== undefined ? explicitState : !(existing?.is_ready_for_practice);
     const updatedItem: PAOItem = {
-      ...(existing || { number, numberStr: numStr, person: '', action: '', object: '' }),
+      ...(existing || { number: num, numberStr: numStr, person: '', action: '', object: '' }),
+      number: num,
+      numberStr: numStr,
       is_ready_for_practice: nextState,
       updatedAt: now,
     };
 
-    setPaoItems((prev) => prev.map((item) => (item.number === number ? updatedItem : item)));
+    setPaoItems((prev) =>
+      prev
+        .filter((item) => typeof item?.number === 'number' && !isNaN(item.number) && item.numberStr !== 'NaN')
+        .map((item) => (item.number === num ? updatedItem : item))
+    );
 
-    const docId = numStr.padStart(2, '0');
+    const docId = numStr;
     setDoc(doc(db, 'pao_items', docId), cleanForFirestore(updatedItem), { merge: true })
       .catch((err) => console.error('Error toggling pao_item ready:', err));
   };
@@ -1164,16 +1203,20 @@ export function useMemoryStore() {
   const setAllPAOReady = (ready: boolean, numbers?: number[]) => {
     const now = Date.now();
     setPaoItems((prev) =>
-      prev.map((item) => {
-        if (!numbers || numbers.includes(item.number)) {
-          const updated = { ...item, is_ready_for_practice: ready, updatedAt: now };
-          const docId = String(item.number).padStart(2, '0');
-          setDoc(doc(db, 'pao_items', docId), cleanForFirestore(updated), { merge: true })
-            .catch((err) => console.error('Error batch setting pao_item ready:', err));
-          return updated;
-        }
-        return item;
-      })
+      prev
+        .filter((item) => typeof item?.number === 'number' && !isNaN(item.number) && item.numberStr !== 'NaN')
+        .map((item) => {
+          if (!numbers || numbers.includes(item.number)) {
+            const num = item.number;
+            const numStr = (num < 10 ? `0${num}` : `${num}`).padStart(2, '0');
+            const updated = { ...item, number: num, numberStr: numStr, is_ready_for_practice: ready, updatedAt: now };
+            const docId = numStr;
+            setDoc(doc(db, 'pao_items', docId), cleanForFirestore(updated), { merge: true })
+              .catch((err) => console.error('Error batch setting pao_item ready:', err));
+            return updated;
+          }
+          return item;
+        })
     );
   };
 
@@ -1261,38 +1304,51 @@ export function useMemoryStore() {
   };
 
   const addPAOItem = (item: PAOItem) => {
+    if (typeof item?.number !== 'number' || isNaN(item.number) || !isFinite(item.number) || item.number < 0 || item.number > 99) {
+      console.warn('Rejected invalid addPAOItem:', item);
+      return;
+    }
+    const num = Math.floor(Math.abs(item.number));
+    const numStr = (num < 10 ? `0${num}` : `${num}`).padStart(2, '0');
     const now = Date.now();
-    const withTime = { ...item, updatedAt: now };
+    const withTime = { ...item, number: num, numberStr: numStr, updatedAt: now };
     setPaoItems((prev) => {
-      const exists = prev.some((x) => x.number === item.number);
+      const filtered = prev.filter((p) => typeof p?.number === 'number' && !isNaN(p.number) && p.numberStr !== 'NaN');
+      const exists = filtered.some((x) => x.number === num);
       if (exists) {
-        return prev.map((x) => (x.number === item.number ? withTime : x));
+        return filtered.map((x) => (x.number === num ? withTime : x));
       }
-      return [...prev, withTime].sort((a, b) => a.number - b.number);
+      return [...filtered, withTime].sort((a, b) => a.number - b.number);
     });
-    earnPoints(15, `הוספת שלשת PAO (${item.numberStr})`);
+    earnPoints(15, `הוספת שלשת PAO (${numStr})`);
     if (isNetworkOnline()) {
-      setDoc(doc(db, 'pao_items', item.numberStr.padStart(2, '0')), cleanForFirestore(withTime), { merge: true })
+      setDoc(doc(db, 'pao_items', numStr), cleanForFirestore(withTime), { merge: true })
         .catch((err) => console.error('Error adding pao_item:', err));
     }
   };
 
   const deletePAOItem = (number: number) => {
-    setPaoItems((prev) => prev.filter((item) => item.number !== number));
+    if (typeof number !== 'number' || isNaN(number) || !isFinite(number)) return;
+    const num = Math.floor(Math.abs(number));
+    const numStr = (num < 10 ? `0${num}` : `${num}`).padStart(2, '0');
+    setPaoItems((prev) => prev.filter((item) => item.number !== num && item.numberStr !== numStr));
     if (isNetworkOnline()) {
-      deleteDoc(doc(db, 'pao_items', String(number).padStart(2, '0')))
+      deleteDoc(doc(db, 'pao_items', numStr))
         .catch((err) => console.error('Error deleting pao_item:', err));
     }
   };
 
   const resetPAOItem = (number: number) => {
-    const original = DEFAULT_PAO_ITEMS.find((p) => p.number === number);
+    if (typeof number !== 'number' || isNaN(number) || !isFinite(number)) return;
+    const num = Math.floor(Math.abs(number));
+    const original = DEFAULT_PAO_ITEMS.find((p) => p.number === num);
     if (!original) return;
+    const numStr = (num < 10 ? `0${num}` : `${num}`).padStart(2, '0');
     const now = Date.now();
-    const withTime = { ...original, updatedAt: now };
-    setPaoItems((prev) => prev.map((p) => (p.number === number ? withTime : p)));
+    const withTime = { ...original, number: num, numberStr: numStr, updatedAt: now };
+    setPaoItems((prev) => prev.map((p) => (p.number === num ? withTime : p)));
     if (isNetworkOnline()) {
-      setDoc(doc(db, 'pao_items', String(number).padStart(2, '0')), cleanForFirestore(withTime), { merge: true })
+      setDoc(doc(db, 'pao_items', numStr), cleanForFirestore(withTime), { merge: true })
         .catch((err) => console.error('Error resetting pao_item:', err));
     }
   };
