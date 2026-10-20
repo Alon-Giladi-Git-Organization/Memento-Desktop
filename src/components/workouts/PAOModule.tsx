@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   User,
   Search,
@@ -21,6 +21,13 @@ import {
   Package,
   GripVertical,
   AlertTriangle,
+  Image as ImageIcon,
+  ImagePlus,
+  Upload,
+  Maximize2,
+  X,
+  ExternalLink,
+  RefreshCw,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { PAOItem, MajorItem } from '../../types/memory';
@@ -40,8 +47,9 @@ import {
   DeckProgress,
 } from '../../lib/quizDeckManager';
 import { QuizDeckProgressBar } from '../QuizDeckProgressBar';
+import { compressImageFile } from '../../lib/imageCompression';
 
-export type PAOColumnKey = 'number' | 'person' | 'action' | 'object' | 'scene' | 'ready' | 'actions';
+export type PAOColumnKey = 'number' | 'image' | 'person' | 'action' | 'object' | 'scene' | 'ready' | 'actions';
 
 export interface PAOColumnDef {
   key: PAOColumnKey;
@@ -52,11 +60,12 @@ export interface PAOColumnDef {
 }
 
 export const DEFAULT_PAO_COLUMNS: PAOColumnDef[] = [
-  { key: 'number', label: 'מספר', defaultWidth: 95, minWidth: 70, headerColorClass: 'text-indigo-400' },
-  { key: 'person', label: '👤 אדם', defaultWidth: 160, minWidth: 90, headerColorClass: 'text-amber-400' },
-  { key: 'action', label: '⚡ פעולה', defaultWidth: 160, minWidth: 90, headerColorClass: 'text-purple-400' },
-  { key: 'object', label: '📦 חפץ', defaultWidth: 160, minWidth: 90, headerColorClass: 'text-teal-400' },
-  { key: 'scene', label: '🎬 סצנה שלמה', defaultWidth: 260, minWidth: 130, headerColorClass: 'text-amber-300' },
+  { key: 'number', label: 'מספר', defaultWidth: 85, minWidth: 65, headerColorClass: 'text-indigo-400' },
+  { key: 'image', label: 'תמונה', defaultWidth: 70, minWidth: 60, headerColorClass: 'text-center text-pink-400' },
+  { key: 'person', label: '👤 אדם', defaultWidth: 150, minWidth: 90, headerColorClass: 'text-amber-400' },
+  { key: 'action', label: '⚡ פעולה', defaultWidth: 150, minWidth: 90, headerColorClass: 'text-purple-400' },
+  { key: 'object', label: '📦 חפץ', defaultWidth: 150, minWidth: 90, headerColorClass: 'text-teal-400' },
+  { key: 'scene', label: '🎬 סצנה שלמה', defaultWidth: 250, minWidth: 130, headerColorClass: 'text-amber-300' },
   { key: 'ready', label: 'מוכן לתרגול', defaultWidth: 105, minWidth: 80, headerColorClass: 'text-center' },
   { key: 'actions', label: 'פעולות', defaultWidth: 95, minWidth: 75, headerColorClass: 'text-center' },
 ];
@@ -70,7 +79,7 @@ interface PAOModuleProps {
   onAddPAOItem?: (item: PAOItem) => void;
   onUpdatePAOItem: (
     number: number,
-    updates: { person?: string; action?: string; object?: string; scene?: string; is_ready_for_practice?: boolean }
+    updates: { person?: string; action?: string; object?: string; scene?: string; imageUrl?: string; is_ready_for_practice?: boolean }
   ) => void;
   onDeletePAOItem?: (number: number) => void;
   onResetPAOItem: (number: number) => void;
@@ -78,6 +87,7 @@ interface PAOModuleProps {
   onTogglePAOReady?: (number: number, explicitState?: boolean) => void;
   onSetAllPAOReady?: (ready: boolean, numbers?: number[]) => void;
   onNavigateToLogicTab?: () => void;
+  onSyncMajorAndPAOObjects?: (direction: 'majorToPao' | 'paoToMajor') => void;
 }
 
 export const PAOModule: React.FC<PAOModuleProps> = ({
@@ -93,6 +103,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
   onOpenSummary,
   onTogglePAOReady,
   onSetAllPAOReady,
+  onSyncMajorAndPAOObjects,
 }) => {
   const [subView, setSubView] = useState<'registry' | 'quiz'>('registry');
   const [search, setSearch] = useState('');
@@ -111,31 +122,32 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
   // Excel-style customizable column order & widths for List View
   const [columnOrder, setColumnOrder] = useState<PAOColumnKey[]>(() => {
     try {
-      const saved = localStorage.getItem('pao_table_col_order_v2');
+      const saved = localStorage.getItem('pao_table_col_order_v3');
       if (saved) {
         const parsed: PAOColumnKey[] = JSON.parse(saved);
-        const allKeys: PAOColumnKey[] = ['number', 'person', 'action', 'object', 'scene', 'ready', 'actions'];
+        const allKeys: PAOColumnKey[] = ['number', 'image', 'person', 'action', 'object', 'scene', 'ready', 'actions'];
         if (allKeys.every((k) => parsed.includes(k)) && parsed.length === allKeys.length) {
           return parsed;
         }
       }
     } catch {}
-    return ['number', 'person', 'action', 'object', 'scene', 'ready', 'actions'];
+    return ['number', 'image', 'person', 'action', 'object', 'scene', 'ready', 'actions'];
   });
 
   const [columnWidths, setColumnWidths] = useState<Record<PAOColumnKey, number>>(() => {
     try {
-      const saved = localStorage.getItem('pao_table_col_widths_v2');
+      const saved = localStorage.getItem('pao_table_col_widths_v3');
       if (saved) {
         return JSON.parse(saved);
       }
     } catch {}
     return {
-      number: 95,
-      person: 160,
-      action: 160,
-      object: 160,
-      scene: 260,
+      number: 85,
+      image: 70,
+      person: 150,
+      action: 150,
+      object: 150,
+      scene: 250,
       ready: 105,
       actions: 95,
     };
@@ -234,23 +246,50 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
   };
 
   const handleResetTableLayout = () => {
-    const defaultOrder: PAOColumnKey[] = ['number', 'person', 'action', 'object', 'scene', 'ready', 'actions'];
+    const defaultOrder: PAOColumnKey[] = ['number', 'image', 'person', 'action', 'object', 'scene', 'ready', 'actions'];
     const defaultWidths: Record<PAOColumnKey, number> = {
-      number: 95,
-      person: 160,
-      action: 160,
-      object: 160,
-      scene: 260,
+      number: 85,
+      image: 70,
+      person: 150,
+      action: 150,
+      object: 150,
+      scene: 250,
       ready: 105,
       actions: 95,
     };
     setColumnOrder(defaultOrder);
     setColumnWidths(defaultWidths);
     try {
-      localStorage.removeItem('pao_table_col_order_v2');
-      localStorage.removeItem('pao_table_col_widths_v2');
+      localStorage.removeItem('pao_table_col_order_v3');
+      localStorage.removeItem('pao_table_col_widths_v3');
     } catch {}
   };
+
+  // Light-dismiss Image Full-Screen Modal State
+  const [selectedPreviewImage, setSelectedPreviewImage] = useState<{
+    url: string;
+    title: string;
+    subtitle?: string;
+    scene?: string;
+    numberStr?: string;
+  } | null>(null);
+
+  // Quick Image Upload Modal State
+  const [quickUploadItem, setQuickUploadItem] = useState<PAOItem | null>(null);
+  const [quickUploadUrl, setQuickUploadUrl] = useState('');
+  const [isCompressing, setIsCompressing] = useState(false);
+
+  // Escape key light-dismiss handler
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (selectedPreviewImage) setSelectedPreviewImage(null);
+        if (quickUploadItem) setQuickUploadItem(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedPreviewImage, quickUploadItem]);
 
   // Edit PAO Item (Draft State)
   const [editingNum, setEditingNum] = useState<number | null>(null);
@@ -258,6 +297,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
   const [editAction, setEditAction] = useState('');
   const [editObject, setEditObject] = useState('');
   const [editScene, setEditScene] = useState('');
+  const [editImageUrl, setEditImageUrl] = useState('');
 
   // Add PAO Item
   const [showAddForm, setShowAddForm] = useState(false);
@@ -266,6 +306,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
   const [newAction, setNewAction] = useState('');
   const [newObject, setNewObject] = useState('');
   const [newScene, setNewScene] = useState('');
+  const [newImageUrl, setNewImageUrl] = useState('');
 
   // PAO Quiz question & filter types
   type PAOQuizQuestionType =
@@ -299,6 +340,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
   const [quizEditAction, setQuizEditAction] = useState('');
   const [quizEditObject, setQuizEditObject] = useState('');
   const [quizEditScene, setQuizEditScene] = useState('');
+  const [quizEditImageUrl, setQuizEditImageUrl] = useState('');
 
   const safeQuizIndex = readyPaoItems.length > 0 ? quizIndex % readyPaoItems.length : 0;
   const currentQuizItem = readyPaoItems.length > 0 ? readyPaoItems[safeQuizIndex] : null;
@@ -373,8 +415,10 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
       action: aTrim,
       object: oTrim,
       scene: sTrim,
+      imageUrl: editImageUrl.trim(),
     });
     setEditingNum(null);
+    setEditImageUrl('');
     setValidationModal(null);
   };
 
@@ -507,6 +551,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
         action: aTrim,
         object: oTrim,
         scene: sTrim,
+        imageUrl: newImageUrl.trim(),
         is_ready_for_practice: true,
       });
     }
@@ -516,6 +561,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
     setNewAction('');
     setNewObject('');
     setNewScene('');
+    setNewImageUrl('');
     setShowAddForm(false);
     setValidationModal(null);
   };
@@ -591,6 +637,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
     setQuizEditAction(currentQuizItem.action || '');
     setQuizEditObject(currentQuizItem.object || '');
     setQuizEditScene(currentQuizItem.scene || '');
+    setQuizEditImageUrl(currentQuizItem.imageUrl || '');
     setIsQuizEditing((prev) => !prev);
   };
 
@@ -648,6 +695,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
       action: aTrim,
       object: oTrim,
       scene: sTrim,
+      imageUrl: quizEditImageUrl.trim(),
     });
     setIsQuizEditing(false);
     setValidationModal(null);
@@ -1296,6 +1344,44 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                             <span className="text-[11px] text-amber-400/70 font-normal">ר"ת:</span>
                             <span>{getPAOInitials(item.number).initials}</span>
                           </span>
+
+                          {/* Image Thumbnail or Quick Upload trigger */}
+                          {item.imageUrl ? (
+                            <div
+                              onClick={() =>
+                                setSelectedPreviewImage({
+                                  url: item.imageUrl!,
+                                  title: `שלשת PAO #${item.numberStr}`,
+                                  subtitle: `${p} • ${a} • ${o}`,
+                                  scene: s,
+                                  numberStr: item.numberStr,
+                                })
+                              }
+                              className="relative group cursor-pointer shrink-0"
+                              title="לחץ להגדלה במסך מלא (Light Dismiss)"
+                            >
+                              <img
+                                src={item.imageUrl}
+                                alt={`סצנה ${item.numberStr}`}
+                                className="w-9 h-9 object-cover rounded-lg border border-indigo-500/40 shadow-sm group-hover:scale-105 group-hover:border-indigo-400 transition-all"
+                              />
+                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 rounded-lg flex items-center justify-center transition-opacity">
+                                <Maximize2 className="w-3.5 h-3.5 text-white drop-shadow" />
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setQuickUploadItem(item);
+                                setQuickUploadUrl('');
+                              }}
+                              className="p-1 rounded-lg text-slate-500 hover:text-indigo-300 hover:bg-slate-900 border border-transparent hover:border-slate-800 transition-all cursor-pointer"
+                              title="צרף תמונה לשלשה זו"
+                            >
+                              <ImagePlus className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                         <div className="flex items-center gap-1">
                           {isCustom && (
@@ -1320,6 +1406,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                                 setEditAction(a);
                                 setEditObject(o);
                                 setEditScene(s);
+                                setEditImageUrl(item.imageUrl || '');
                               }
                             }}
                             className="p-1 text-slate-400 hover:text-indigo-400 cursor-pointer"
@@ -1426,22 +1513,82 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                               />
                             </div>
                             <textarea
-                              rows={5}
+                              rows={4}
                               value={editScene}
                               onChange={(e) => setEditScene(e.target.value)}
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSaveItem(item.number); }
                               }}
                               placeholder="סצנה מפורטת המשלבת את 3 השדות..."
-                              className="w-full min-h-[120px] bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                              className="w-full min-h-[90px] bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
                             />
+                          </div>
+
+                          {/* Image Attachment in Edit Mode */}
+                          <div className="bg-slate-900/70 border border-pink-500/25 rounded-xl p-2.5 space-y-1.5">
+                            <label className="text-xs text-pink-300 font-bold flex items-center gap-1">
+                              <ImageIcon className="w-3 h-3 text-pink-400" />
+                              <span>תמונה ויזואלית לסצנה:</span>
+                            </label>
+                            <div className="flex items-center gap-2">
+                              {editImageUrl && (
+                                <div className="relative group shrink-0">
+                                  <img
+                                    src={editImageUrl}
+                                    alt="סצנה"
+                                    className="w-10 h-10 object-cover rounded-lg border border-pink-500/40"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditImageUrl('')}
+                                    className="absolute -top-1 -right-1 bg-rose-600 hover:bg-rose-500 text-white rounded-full p-0.5 cursor-pointer shadow"
+                                    title="הסר תמונה"
+                                  >
+                                    <X className="w-2.5 h-2.5" />
+                                  </button>
+                                </div>
+                              )}
+                              <label className="py-1 px-2.5 rounded-lg border border-dashed border-slate-700 hover:border-indigo-400 bg-slate-950 text-xs text-slate-300 hover:text-white flex items-center gap-1 cursor-pointer transition-all">
+                                <Upload className="w-3.5 h-3.5 text-indigo-400" />
+                                <span className="text-[11px] font-medium">{isCompressing ? 'דוחס...' : 'העלה קובץ'}</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  disabled={isCompressing}
+                                  onChange={async (e) => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    try {
+                                      setIsCompressing(true);
+                                      const comp = await compressImageFile(file);
+                                      setEditImageUrl(comp);
+                                    } catch (err) {
+                                      console.error(err);
+                                    } finally {
+                                      setIsCompressing(false);
+                                    }
+                                  }}
+                                />
+                              </label>
+                              <input
+                                type="url"
+                                value={editImageUrl.startsWith('data:') ? '' : editImageUrl}
+                                onChange={(e) => setEditImageUrl(e.target.value)}
+                                placeholder="או הזן URL..."
+                                className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white"
+                              />
+                            </div>
                           </div>
 
                           <div className="flex items-center justify-between gap-1 pt-1">
                             <span className="text-[10px] text-slate-500 font-mono">↵ שמירה</span>
                             <div className="flex gap-1.5">
                               <button
-                                onClick={() => setEditingNum(null)}
+                                onClick={() => {
+                                  setEditingNum(null);
+                                  setEditImageUrl('');
+                                }}
                                 className="text-xs text-slate-400 hover:text-slate-200 px-2.5 py-1 cursor-pointer"
                               >
                                 ביטול
@@ -1470,12 +1617,20 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                             {o}
                           </div>
 
-                          {s && (
+                          {s === 'עודכן החפץ עבור שלשת PAO זו, וצריך ליצור סצנה חדשה' ? (
+                            <div className="text-xs text-amber-300 bg-amber-500/15 border border-amber-500/35 rounded-xl p-2.5 mt-2 flex items-start gap-2">
+                              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                              <div className="flex-1">
+                                <span className="font-bold text-amber-300 block text-xs">החפץ עודכן מ-Major:</span>
+                                <span className="text-[11px] text-amber-200/90">{s}</span>
+                              </div>
+                            </div>
+                          ) : s ? (
                             <div className="text-xs text-amber-200/90 bg-amber-500/10 border border-amber-500/20 rounded-xl p-2.5 mt-2 leading-relaxed">
                               <span className="font-bold text-amber-400 block text-xs mb-0.5">🎬 סצנה שלמה:</span>
                               "{s}"
                             </div>
-                          )}
+                          ) : null}
                         </div>
                       )}
 
@@ -1511,6 +1666,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                   <thead className="bg-slate-900/90 text-slate-300 text-xs font-bold sticky top-0 z-10 border-b border-slate-800">
                     <tr>
                       <th className="py-2.5 px-3">מספר</th>
+                      <th className="py-2.5 px-3 text-center text-pink-400">תמונה</th>
                       <th className="py-2.5 px-3 text-amber-400">👤 אדם</th>
                       <th className="py-2.5 px-3 text-purple-400">⚡ פעולה</th>
                       <th className="py-2.5 px-3 text-teal-400">📦 חפץ</th>
@@ -1550,6 +1706,46 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                                 ({getPAOInitials(item.number).initials})
                               </span>
                             </div>
+                          </td>
+
+                          {/* Image Thumbnail Cell */}
+                          <td className="py-2 px-2 text-center whitespace-nowrap">
+                            {item.imageUrl ? (
+                              <div
+                                onClick={() =>
+                                  setSelectedPreviewImage({
+                                    url: item.imageUrl!,
+                                    title: `שלשת PAO #${item.numberStr}`,
+                                    subtitle: `${p} • ${a} • ${o}`,
+                                    scene: s,
+                                    numberStr: item.numberStr,
+                                  })
+                                }
+                                className="relative inline-block group cursor-pointer"
+                                title="לחץ להגדלה במסך מלא (Light Dismiss)"
+                              >
+                                <img
+                                  src={item.imageUrl}
+                                  alt={item.numberStr}
+                                  className="w-8 h-8 sm:w-9 sm:h-9 object-cover rounded-lg border border-indigo-500/40 shadow-xs group-hover:scale-110 group-hover:border-indigo-400 transition-all"
+                                />
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 rounded-lg flex items-center justify-center transition-opacity">
+                                  <Maximize2 className="w-3 h-3 text-white drop-shadow" />
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setQuickUploadItem(item);
+                                  setQuickUploadUrl('');
+                                }}
+                                className="p-1 rounded text-slate-500 hover:text-indigo-400 hover:bg-slate-900 transition-colors cursor-pointer"
+                                title="צרף תמונה לשלשה זו"
+                              >
+                                <ImagePlus className="w-4 h-4" />
+                              </button>
+                            )}
                           </td>
 
                           {isEditing ? (
@@ -1614,8 +1810,15 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                               <td className="py-2.5 px-3 text-slate-300 whitespace-nowrap">
                                 {o}
                               </td>
-                              <td className="py-2.5 px-3 text-xs text-amber-200/90 max-w-xs truncate" title={s}>
-                                {s || <span className="text-slate-600">-</span>}
+                              <td className="py-2.5 px-3 text-xs max-w-xs" title={s}>
+                                {s === 'עודכן החפץ עבור שלשת PAO זו, וצריך ליצור סצנה חדשה' ? (
+                                  <span className="text-[11px] text-amber-300 bg-amber-500/20 border border-amber-500/40 rounded px-1.5 py-0.5 inline-flex items-center gap-1 font-bold">
+                                    <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
+                                    <span>עודכן חפץ - נדרשת סצנה חדשה</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-amber-200/90 truncate block">{s || <span className="text-slate-600">-</span>}</span>
+                                )}
                               </td>
                             </>
                           )}
@@ -1641,7 +1844,10 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                                     שמור
                                   </button>
                                   <button
-                                    onClick={() => setEditingNum(null)}
+                                    onClick={() => {
+                                      setEditingNum(null);
+                                      setEditImageUrl('');
+                                    }}
                                     className="px-1.5 py-1 text-xs text-slate-400 hover:text-white cursor-pointer"
                                   >
                                     ביטול
@@ -1656,6 +1862,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                                       setEditAction(a);
                                       setEditObject(o);
                                       setEditScene(s);
+                                      setEditImageUrl(item.imageUrl || '');
                                     }}
                                     className="p-1 text-slate-400 hover:text-indigo-400 cursor-pointer"
                                     title="ערוך שורה"
@@ -1666,7 +1873,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                                     <button
                                       onClick={() => onResetPAOItem(item.number)}
                                       className="p-1 text-slate-500 hover:text-rose-400 cursor-pointer"
-                                      title="איפוס לברירת מחדל"
+                                      title="אפס לברירת מחדל"
                                     >
                                       <Undo2 className="w-3.5 h-3.5" />
                                     </button>
@@ -1999,6 +2206,63 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                         />
                       </div>
 
+                      {/* Image Attachment in Quiz Edit */}
+                      <div className="bg-slate-950/80 border border-pink-500/30 rounded-xl p-3 space-y-2">
+                        <label className="text-[11px] text-pink-300 font-bold flex items-center gap-1">
+                          <ImageIcon className="w-3.5 h-3.5 text-pink-400" />
+                          <span>תמונה ויזואלית לסצנה (העלאה מקובץ או קישור URL):</span>
+                        </label>
+                        <div className="flex items-center gap-2">
+                          {quizEditImageUrl && (
+                            <div className="relative group shrink-0">
+                              <img
+                                src={quizEditImageUrl}
+                                alt="תצוגה מקדימה"
+                                className="w-11 h-11 object-cover rounded-lg border border-pink-500/40"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => setQuizEditImageUrl('')}
+                                className="absolute -top-1 -right-1 bg-rose-600 hover:bg-rose-500 text-white rounded-full p-0.5 cursor-pointer shadow"
+                                title="הסר תמונה"
+                              >
+                                <X className="w-2.5 h-2.5" />
+                              </button>
+                            </div>
+                          )}
+                          <label className="py-1.5 px-3 rounded-lg border border-dashed border-indigo-500/50 hover:border-indigo-400 bg-indigo-950/30 text-xs text-indigo-300 hover:text-white flex items-center gap-1.5 cursor-pointer transition-all">
+                            <Upload className="w-3.5 h-3.5 text-indigo-400" />
+                            <span>{isCompressing ? 'דוחס תמונה...' : 'בחר תמונה מהמכשיר'}</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              disabled={isCompressing}
+                              onChange={async (e) => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                try {
+                                  setIsCompressing(true);
+                                  const comp = await compressImageFile(file);
+                                  setQuizEditImageUrl(comp);
+                                } catch (err) {
+                                  console.error(err);
+                                } finally {
+                                  setIsCompressing(false);
+                                }
+                              }}
+                            />
+                          </label>
+                          <input
+                            type="url"
+                            value={quizEditImageUrl.startsWith('data:') ? '' : quizEditImageUrl}
+                            onChange={(e) => setQuizEditImageUrl(e.target.value)}
+                            placeholder="או הדבק כתובת URL לתמונה..."
+                            className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
+                          />
+                        </div>
+                      </div>
+
                       <div className="flex items-center justify-end gap-2 pt-1 border-t border-slate-800">
                         <button
                           type="button"
@@ -2009,7 +2273,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                         </button>
                         <button
                           type="button"
-                          onClick={handleSaveQuizEdit}
+                          onClick={() => handleSaveQuizEdit()}
                           className="text-xs bg-emerald-600 hover:bg-emerald-500 text-white font-bold px-4 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer shadow-md shadow-emerald-900/30 transition-all"
                         >
                           <Save className="w-3.5 h-3.5" />
@@ -2175,11 +2439,129 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                           </div>
                         </div>
 
-                        <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 text-xs text-slate-200">
-                          ⚡ <strong className="text-amber-400">סצנה מנטלית:</strong>{' '}
-                          "{quizMeta.isFullScene
-                            ? `${quizMeta.pItem?.person} ${quizMeta.aItem?.action} ${quizMeta.oItem?.object}`
-                            : `${currentQuizItem?.person} ${currentQuizItem?.action} ${currentQuizItem?.object}`}"
+                        {/* Scene text & Visual Image representation */}
+                        <div className="space-y-2">
+                          <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 text-xs text-slate-200">
+                            ⚡ <strong className="text-amber-400">סצנה מנטלית:</strong>{' '}
+                            "{quizMeta.isFullScene
+                              ? `${quizMeta.pItem?.person} ${quizMeta.aItem?.action} ${quizMeta.oItem?.object}`
+                              : `${currentQuizItem?.person} ${currentQuizItem?.action} ${currentQuizItem?.object}`}"
+                          </div>
+
+                          {/* Visual Scene Image in Quiz Feedback */}
+                          {!quizMeta.isFullScene && currentQuizItem && (
+                            <div>
+                              {currentQuizItem.imageUrl ? (
+                                <div className="bg-gradient-to-r from-pink-500/10 via-purple-500/10 to-indigo-500/10 border border-pink-500/30 rounded-2xl p-3 flex flex-col sm:flex-row items-center gap-3.5 text-right">
+                                  <div
+                                    onClick={() =>
+                                      setSelectedPreviewImage({
+                                        url: currentQuizItem.imageUrl!,
+                                        title: `שלשת PAO #${currentQuizItem.numberStr}`,
+                                        subtitle: `${currentQuizItem.person} • ${currentQuizItem.action} • ${currentQuizItem.object}`,
+                                        scene: currentQuizItem.scene || `${currentQuizItem.person} ${currentQuizItem.action} ${currentQuizItem.object}`,
+                                        numberStr: currentQuizItem.numberStr,
+                                      })
+                                    }
+                                    className="relative group cursor-pointer shrink-0"
+                                    title="לחץ להגדלה במסך מלא (Light Dismiss)"
+                                  >
+                                    <img
+                                      src={currentQuizItem.imageUrl}
+                                      alt={`סצנה ${currentQuizItem.numberStr}`}
+                                      className="w-20 h-20 sm:w-24 sm:h-24 object-cover rounded-xl border-2 border-pink-500/40 shadow-lg group-hover:scale-105 group-hover:border-pink-400 transition-all"
+                                    />
+                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 rounded-xl flex items-center justify-center transition-opacity">
+                                      <Maximize2 className="w-5 h-5 text-white drop-shadow" />
+                                    </div>
+                                    <span className="absolute bottom-1 right-1 text-[9px] bg-black/75 text-pink-200 px-1.5 py-0.5 rounded backdrop-blur-xs font-mono">
+                                      מסך מלא 🔍
+                                    </span>
+                                  </div>
+                                  <div className="flex-1 space-y-1">
+                                    <div className="flex items-center justify-between">
+                                      <span className="text-xs font-bold text-pink-300 flex items-center gap-1.5">
+                                        <ImageIcon className="w-3.5 h-3.5 text-pink-400" />
+                                        <span>הדימוי הויזואלי של הסצנה:</span>
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setQuickUploadItem(currentQuizItem);
+                                          setQuickUploadUrl(currentQuizItem.imageUrl || '');
+                                        }}
+                                        className="text-[10px] text-slate-400 hover:text-pink-300 underline cursor-pointer"
+                                      >
+                                        החלף תמונה
+                                      </button>
+                                    </div>
+                                    <p className="text-xs text-slate-300 italic leading-relaxed">
+                                      "{currentQuizItem.scene || `${currentQuizItem.person} ${currentQuizItem.action} ${currentQuizItem.object}`}"
+                                    </p>
+                                    <span className="text-[10px] text-slate-400 block pt-0.5">
+                                      לחץ על התמונה להצגה במסך מלא ברזולוציה גבוהה
+                                    </span>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="p-2.5 rounded-xl bg-slate-900/50 border border-dashed border-slate-800 flex items-center justify-between text-xs text-slate-400">
+                                  <span className="flex items-center gap-1.5 text-slate-400">
+                                    <ImageIcon className="w-3.5 h-3.5 text-slate-500" />
+                                    <span>עדיין לא צורפה תמונה ויזואלית לסצנה זו</span>
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setQuickUploadItem(currentQuizItem);
+                                      setQuickUploadUrl('');
+                                    }}
+                                    className="text-[11px] text-pink-300 hover:text-white font-semibold bg-pink-500/10 hover:bg-pink-500/20 border border-pink-500/30 px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer transition-all"
+                                  >
+                                    <ImagePlus className="w-3 h-3" />
+                                    <span>+ צרף תמונה עכשיו</span>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Full scene images if applicable */}
+                          {quizMeta.isFullScene && (
+                            <div className="flex flex-wrap items-center gap-3 pt-1">
+                              {[
+                                { item: quizMeta.pItem, role: '👤 P (דמות)' },
+                                { item: quizMeta.aItem, role: '⚡ A (פעולה)' },
+                                { item: quizMeta.oItem, role: '📦 O (חפץ)' },
+                              ].map(
+                                ({ item, role }) =>
+                                  item?.imageUrl && (
+                                    <div
+                                      key={item.number}
+                                      onClick={() =>
+                                        setSelectedPreviewImage({
+                                          url: item.imageUrl!,
+                                          title: `שלשת PAO #${item.numberStr} (${role})`,
+                                          subtitle: `${item.person} • ${item.action} • ${item.object}`,
+                                          scene: item.scene,
+                                          numberStr: item.numberStr,
+                                        })
+                                      }
+                                      className="relative group cursor-pointer"
+                                      title="לחץ להגדלה במסך מלא (Light Dismiss)"
+                                    >
+                                      <img
+                                        src={item.imageUrl}
+                                        alt={item.numberStr}
+                                        className="w-14 h-14 object-cover rounded-xl border border-indigo-500/40 shadow group-hover:scale-105 transition-all"
+                                      />
+                                      <span className="text-[9px] text-slate-300 block text-center pt-0.5">
+                                        #{item.numberStr}
+                                      </span>
+                                    </div>
+                                  )
+                              )}
+                            </div>
+                          )}
                         </div>
 
                         <div className="flex justify-center pt-1">
@@ -2209,6 +2591,197 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
               )}
             </>
           )}
+        </div>
+      )}
+
+      {/* Light-Dismiss Full-Screen Image Modal */}
+      {selectedPreviewImage && (
+        <div
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn"
+          onClick={() => setSelectedPreviewImage(null)}
+        >
+          <div
+            className="relative max-w-4xl w-full bg-slate-900 border border-slate-700 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[92vh] animate-scaleUp"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-950/80">
+              <div className="flex items-center gap-3">
+                {selectedPreviewImage.numberStr && (
+                  <span className="font-mono text-base font-black px-2.5 py-1 rounded-xl bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                    #{selectedPreviewImage.numberStr}
+                  </span>
+                )}
+                <div>
+                  <h3 className="font-bold text-white text-sm sm:text-base">
+                    {selectedPreviewImage.title}
+                  </h3>
+                  {selectedPreviewImage.subtitle && (
+                    <p className="text-xs text-slate-400">
+                      {selectedPreviewImage.subtitle}
+                    </p>
+                  )}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedPreviewImage(null)}
+                className="p-1.5 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                title="סגור (Esc או לחיצה מחוץ לתמונה)"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* High-Resolution Image Viewport */}
+            <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-black/60 min-h-[300px]">
+              <img
+                src={selectedPreviewImage.url}
+                alt={selectedPreviewImage.title}
+                className="max-h-[65vh] w-auto max-w-full object-contain rounded-xl shadow-2xl border border-slate-800"
+              />
+            </div>
+
+            {/* Modal Footer with Scene Details */}
+            {selectedPreviewImage.scene && (
+              <div className="p-4 border-t border-slate-800 bg-slate-950/80 text-right space-y-1">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-amber-300">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <span>סצנה מנטלית:</span>
+                </div>
+                <p className="text-xs text-slate-200 italic leading-relaxed">
+                  "{selectedPreviewImage.scene}"
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Quick Image Upload Modal */}
+      {quickUploadItem && (
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn"
+          onClick={() => setQuickUploadItem(null)}
+        >
+          <div
+            className="max-w-md w-full bg-slate-900 border border-pink-500/40 rounded-3xl p-6 text-right space-y-4 shadow-2xl animate-scaleUp"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <ImageIcon className="w-5 h-5 text-pink-400" />
+                <h3 className="font-bold text-white text-base">
+                  תמונה לסצנת שלשת PAO #{quickUploadItem.numberStr}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQuickUploadItem(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+                title="סגור"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="text-xs text-slate-300 space-y-1 bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+              <div><strong className="text-amber-400">👤 אדם:</strong> {quickUploadItem.person}</div>
+              <div><strong className="text-purple-400">⚡ פעולה:</strong> {quickUploadItem.action}</div>
+              <div><strong className="text-teal-400">📦 חפץ:</strong> {quickUploadItem.object}</div>
+            </div>
+
+            {/* Image Preview & Upload Input */}
+            <div className="space-y-3">
+              {(quickUploadUrl || quickUploadItem.imageUrl) && quickUploadUrl !== 'REMOVE' && (
+                <div className="flex justify-center">
+                  <div className="relative group">
+                    <img
+                      src={quickUploadUrl || quickUploadItem.imageUrl}
+                      alt="סצנה"
+                      className="w-36 h-36 object-cover rounded-2xl border-2 border-pink-500/50 shadow-md"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setQuickUploadUrl('REMOVE')}
+                      className="absolute -top-2 -right-2 bg-rose-600 hover:bg-rose-500 text-white rounded-full p-1 cursor-pointer shadow"
+                      title="הסר תמונה"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <label className="block text-xs font-bold text-pink-300">
+                  העלה קובץ תמונה מהמכשיר:
+                </label>
+                <label className="w-full py-2.5 px-4 rounded-xl border border-dashed border-pink-500/40 hover:border-pink-400 bg-pink-950/20 text-xs text-pink-200 hover:text-white flex items-center justify-center gap-2 cursor-pointer transition-all">
+                  <Upload className="w-4 h-4 text-pink-400" />
+                  <span className="font-semibold">
+                    {isCompressing ? 'דוחס ומכין תמונה...' : 'בחר תמונה מהמחשב או הנייד'}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    disabled={isCompressing}
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      try {
+                        setIsCompressing(true);
+                        const compressed = await compressImageFile(file);
+                        setQuickUploadUrl(compressed);
+                      } catch (err) {
+                        console.error(err);
+                      } finally {
+                        setIsCompressing(false);
+                      }
+                    }}
+                  />
+                </label>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-xs text-slate-400">
+                  או הדבק קישור (URL) לתמונה באינטרנט:
+                </label>
+                <input
+                  type="url"
+                  value={quickUploadUrl === 'REMOVE' ? '' : quickUploadUrl.startsWith('data:') ? '' : quickUploadUrl}
+                  onChange={(e) => setQuickUploadUrl(e.target.value)}
+                  placeholder="https://example.com/image.jpg"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-pink-500 focus:ring-1 focus:ring-pink-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setQuickUploadItem(null)}
+                className="px-3 py-1.5 text-xs text-slate-400 hover:text-white cursor-pointer"
+              >
+                ביטול
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const finalUrl = quickUploadUrl === 'REMOVE' ? '' : quickUploadUrl || quickUploadItem.imageUrl || '';
+                  onUpdatePAOItem(quickUploadItem.number, {
+                    imageUrl: finalUrl,
+                  });
+                  setQuickUploadItem(null);
+                  setQuickUploadUrl('');
+                }}
+                className="px-4 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl cursor-pointer shadow-md transition-all"
+              >
+                שמור תמונה
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

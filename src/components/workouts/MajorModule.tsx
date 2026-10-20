@@ -65,6 +65,7 @@ interface MajorModuleProps {
   onToggleMajorReady?: (number: number, explicitState?: boolean) => void;
   onSetAllMajorReady?: (ready: boolean, numbers?: number[]) => void;
   onNavigateToLogicTab?: () => void;
+  onSyncMajorAndPAOObjects?: (direction: 'majorToPao' | 'paoToMajor') => void;
 }
 
 export const MajorModule: React.FC<MajorModuleProps> = ({
@@ -84,6 +85,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
   onToggleMajorReady,
   onSetAllMajorReady,
   onNavigateToLogicTab,
+  onSyncMajorAndPAOObjects,
 }) => {
   const [subView, setSubView] = useState<'table' | 'digits' | 'quiz'>('table');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -1584,7 +1586,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                               </button>
                               <button
                                 type="button"
-                                onClick={handleSaveQuizEdit}
+                                onClick={() => handleSaveQuizEdit()}
                                 className="text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-4 py-1 rounded-lg cursor-pointer"
                               >
                                 שמור שינויים

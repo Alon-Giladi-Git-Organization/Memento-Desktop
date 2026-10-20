@@ -1134,6 +1134,34 @@ export function useMemoryStore() {
     const docId = numStr.padStart(2, '0');
     setDoc(doc(db, 'major_items', docId), cleanForFirestore(updatedItem), { merge: true })
       .catch((err) => console.error('Error saving major_item to Firestore:', err));
+
+    // Bi-directional sync: if defaultWord was updated for numbers 0-99, sync to PAO object and reset scene!
+    if (updates.defaultWord !== undefined && number >= 0 && number <= 99) {
+      const newWord = updates.defaultWord.trim();
+      const RESET_SCENE_NOTICE = 'עודכן החפץ עבור שלשת PAO זו, וצריך ליצור סצנה חדשה';
+      const paoExisting = paoItems.find((p) => p.number === number);
+      const paoNumStr = (number < 10 ? `0${number}` : `${number}`).padStart(2, '0');
+      const updatedPao: PAOItem = {
+        ...(paoExisting || { number, numberStr: paoNumStr, person: '', action: '', object: '' }),
+        number,
+        numberStr: paoNumStr,
+        object: newWord,
+        scene: RESET_SCENE_NOTICE,
+        updatedAt: now,
+      };
+
+      setPaoItems((prev) => {
+        const filtered = prev.filter((p) => typeof p?.number === 'number' && !isNaN(p.number) && p.numberStr !== 'NaN');
+        const exists = filtered.some((p) => p.number === number);
+        if (exists) {
+          return filtered.map((p) => (p.number === number ? updatedPao : p));
+        }
+        return [...filtered, updatedPao].sort((a, b) => a.number - b.number);
+      });
+
+      setDoc(doc(db, 'pao_items', paoNumStr), cleanForFirestore(updatedPao), { merge: true })
+        .catch((err) => console.error('Error auto-syncing PAO object from Major:', err));
+    }
   };
 
   const toggleMajorReady = (number: number, explicitState?: boolean) => {
@@ -1179,6 +1207,24 @@ export function useMemoryStore() {
     const docId = String(number).padStart(2, '0');
     setDoc(doc(db, 'major_items', docId), cleanForFirestore(updated), { merge: true })
       .catch((err) => console.error('Error resetting major_item:', err));
+
+    // Also sync to PAO object and reset scene
+    if (number >= 0 && number <= 99 && original.defaultWord) {
+      const RESET_SCENE_NOTICE = 'עודכן החפץ עבור שלשת PAO זו, וצריך ליצור סצנה חדשה';
+      const paoExisting = paoItems.find((p) => p.number === number);
+      const paoNumStr = (number < 10 ? `0${number}` : `${number}`).padStart(2, '0');
+      const updatedPao: PAOItem = {
+        ...(paoExisting || { number, numberStr: paoNumStr, person: '', action: '', object: '' }),
+        number,
+        numberStr: paoNumStr,
+        object: original.defaultWord,
+        scene: RESET_SCENE_NOTICE,
+        updatedAt: now,
+      };
+      setPaoItems((prev) => prev.map((p) => (p.number === number ? updatedPao : p)));
+      setDoc(doc(db, 'pao_items', paoNumStr), cleanForFirestore(updatedPao), { merge: true })
+        .catch((err) => console.error('Error syncing reset Major to PAO:', err));
+    }
   };
 
   const updatePAOItem = (
@@ -1188,6 +1234,7 @@ export function useMemoryStore() {
       action?: string;
       object?: string;
       scene?: string;
+      imageUrl?: string;
       is_ready_for_practice?: boolean;
     }
   ) => {
@@ -1199,9 +1246,27 @@ export function useMemoryStore() {
     const now = Date.now();
     const existing = paoItems.find((p) => p.number === num);
     const numStr = (num < 10 ? `0${num}` : `${num}`).padStart(2, '0');
+    const RESET_SCENE_NOTICE = 'עודכן החפץ עבור שלשת PAO זו, וצריך ליצור סצנה חדשה';
+
+    let finalScene = updates.scene !== undefined ? updates.scene : existing?.scene;
+    const objectChanged =
+      updates.object !== undefined && updates.object.trim() !== (existing?.object || '').trim();
+
+    // If object was updated/changed, reset scene if user didn't enter a new custom scene
+    if (objectChanged) {
+      const isNewSceneProvided =
+        updates.scene !== undefined &&
+        updates.scene.trim() !== '' &&
+        updates.scene.trim() !== (existing?.scene || '').trim();
+      if (!isNewSceneProvided) {
+        finalScene = RESET_SCENE_NOTICE;
+      }
+    }
+
     const updatedItem: PAOItem = {
       ...(existing || { number: num, numberStr: numStr, person: '', action: '', object: '' }),
       ...updates,
+      scene: finalScene,
       number: num,
       numberStr: numStr,
       updatedAt: now,
@@ -1216,13 +1281,37 @@ export function useMemoryStore() {
       return [...filtered, updatedItem].sort((a, b) => a.number - b.number);
     });
 
-    if (updates.person || updates.action || updates.object || updates.scene) {
+    if (updates.person || updates.action || updates.object || updates.scene || updates.imageUrl) {
       earnPoints(15, 'התאמת שלשת PAO אישית');
     }
 
     const docId = numStr;
     setDoc(doc(db, 'pao_items', docId), cleanForFirestore(updatedItem), { merge: true })
       .catch((err) => console.error('Error saving pao_item to Firestore:', err));
+
+    // Bi-directional sync: If object changed, update MAJOR defaultWord for this number!
+    if (objectChanged && updates.object !== undefined && num >= 0 && num <= 99) {
+      const newObjWord = updates.object.trim();
+      const majorExisting = majorItems.find((m) => m.number === num);
+      const updatedMajor: MajorItem = {
+        ...(majorExisting || { number: num, numberStr: numStr, consonants: '', defaultWord: '', imageHint: '' }),
+        number: num,
+        numberStr: numStr,
+        defaultWord: newObjWord,
+        updatedAt: now,
+      };
+
+      setMajorItems((prev) => {
+        const exists = prev.some((m) => m.number === num);
+        if (exists) {
+          return prev.map((m) => (m.number === num ? updatedMajor : m));
+        }
+        return [...prev, updatedMajor].sort((a, b) => a.number - b.number);
+      });
+
+      setDoc(doc(db, 'major_items', numStr), cleanForFirestore(updatedMajor), { merge: true })
+        .catch((err) => console.error('Error auto-syncing Major defaultWord from PAO:', err));
+    }
   };
 
   const togglePAOReady = (number: number, explicitState?: boolean) => {
@@ -1347,6 +1436,29 @@ export function useMemoryStore() {
       setDoc(doc(db, 'major_items', item.numberStr.padStart(2, '0')), cleanForFirestore(withTime), { merge: true })
         .catch((err) => console.error('Error adding major_item:', err));
     }
+
+    // Sync defaultWord to PAO object and reset scene
+    if (item.defaultWord && item.number >= 0 && item.number <= 99) {
+      const RESET_SCENE_NOTICE = 'עודכן החפץ עבור שלשת PAO זו, וצריך ליצור סצנה חדשה';
+      const num = item.number;
+      const numStr = (num < 10 ? `0${num}` : `${num}`).padStart(2, '0');
+      const paoExisting = paoItems.find((p) => p.number === num);
+      const updatedPao: PAOItem = {
+        ...(paoExisting || { number: num, numberStr: numStr, person: '', action: '', object: '' }),
+        number: num,
+        numberStr: numStr,
+        object: item.defaultWord.trim(),
+        scene: RESET_SCENE_NOTICE,
+        updatedAt: now,
+      };
+      setPaoItems((prev) => {
+        const exists = prev.some((x) => x.number === num);
+        if (exists) return prev.map((x) => (x.number === num ? updatedPao : x));
+        return [...prev, updatedPao].sort((a, b) => a.number - b.number);
+      });
+      setDoc(doc(db, 'pao_items', numStr), cleanForFirestore(updatedPao), { merge: true })
+        .catch((err) => console.error('Error syncing added Major to PAO:', err));
+    }
   };
 
   const deleteMajorItem = (number: number) => {
@@ -1379,6 +1491,23 @@ export function useMemoryStore() {
       setDoc(doc(db, 'pao_items', numStr), cleanForFirestore(withTime), { merge: true })
         .catch((err) => console.error('Error adding pao_item:', err));
     }
+
+    // Sync object to Major
+    if (item.object && num >= 0 && num <= 99) {
+      const majorExisting = majorItems.find((m) => m.number === num);
+      const updatedMajor: MajorItem = {
+        ...(majorExisting || { number: num, numberStr: numStr, consonants: '', defaultWord: '', imageHint: '' }),
+        defaultWord: item.object.trim(),
+        updatedAt: now,
+      };
+      setMajorItems((prev) => {
+        const exists = prev.some((x) => x.number === num);
+        if (exists) return prev.map((x) => (x.number === num ? updatedMajor : x));
+        return [...prev, updatedMajor].sort((a, b) => a.number - b.number);
+      });
+      setDoc(doc(db, 'major_items', numStr), cleanForFirestore(updatedMajor), { merge: true })
+        .catch((err) => console.error('Error syncing added PAO to Major:', err));
+    }
   };
 
   const deletePAOItem = (number: number) => {
@@ -1399,11 +1528,72 @@ export function useMemoryStore() {
     if (!original) return;
     const numStr = (num < 10 ? `0${num}` : `${num}`).padStart(2, '0');
     const now = Date.now();
-    const withTime = { ...original, number: num, numberStr: numStr, updatedAt: now };
+    const RESET_SCENE_NOTICE = 'עודכן החפץ עבור שלשת PAO זו, וצריך ליצור סצנה חדשה';
+    const withTime = { ...original, number: num, numberStr: numStr, scene: RESET_SCENE_NOTICE, updatedAt: now };
     setPaoItems((prev) => prev.map((p) => (p.number === num ? withTime : p)));
     if (isNetworkOnline()) {
       setDoc(doc(db, 'pao_items', numStr), cleanForFirestore(withTime), { merge: true })
         .catch((err) => console.error('Error resetting pao_item:', err));
+    }
+
+    // Also sync object to Major defaultWord
+    if (original.object && num >= 0 && num <= 99) {
+      const majorExisting = majorItems.find((m) => m.number === num);
+      const updatedMajor: MajorItem = {
+        ...(majorExisting || { number: num, numberStr: numStr, consonants: '', defaultWord: '', imageHint: '' }),
+        number: num,
+        numberStr: numStr,
+        defaultWord: original.object,
+        updatedAt: now,
+      };
+      setMajorItems((prev) => prev.map((m) => (m.number === num ? updatedMajor : m)));
+      setDoc(doc(db, 'major_items', numStr), cleanForFirestore(updatedMajor), { merge: true })
+        .catch((err) => console.error('Error syncing reset PAO object to Major:', err));
+    }
+  };
+
+  const syncMajorAndPAOObjects = (direction: 'majorToPao' | 'paoToMajor') => {
+    const now = Date.now();
+    const RESET_SCENE_NOTICE = 'עודכן החפץ עבור שלשת PAO זו, וצריך ליצור סצנה חדשה';
+
+    if (direction === 'majorToPao') {
+      setPaoItems((prev) => {
+        return prev.map((p) => {
+          const m = majorItems.find((item) => item.number === p.number);
+          if (m && m.defaultWord) {
+            const hasChanged = p.object !== m.defaultWord;
+            const updatedPao: PAOItem = {
+              ...p,
+              object: m.defaultWord,
+              scene: hasChanged ? RESET_SCENE_NOTICE : p.scene,
+              updatedAt: now,
+            };
+            const docId = p.numberStr.padStart(2, '0');
+            setDoc(doc(db, 'pao_items', docId), cleanForFirestore(updatedPao), { merge: true }).catch(() => {});
+            return updatedPao;
+          }
+          return p;
+        });
+      });
+      earnPoints(20, 'סנכרון חפצים מ-Major ל-PAO ואיפוס סצנות');
+    } else {
+      setMajorItems((prev) => {
+        return prev.map((m) => {
+          const p = paoItems.find((item) => item.number === m.number);
+          if (p && p.object) {
+            const updatedMajor: MajorItem = {
+              ...m,
+              defaultWord: p.object,
+              updatedAt: now,
+            };
+            const docId = m.numberStr.padStart(2, '0');
+            setDoc(doc(db, 'major_items', docId), cleanForFirestore(updatedMajor), { merge: true }).catch(() => {});
+            return updatedMajor;
+          }
+          return m;
+        });
+      });
+      earnPoints(20, 'סנכרון חפצים מ-PAO ל-Major');
     }
   };
 
@@ -1835,6 +2025,7 @@ export function useMemoryStore() {
     resetPAOItem,
     togglePAOReady,
     setAllPAOReady,
+    syncMajorAndPAOObjects,
     addBodyPeg,
     updateBodyPeg,
     deleteBodyPeg,

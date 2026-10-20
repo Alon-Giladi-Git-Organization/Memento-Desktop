@@ -18,6 +18,7 @@ export interface PAOItem {
   action: string; // Kinetic action
   object: string; // Passive distinctive object
   scene?: string; // 4th field: "סצנה שלמה" (complete mnemonic scene)
+  imageUrl?: string; // Visual scene image thumbnail / full resolution
   is_ready_for_practice?: boolean; // Flag: ready for testing & practice
   updatedAt?: number;
 }

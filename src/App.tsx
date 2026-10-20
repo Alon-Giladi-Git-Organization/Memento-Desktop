@@ -106,6 +106,7 @@ export default function App() {
     resetPAOItem,
     togglePAOReady,
     setAllPAOReady,
+    syncMajorAndPAOObjects,
     addShapePeg,
     updateShapePeg,
     deleteShapePeg,
@@ -207,6 +208,7 @@ export default function App() {
             onResetPAOItem={resetPAOItem}
             onTogglePAOReady={togglePAOReady}
             onSetAllPAOReady={setAllPAOReady}
+            onSyncMajorAndPAOObjects={syncMajorAndPAOObjects}
             onAddShapePeg={addShapePeg}
             onUpdateShapePeg={updateShapePeg}
             onDeleteShapePeg={deleteShapePeg}
