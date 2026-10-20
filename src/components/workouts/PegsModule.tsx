@@ -18,6 +18,13 @@ import confetti from 'canvas-confetti';
 import { PegShapeItem, BodyPegItem } from '../../types/memory';
 import { AIFieldGeneratorButton } from '../AIFieldGeneratorButton';
 import { isHebrewFuzzyMatch, isHebrewMultiFieldSearchMatch } from '../../lib/fuzzyMatch';
+import {
+  getCurrentOrInitialDeckItem,
+  advanceToNextDeckItem,
+  resetQuizDeck,
+  DeckProgress,
+} from '../../lib/quizDeckManager';
+import { QuizDeckProgressBar } from '../QuizDeckProgressBar';
 
 interface PegsModuleProps {
   shapePegs: PegShapeItem[];
@@ -115,17 +122,55 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
   const [newBodyObj, setNewBodyObj] = useState('');
   const [newBodyTip, setNewBodyTip] = useState('');
 
-  // Quiz state
+  // Quiz state (Strictly via non-repeating permutation cycle)
+  const [deckProgress, setDeckProgress] = useState<DeckProgress | null>(null);
   const [quizTarget, setQuizTarget] = useState<'shape' | 'body'>('shape');
   const [quizIndex, setQuizIndex] = useState(0);
   const [quizGuess, setQuizGuess] = useState('');
   const [quizFeedback, setQuizFeedback] = useState<'idle' | 'correct' | 'incorrect'>('idle');
   const [revealQuiz, setRevealQuiz] = useState(false);
 
+  // Peek on mount or when target changes
+  React.useEffect(() => {
+    if (quizTarget === 'shape') {
+      if (shapePegs.length > 0) {
+        const { item, progress } = getCurrentOrInitialDeckItem('workout_pegs_shape', shapePegs, (p) => p.number);
+        if (item) {
+          const idx = shapePegs.findIndex((p) => p.number === item.number);
+          if (idx >= 0) setQuizIndex(idx);
+        }
+        setDeckProgress(progress);
+      }
+    } else {
+      if (bodyPegs.length > 0) {
+        const { item, progress } = getCurrentOrInitialDeckItem('workout_pegs_body', bodyPegs, (p) => p.index);
+        if (item) {
+          const idx = bodyPegs.findIndex((p) => p.index === item.index);
+          if (idx >= 0) setQuizIndex(idx);
+        }
+        setDeckProgress(progress);
+      }
+    }
+  }, [quizTarget, shapePegs.length, bodyPegs.length]);
+
   const handleNextQuizQuestion = () => {
-    const listLength = quizTarget === 'shape' ? shapePegs.length : bodyPegs.length;
-    if (listLength === 0) return;
-    setQuizIndex(Math.floor(Math.random() * listLength));
+    if (quizTarget === 'shape') {
+      if (shapePegs.length === 0) return;
+      const { item, progress } = advanceToNextDeckItem('workout_pegs_shape', shapePegs, (p) => p.number);
+      if (item) {
+        const idx = shapePegs.findIndex((p) => p.number === item.number);
+        if (idx >= 0) setQuizIndex(idx);
+      }
+      setDeckProgress(progress);
+    } else {
+      if (bodyPegs.length === 0) return;
+      const { item, progress } = advanceToNextDeckItem('workout_pegs_body', bodyPegs, (p) => p.index);
+      if (item) {
+        const idx = bodyPegs.findIndex((p) => p.index === item.index);
+        if (idx >= 0) setQuizIndex(idx);
+      }
+      setDeckProgress(progress);
+    }
     setQuizGuess('');
     setQuizFeedback('idle');
     setRevealQuiz(false);
@@ -1049,8 +1094,20 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
               className="flex items-center gap-1.5 text-xs text-yellow-400 hover:text-yellow-300 bg-slate-800 px-3.5 py-1.5 rounded-xl cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span>מתלה אקראי חדש</span>
+              <span>שאלה הבאה בסבב</span>
             </button>
+          </div>
+
+          {/* Non-repeating Quiz Deck Progress Bar */}
+          <div className="max-w-xl mx-auto">
+            <QuizDeckProgressBar
+              progress={deckProgress}
+              onResetDeck={() => {
+                resetQuizDeck(quizTarget === 'shape' ? 'workout_pegs_shape' : 'workout_pegs_body');
+                handleNextQuizQuestion();
+              }}
+              deckTitle={quizTarget === 'shape' ? 'מתלי צורות (0-9)' : 'מתלי גוף (1-20)'}
+            />
           </div>
 
           <div className="max-w-xl mx-auto space-y-6 text-center">

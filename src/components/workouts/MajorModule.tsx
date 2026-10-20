@@ -20,14 +20,28 @@ import {
   Check,
   ArrowLeft,
   ListFilter,
+  AlertTriangle,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { MajorItem } from '../../types/memory';
 import { isHebrewFuzzyMatch, isHebrewMultiFieldSearchMatch } from '../../lib/fuzzyMatch';
 import { AIFieldGeneratorButton } from '../AIFieldGeneratorButton';
+import {
+  validateHebrewLogic,
+  checkMajorDuplicates,
+  DEFAULT_CONNECTING_LETTERS,
+} from '../../lib/hebrewLogicValidator';
+import {
+  getCurrentOrInitialDeckItem,
+  advanceToNextDeckItem,
+  resetQuizDeck,
+  DeckProgress,
+} from '../../lib/quizDeckManager';
+import { QuizDeckProgressBar } from '../QuizDeckProgressBar';
 
 interface MajorModuleProps {
   majorDigits: MajorItem[];
+  connectingLetters?: string[];
   majorItems: MajorItem[];
   onEarnPoints: (amount: number, reason?: string) => void;
   onUnlockBadge: (badge: string) => void;
@@ -50,10 +64,12 @@ interface MajorModuleProps {
   onOpenSummary?: (techniqueId: string) => void;
   onToggleMajorReady?: (number: number, explicitState?: boolean) => void;
   onSetAllMajorReady?: (ready: boolean, numbers?: number[]) => void;
+  onNavigateToLogicTab?: () => void;
 }
 
 export const MajorModule: React.FC<MajorModuleProps> = ({
   majorDigits,
+  connectingLetters = DEFAULT_CONNECTING_LETTERS,
   majorItems,
   onEarnPoints,
   onUnlockBadge,
@@ -67,6 +83,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
   onOpenSummary,
   onToggleMajorReady,
   onSetAllMajorReady,
+  onNavigateToLogicTab,
 }) => {
   const [subView, setSubView] = useState<'table' | 'digits' | 'quiz'>('table');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
@@ -90,6 +107,15 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
   const [editDigitWord, setEditDigitWord] = useState('');
   const [editDigitHint, setEditDigitHint] = useState('');
 
+  // Validation alert modal state
+  const [validationModal, setValidationModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    details?: string;
+    onConfirmBypass?: () => void;
+  } | null>(null);
+
   const handleSaveDigit = (digitNum: number) => {
     onUpdateMajorDigit(
       digitNum,
@@ -101,13 +127,43 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
     onEarnPoints(10, `עדכון לוגיקת ספרה ${digitNum}`);
   };
 
-  const handleSaveItem = (itemNum: number) => {
+  const handleSaveItem = (itemNum: number, bypassValidation = false) => {
+    const wordToSave = editWord.trim();
+    if (!bypassValidation && wordToSave) {
+      // 1. Check duplicate
+      const dup = checkMajorDuplicates(majorItems, itemNum, wordToSave);
+      if (dup.hasDuplicate) {
+        setValidationModal({
+          isOpen: true,
+          title: 'הודעת ולידציה: ערך כפול',
+          message: dup.message,
+          details: `המילה "${wordToSave}" כבר מוגדרת עבור מספר אחר (${dup.conflictingNumberStr}). מומלץ שלכל מספר תהיה אסוציאציה בלעדית.`,
+          onConfirmBypass: () => handleSaveItem(itemNum, true),
+        });
+        return;
+      }
+
+      // 2. Check logic conformity
+      const logicRes = validateHebrewLogic(wordToSave, itemNum, majorDigits, connectingLetters, 'major');
+      if (!logicRes.isValid) {
+        setValidationModal({
+          isOpen: true,
+          title: 'הודעת ולידציה: אי-התאמה לחוקי הלוגיקה',
+          message: logicRes.message,
+          details: logicRes.details || `המילה "${wordToSave}" אינה תואמת לעיצורים שהוגדרו עבור ספרה ${itemNum}.`,
+          onConfirmBypass: () => handleSaveItem(itemNum, true),
+        });
+        return;
+      }
+    }
+
     onUpdateMajorItem(itemNum, {
-      defaultWord: editWord.trim(),
+      defaultWord: wordToSave,
       consonants: editConsonants.trim(),
       imageHint: editHint.trim(),
     });
     setEditingNum(null);
+    setValidationModal(null);
   };
 
   const handleToggleItemReady = (itemNumber: number, currentState?: boolean) => {
@@ -126,8 +182,9 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
   const [newConsonants, setNewConsonants] = useState('');
   const [newHint, setNewHint] = useState('');
 
-  // Quiz State (Strictly over readyItems - initialized to random ready index)
-  const [quizIndex, setQuizIndex] = useState(() => Math.floor(Math.random() * 100));
+  // Quiz State (Strictly over readyItems via non-repeating permutation cycle)
+  const [deckProgress, setDeckProgress] = useState<DeckProgress | null>(null);
+  const [quizIndex, setQuizIndex] = useState(0);
   const [userGuess, setUserGuess] = useState('');
   const [quizFeedback, setQuizFeedback] = useState<'idle' | 'correct' | 'incorrect'>('idle');
   const [revealHint, setRevealHint] = useState(false);
@@ -136,10 +193,15 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
   const [quizEditConsonants, setQuizEditConsonants] = useState('');
   const [quizEditHint, setQuizEditHint] = useState('');
 
-  // Randomize quiz question when switching to quiz subview
+  // Peek/Mount quiz question when switching to quiz subview without advancing
   useEffect(() => {
     if (subView === 'quiz' && readyItems.length > 0) {
-      setQuizIndex(Math.floor(Math.random() * readyItems.length));
+      const { item, progress } = getCurrentOrInitialDeckItem('workout_major', readyItems, (i) => i.number);
+      if (item) {
+        const idx = readyItems.findIndex((x) => x.number === item.number);
+        if (idx >= 0) setQuizIndex(idx);
+      }
+      setDeckProgress(progress);
       setUserGuess('');
       setQuizFeedback('idle');
       setRevealHint(false);
@@ -170,8 +232,12 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
 
   const handleNextQuestion = () => {
     if (readyItems.length === 0) return;
-    const nextIdx = Math.floor(Math.random() * readyItems.length);
-    setQuizIndex(nextIdx);
+    const { item, progress } = advanceToNextDeckItem('workout_major', readyItems, (i) => i.number);
+    if (item) {
+      const idx = readyItems.findIndex((x) => x.number === item.number);
+      if (idx >= 0) setQuizIndex(idx);
+    }
+    setDeckProgress(progress);
     setUserGuess('');
     setQuizFeedback('idle');
     setRevealHint(false);
@@ -196,31 +262,87 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
     }
   };
 
-  const handleSaveQuizEdit = () => {
+  const handleSaveQuizEdit = (bypass = false) => {
     if (!currentQuizItem) return;
+    const wordToSave = quizEditWord.trim();
+
+    if (!bypass && wordToSave) {
+      const dup = checkMajorDuplicates(majorItems, currentQuizItem.number, wordToSave);
+      if (dup.hasDuplicate) {
+        setValidationModal({
+          isOpen: true,
+          title: 'הודעת ולידציה: ערך כפול',
+          message: dup.message,
+          details: `המילה "${wordToSave}" כבר מוגדרת עבור מספר ${dup.conflictingNumberStr}.`,
+          onConfirmBypass: () => handleSaveQuizEdit(true),
+        });
+        return;
+      }
+
+      const logicRes = validateHebrewLogic(wordToSave, currentQuizItem.number, majorDigits, connectingLetters, 'major');
+      if (!logicRes.isValid) {
+        setValidationModal({
+          isOpen: true,
+          title: 'הודעת ולידציה: אי-התאמה לחוקי הלוגיקה',
+          message: logicRes.message,
+          details: logicRes.details,
+          onConfirmBypass: () => handleSaveQuizEdit(true),
+        });
+        return;
+      }
+    }
+
     onUpdateMajorItem(currentQuizItem.number, {
-      defaultWord: quizEditWord.trim(),
+      defaultWord: wordToSave,
       consonants: quizEditConsonants.trim(),
       imageHint: quizEditHint.trim(),
     });
     setIsQuizEditing(false);
+    setValidationModal(null);
     onEarnPoints(10, 'עדכון אסוציאציה מתוך מבחן השליפה');
   };
 
-  const handleAddNewItem = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAddNewItem = (e?: React.FormEvent, bypass = false) => {
+    if (e && e.preventDefault) e.preventDefault();
     const num = parseInt(newNumber, 10);
     if (isNaN(num)) return;
     const numStr = num < 10 && num >= 0 ? `0${num}` : `${num}`;
+    const wordToSave = newWord.trim();
+
+    if (!bypass && wordToSave) {
+      const dup = checkMajorDuplicates(majorItems, num, wordToSave);
+      if (dup.hasDuplicate) {
+        setValidationModal({
+          isOpen: true,
+          title: 'הודעת ולידציה: ערך כפול',
+          message: dup.message,
+          details: `המילה "${wordToSave}" כבר מוגדרת עבור מספר ${dup.conflictingNumberStr}.`,
+          onConfirmBypass: () => handleAddNewItem(undefined, true),
+        });
+        return;
+      }
+
+      const logicRes = validateHebrewLogic(wordToSave, num, majorDigits, connectingLetters, 'major');
+      if (!logicRes.isValid) {
+        setValidationModal({
+          isOpen: true,
+          title: 'הודעת ולידציה: אי-התאמה לחוקי הלוגיקה',
+          message: logicRes.message,
+          details: logicRes.details,
+          onConfirmBypass: () => handleAddNewItem(undefined, true),
+        });
+        return;
+      }
+    }
 
     if (onAddMajorItem) {
       onAddMajorItem({
         number: num,
         numberStr: numStr,
-        defaultWord: newWord.trim(),
+        defaultWord: wordToSave,
         consonants: newConsonants.trim(),
         imageHint: newHint.trim(),
-        is_ready_for_practice: true, // Newly manually created item defaults to ready for practice
+        is_ready_for_practice: true,
       });
     }
 
@@ -229,6 +351,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
     setNewConsonants('');
     setNewHint('');
     setShowAddForm(false);
+    setValidationModal(null);
   };
 
   const filteredItems = majorItems.filter((item) => {
@@ -878,6 +1001,12 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                                 type="text"
                                 value={editConsonants}
                                 onChange={(e) => setEditConsonants(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleSaveItem(item.number);
+                                  }
+                                }}
                                 className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-amber-300"
                               />
                             ) : (
@@ -890,6 +1019,12 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                                 type="text"
                                 value={editWord}
                                 onChange={(e) => setEditWord(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleSaveItem(item.number);
+                                  }
+                                }}
                                 className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-sm text-white"
                               />
                             ) : (
@@ -903,6 +1038,12 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                                   type="text"
                                   value={editHint}
                                   onChange={(e) => setEditHint(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      handleSaveItem(item.number);
+                                    }
+                                  }}
                                   className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200"
                                 />
                                 <div className="flex gap-1">
@@ -1110,6 +1251,12 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                             type="text"
                             value={editDigitConsonants}
                             onChange={(e) => setEditDigitConsonants(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleSaveDigit(d.number);
+                              }
+                            }}
                             className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-amber-300"
                           />
                         </div>
@@ -1119,6 +1266,12 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                             type="text"
                             value={editDigitWord}
                             onChange={(e) => setEditDigitWord(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleSaveDigit(d.number);
+                              }
+                            }}
                             className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white"
                           />
                         </div>
@@ -1128,6 +1281,12 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                             type="text"
                             value={editDigitHint}
                             onChange={(e) => setEditDigitHint(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                handleSaveDigit(d.number);
+                              }
+                            }}
                             className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-300"
                           />
                         </div>
@@ -1225,8 +1384,20 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                   className="flex items-center gap-1.5 text-xs text-amber-400 hover:text-amber-300 bg-slate-800 px-3.5 py-1.5 rounded-xl cursor-pointer hover:bg-slate-700 transition-colors"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  <span>מספר אקראי חדש</span>
+                  <span>שאלה הבאה בסבב</span>
                 </button>
+              </div>
+
+              {/* Non-repeating Quiz Deck Progress Bar */}
+              <div className="max-w-xl mx-auto">
+                <QuizDeckProgressBar
+                  progress={deckProgress}
+                  onResetDeck={() => {
+                    resetQuizDeck('workout_major');
+                    handleNextQuestion();
+                  }}
+                  deckTitle="שיטת Major (00-99)"
+                />
               </div>
 
               {currentQuizItem && (
@@ -1369,6 +1540,12 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                                 type="text"
                                 value={quizEditWord}
                                 onChange={(e) => setQuizEditWord(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleSaveQuizEdit();
+                                  }
+                                }}
                                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white"
                               />
                             </div>
@@ -1388,6 +1565,12 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                                 type="text"
                                 value={quizEditHint}
                                 onChange={(e) => setQuizEditHint(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleSaveQuizEdit();
+                                  }
+                                }}
                                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white"
                               />
                             </div>
@@ -1435,6 +1618,52 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
               )}
             </>
           )}
+        </div>
+      )}
+
+      {/* Validation Alert Modal */}
+      {validationModal && validationModal.isOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4" dir="rtl">
+          <div className="bg-slate-900 border-2 border-amber-500/80 rounded-3xl max-w-md w-full p-6 text-right space-y-4 shadow-2xl animate-in fade-in zoom-in-95">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-6 h-6 text-amber-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-white">
+                  {validationModal.title}
+                </h3>
+                <p className="text-xs text-amber-300 font-bold mt-0.5">
+                  {validationModal.message}
+                </p>
+              </div>
+            </div>
+
+            {validationModal.details && (
+              <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 text-xs text-slate-300 leading-relaxed">
+                {validationModal.details}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-800">
+              {validationModal.onConfirmBypass && (
+                <button
+                  type="button"
+                  onClick={validationModal.onConfirmBypass}
+                  className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-3 py-2 rounded-xl transition-all cursor-pointer"
+                >
+                  שמור בכל זאת כמקרה חריג
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setValidationModal(null)}
+                className="text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-4 py-2 rounded-xl transition-all cursor-pointer shadow-md"
+              >
+                חזור ותקן ערך
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

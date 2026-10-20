@@ -20,12 +20,26 @@ import {
   Zap,
   Package,
   GripVertical,
+  AlertTriangle,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { PAOItem, MajorItem } from '../../types/memory';
 import { getPAOInitials } from '../../lib/paoInitials';
 import { isHebrewFuzzyMatch, isHebrewSearchMatch, isHebrewMultiFieldSearchMatch } from '../../lib/fuzzyMatch';
 import { AIFieldGeneratorButton } from '../AIFieldGeneratorButton';
+import {
+  validateHebrewLogic,
+  checkPAODuplicates,
+  DEFAULT_CONNECTING_LETTERS,
+} from '../../lib/hebrewLogicValidator';
+import {
+  getCurrentOrInitialDeckItem,
+  advanceToNextDeckItem,
+  getNextPAOTriplet,
+  resetQuizDeck,
+  DeckProgress,
+} from '../../lib/quizDeckManager';
+import { QuizDeckProgressBar } from '../QuizDeckProgressBar';
 
 export type PAOColumnKey = 'number' | 'person' | 'action' | 'object' | 'scene' | 'ready' | 'actions';
 
@@ -50,6 +64,7 @@ export const DEFAULT_PAO_COLUMNS: PAOColumnDef[] = [
 interface PAOModuleProps {
   paoItems: PAOItem[];
   majorDigits?: MajorItem[];
+  connectingLetters?: string[];
   onEarnPoints: (amount: number, reason?: string) => void;
   onUnlockBadge: (badge: string) => void;
   onAddPAOItem?: (item: PAOItem) => void;
@@ -62,11 +77,13 @@ interface PAOModuleProps {
   onOpenSummary?: (techniqueId: string) => void;
   onTogglePAOReady?: (number: number, explicitState?: boolean) => void;
   onSetAllPAOReady?: (ready: boolean, numbers?: number[]) => void;
+  onNavigateToLogicTab?: () => void;
 }
 
 export const PAOModule: React.FC<PAOModuleProps> = ({
   paoItems,
   majorDigits,
+  connectingLetters = DEFAULT_CONNECTING_LETTERS,
   onEarnPoints,
   onUnlockBadge,
   onAddPAOItem,
@@ -263,6 +280,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
   type PAOQuizFilter = 'all' | 'fullScene' | 'person' | 'action' | 'object' | 'reverse';
 
   // PAO Quiz state (Strictly over readyPaoItems)
+  const [deckProgress, setDeckProgress] = useState<DeckProgress | null>(null);
   const [quizIndex, setQuizIndex] = useState(0);
   const [quizFilter, setQuizFilter] = useState<PAOQuizFilter>('all');
   const [questionType, setQuestionType] = useState<PAOQuizQuestionType>('numberToPerson');
@@ -288,16 +306,76 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
   // Jump to specific number in registry
   const [highlightedNum, setHighlightedNum] = useState<number | null>(null);
 
+  // Validation Alert Modal
+  const [validationModal, setValidationModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    details?: string;
+    onConfirmBypass?: () => void;
+  } | null>(null);
+
   // --- Core Save Logic (Lifting State Up) ---
-  const handleSaveItem = (itemNum: number) => {
+  const handleSaveItem = (itemNum: number, bypassValidation = false) => {
     if (typeof itemNum !== 'number' || isNaN(itemNum)) return;
+    const pTrim = editPerson.trim();
+    const aTrim = editAction.trim();
+    const oTrim = editObject.trim();
+    const sTrim = editScene.trim();
+
+    if (!bypassValidation) {
+      // 1. Check duplicate person / action / object
+      const dup = checkPAODuplicates(paoItems, itemNum, { person: pTrim, action: aTrim, object: oTrim });
+      if (dup.hasDuplicate) {
+        setValidationModal({
+          isOpen: true,
+          title: 'הודעת ולידציה: ערך כפול',
+          message: dup.message, // e.g. "הפעולה הזו כבר מופיעה (עבור מספר 23)"
+          details: `במודולת PAO לכל מספר רצוי לייחד פעולה, דמות וחפץ בלעדיים כדי למנוע טעויות בשליפת רצפים.`,
+          onConfirmBypass: () => handleSaveItem(itemNum, true),
+        });
+        return;
+      }
+
+      // 2. Check logic conformity for person
+      if (pTrim && majorDigits) {
+        const pLogic = validateHebrewLogic(pTrim, itemNum, majorDigits, connectingLetters, 'pao');
+        if (!pLogic.isValid) {
+          setValidationModal({
+            isOpen: true,
+            title: 'הודעת ולידציה: אי-התאמה לחוקי הלוגיקה',
+            message: pLogic.message, // "הדמות/החפץ אינו עונה לדרישות הלוגיקה הנוכחית"
+            details: `הדמות "${pTrim}" אינה עונה לכללי הלוגיקה של מספר ${itemNum}. ${pLogic.details || ''}`,
+            onConfirmBypass: () => handleSaveItem(itemNum, true),
+          });
+          return;
+        }
+      }
+
+      // 3. Check logic conformity for object
+      if (oTrim && majorDigits) {
+        const oLogic = validateHebrewLogic(oTrim, itemNum, majorDigits, connectingLetters, 'pao');
+        if (!oLogic.isValid) {
+          setValidationModal({
+            isOpen: true,
+            title: 'הודעת ולידציה: אי-התאמה לחוקי הלוגיקה',
+            message: oLogic.message, // "הדמות/החפץ אינו עונה לדרישות הלוגיקה הנוכחית"
+            details: `החפץ "${oTrim}" אינו עונה לכללי הלוגיקה של מספר ${itemNum}. ${oLogic.details || ''}`,
+            onConfirmBypass: () => handleSaveItem(itemNum, true),
+          });
+          return;
+        }
+      }
+    }
+
     onUpdatePAOItem(itemNum, {
-      person: editPerson.trim(),
-      action: editAction.trim(),
-      object: editObject.trim(),
-      scene: editScene.trim(),
+      person: pTrim,
+      action: aTrim,
+      object: oTrim,
+      scene: sTrim,
     });
     setEditingNum(null);
+    setValidationModal(null);
   };
 
   const handleTogglePaoReady = (itemNumber: number, currentState?: boolean) => {
@@ -369,20 +447,66 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
     object: getPaoFor2Digits(pao6Digits.slice(4, 6)).object,
   };
 
-  const handleAddNewItem = (e?: React.FormEvent | React.KeyboardEvent) => {
+  const handleAddNewItem = (e?: React.FormEvent | React.KeyboardEvent, bypass = false) => {
     if (e && e.preventDefault) e.preventDefault();
     const num = parseInt(newNumber.trim(), 10);
     if (isNaN(num) || num < 0 || num > 99) return;
     const numStr = (num < 10 ? `0${num}` : `${num}`).padStart(2, '0');
+    const pTrim = newPerson.trim();
+    const aTrim = newAction.trim();
+    const oTrim = newObject.trim();
+    const sTrim = newScene.trim();
+
+    if (!bypass) {
+      const dup = checkPAODuplicates(paoItems, num, { person: pTrim, action: aTrim, object: oTrim });
+      if (dup.hasDuplicate) {
+        setValidationModal({
+          isOpen: true,
+          title: 'הודעת ולידציה: ערך כפול',
+          message: dup.message,
+          details: `הערך כבר מוגדר עבור מספר אחר (${dup.conflictingNumberStr}). מומלץ לייחד ערך בלעדי.`,
+          onConfirmBypass: () => handleAddNewItem(undefined, true),
+        });
+        return;
+      }
+
+      if (pTrim && majorDigits) {
+        const pLogic = validateHebrewLogic(pTrim, num, majorDigits, connectingLetters, 'pao');
+        if (!pLogic.isValid) {
+          setValidationModal({
+            isOpen: true,
+            title: 'הודעת ולידציה: אי-התאמה לחוקי הלוגיקה',
+            message: pLogic.message,
+            details: `הדמות "${pTrim}" אינה עונה לכללי הלוגיקה של מספר ${num}. ${pLogic.details || ''}`,
+            onConfirmBypass: () => handleAddNewItem(undefined, true),
+          });
+          return;
+        }
+      }
+
+      if (oTrim && majorDigits) {
+        const oLogic = validateHebrewLogic(oTrim, num, majorDigits, connectingLetters, 'pao');
+        if (!oLogic.isValid) {
+          setValidationModal({
+            isOpen: true,
+            title: 'הודעת ולידציה: אי-התאמה לחוקי הלוגיקה',
+            message: oLogic.message,
+            details: `החפץ "${oTrim}" אינו עונה לכללי הלוגיקה של מספר ${num}. ${oLogic.details || ''}`,
+            onConfirmBypass: () => handleAddNewItem(undefined, true),
+          });
+          return;
+        }
+      }
+    }
 
     if (onAddPAOItem) {
       onAddPAOItem({
         number: num,
         numberStr: numStr,
-        person: newPerson.trim(),
-        action: newAction.trim(),
-        object: newObject.trim(),
-        scene: newScene.trim(),
+        person: pTrim,
+        action: aTrim,
+        object: oTrim,
+        scene: sTrim,
         is_ready_for_practice: true,
       });
     }
@@ -393,6 +517,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
     setNewObject('');
     setNewScene('');
     setShowAddForm(false);
+    setValidationModal(null);
   };
 
   const pickNextQuestionType = (filter: PAOQuizFilter): PAOQuizQuestionType => {
@@ -416,29 +541,47 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
 
   const handleNextQuizQuestion = (customFilter?: PAOQuizFilter) => {
     if (readyPaoItems.length === 0) return;
-    const nextIdx = Math.floor(Math.random() * readyPaoItems.length);
-    setQuizIndex(nextIdx);
+    const { item, progress } = advanceToNextDeckItem('workout_pao_single', readyPaoItems, (i) => i.number);
+    if (item) {
+      const idx = readyPaoItems.findIndex((x) => x.number === item.number);
+      if (idx >= 0) setQuizIndex(idx);
+    }
+    setDeckProgress(progress);
     setUserGuessInput('');
     setQuizFeedback('idle');
     setRevealQuizAnswer(false);
     setIsQuizEditing(false);
 
-    // Pick 3 ready items for 6-digit full scene triplet training
-    const p = readyPaoItems[Math.floor(Math.random() * readyPaoItems.length)];
-    const a = readyPaoItems[Math.floor(Math.random() * readyPaoItems.length)];
-    const o = readyPaoItems[Math.floor(Math.random() * readyPaoItems.length)];
-    setQuizSceneTriplet({ p, a, o });
+    // Pick 3 ready items for 6-digit full scene triplet training without immediate repeats
+    try {
+      const triplet = getNextPAOTriplet(readyPaoItems);
+      setQuizSceneTriplet({ p: triplet.p, a: triplet.a, o: triplet.o });
+    } catch {
+      // fallback
+    }
 
     const activeFilter = customFilter !== undefined ? customFilter : quizFilter;
     setQuestionType(pickNextQuestionType(activeFilter));
   };
 
+  // On mount or when readyPaoItems changes, peek current deck item without advancing
   React.useEffect(() => {
-    if (readyPaoItems.length > 0 && !quizSceneTriplet) {
-      const p = readyPaoItems[Math.floor(Math.random() * readyPaoItems.length)];
-      const a = readyPaoItems[Math.floor(Math.random() * readyPaoItems.length)];
-      const o = readyPaoItems[Math.floor(Math.random() * readyPaoItems.length)];
-      setQuizSceneTriplet({ p, a, o });
+    if (readyPaoItems.length > 0) {
+      const { item, progress } = getCurrentOrInitialDeckItem('workout_pao_single', readyPaoItems, (i) => i.number);
+      if (item) {
+        const idx = readyPaoItems.findIndex((x) => x.number === item.number);
+        if (idx >= 0) setQuizIndex(idx);
+      }
+      setDeckProgress(progress);
+
+      if (!quizSceneTriplet) {
+        try {
+          const triplet = getNextPAOTriplet(readyPaoItems);
+          setQuizSceneTriplet({ p: triplet.p, a: triplet.a, o: triplet.o });
+        } catch {
+          // fallback
+        }
+      }
     }
   }, [readyPaoItems.length]);
 
@@ -451,15 +594,63 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
     setIsQuizEditing((prev) => !prev);
   };
 
-  const handleSaveQuizEdit = () => {
+  const handleSaveQuizEdit = (bypass = false) => {
     if (!currentQuizItem) return;
+    const pTrim = quizEditPerson.trim();
+    const aTrim = quizEditAction.trim();
+    const oTrim = quizEditObject.trim();
+    const sTrim = quizEditScene.trim();
+
+    if (!bypass) {
+      const dup = checkPAODuplicates(paoItems, currentQuizItem.number, { person: pTrim, action: aTrim, object: oTrim });
+      if (dup.hasDuplicate) {
+        setValidationModal({
+          isOpen: true,
+          title: 'הודעת ולידציה: ערך כפול',
+          message: dup.message,
+          details: `הערך כבר מוגדר עבור מספר אחר (${dup.conflictingNumberStr}).`,
+          onConfirmBypass: () => handleSaveQuizEdit(true),
+        });
+        return;
+      }
+
+      if (pTrim && majorDigits) {
+        const pLogic = validateHebrewLogic(pTrim, currentQuizItem.number, majorDigits, connectingLetters, 'pao');
+        if (!pLogic.isValid) {
+          setValidationModal({
+            isOpen: true,
+            title: 'הודעת ולידציה: אי-התאמה לחוקי הלוגיקה',
+            message: pLogic.message,
+            details: pLogic.details,
+            onConfirmBypass: () => handleSaveQuizEdit(true),
+          });
+          return;
+        }
+      }
+
+      if (oTrim && majorDigits) {
+        const oLogic = validateHebrewLogic(oTrim, currentQuizItem.number, majorDigits, connectingLetters, 'pao');
+        if (!oLogic.isValid) {
+          setValidationModal({
+            isOpen: true,
+            title: 'הודעת ולידציה: אי-התאמה לחוקי הלוגיקה',
+            message: oLogic.message,
+            details: oLogic.details,
+            onConfirmBypass: () => handleSaveQuizEdit(true),
+          });
+          return;
+        }
+      }
+    }
+
     onUpdatePAOItem(currentQuizItem.number, {
-      person: quizEditPerson.trim(),
-      action: quizEditAction.trim(),
-      object: quizEditObject.trim(),
-      scene: quizEditScene.trim(),
+      person: pTrim,
+      action: aTrim,
+      object: oTrim,
+      scene: sTrim,
     });
     setIsQuizEditing(false);
+    setValidationModal(null);
     onEarnPoints(10, 'עדכון שלשת PAO מתוך מבחן השליפה');
   };
 
@@ -1598,6 +1789,21 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                     <span>החלף שאלה</span>
                   </button>
                 </div>
+              </div>
+
+              {/* Non-repeating Quiz Deck Progress Bar */}
+              <div className="max-w-xl mx-auto">
+                <QuizDeckProgressBar
+                  progress={deckProgress}
+                  onResetDeck={() => {
+                    resetQuizDeck('workout_pao_single');
+                    resetQuizDeck('workout_pao_triplet_p');
+                    resetQuizDeck('workout_pao_triplet_a');
+                    resetQuizDeck('workout_pao_triplet_o');
+                    handleNextQuizQuestion();
+                  }}
+                  deckTitle="מאגר שלשות PAO"
+                />
               </div>
 
               {currentQuizItem && quizMeta && (

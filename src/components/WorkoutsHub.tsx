@@ -34,6 +34,8 @@ export interface WorkoutsHubProps {
   peopleCards: PersonFaceCard[];
   abstractShapes: AbstractShapeCard[];
   academicPoints: AcademicKeyPoint[];
+  connectingLetters?: string[];
+  onNavigateToLogicTab?: () => void;
   onEarnPoints: (amount: number, reason?: string) => void;
   onUnlockBadge: (badge: string) => void;
   onUpdateMajorDigit: (digit: number, consonants: string, word: string, hint: string) => void;
@@ -110,6 +112,8 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
   bodyPegs,
   peopleCards,
   academicPoints,
+  connectingLetters,
+  onNavigateToLogicTab,
   onEarnPoints,
   onUnlockBadge,
   onUpdateMajorDigit,
@@ -219,6 +223,25 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
 
   return (
     <div className="space-y-8 pb-16">
+      {/* Quick Access to Global Number Logic */}
+      {onNavigateToLogicTab && (
+        <div className="flex items-center justify-between flex-wrap gap-3 bg-amber-500/10 border-2 border-amber-500/30 p-3.5 rounded-2xl shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl">⚙️</span>
+            <div>
+              <span className="text-xs font-black text-amber-950 block">הגדרת לוגיקת המספרים והאותיות:</span>
+              <span className="text-[11px] text-amber-800">הגדר קישורי ספרות 0-9 לעיצורים ואותיות מקשרות לכל האפליקציה</span>
+            </div>
+          </div>
+          <button
+            onClick={onNavigateToLogicTab}
+            className="text-xs font-black bg-amber-500 hover:bg-amber-400 text-slate-950 px-3.5 py-1.5 rounded-xl transition-all cursor-pointer shadow-xs"
+          >
+            פתח עריכת לוגיקה ←
+          </button>
+        </div>
+      )}
+
       {/* Category Tabs Header */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {modulesList.map((m) => {
@@ -270,6 +293,7 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
       {activeModule === 'major' && (
         <MajorModule
           majorDigits={majorDigits}
+          connectingLetters={connectingLetters}
           majorItems={majorItems}
           onEarnPoints={onEarnPoints}
           onUnlockBadge={onUnlockBadge}
@@ -283,6 +307,7 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
           onToggleMajorReady={onToggleMajorReady}
           onSetAllMajorReady={onSetAllMajorReady}
           onOpenSummary={onOpenSummary}
+          onNavigateToLogicTab={onNavigateToLogicTab}
         />
       )}
 
@@ -290,6 +315,7 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
         <PAOModule
           paoItems={paoItems}
           majorDigits={majorDigits}
+          connectingLetters={connectingLetters}
           onEarnPoints={onEarnPoints}
           onUnlockBadge={onUnlockBadge}
           onAddPAOItem={onAddPAOItem}
@@ -299,6 +325,7 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
           onTogglePAOReady={onTogglePAOReady}
           onSetAllPAOReady={onSetAllPAOReady}
           onOpenSummary={onOpenSummary}
+          onNavigateToLogicTab={onNavigateToLogicTab}
         />
       )}
 

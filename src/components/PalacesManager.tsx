@@ -603,12 +603,22 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
                                   rows={2}
                                   value={editScene}
                                   onChange={(e) => setEditScene(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                      e.preventDefault();
+                                      onUpdateLocus(currentPalace.id, locus.id, {
+                                        storedContent: editContent,
+                                        mnemonicScene: editScene,
+                                      });
+                                      setEditingLocusId(null);
+                                    }
+                                  }}
                                   placeholder="סצנה קינטית מנמונית..."
                                   className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white"
                                 />
                               </div>
                               <div className="flex items-center justify-between gap-1.5 pt-1">
-                                <span className="text-[9px] text-slate-500 font-mono">↵ Enter</span>
+                                <span className="text-[9px] text-slate-500 font-mono">↵ Enter לשמירה</span>
                                 <div className="flex gap-1.5">
                                   <button
                                     onClick={() => setEditingLocusId(null)}
@@ -850,6 +860,16 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
                                   type="text"
                                   value={editContent}
                                   onChange={(e) => setEditContent(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                      e.preventDefault();
+                                      onUpdateLocus(currentPalace.id, locus.id, {
+                                        storedContent: editContent,
+                                        mnemonicScene: editScene,
+                                      });
+                                      setEditingLocusId(null);
+                                    }
+                                  }}
                                   className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white"
                                 />
                               </div>
@@ -869,6 +889,16 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
                                   rows={2}
                                   value={editScene}
                                   onChange={(e) => setEditScene(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                      e.preventDefault();
+                                      onUpdateLocus(currentPalace.id, locus.id, {
+                                        storedContent: editContent,
+                                        mnemonicScene: editScene,
+                                      });
+                                      setEditingLocusId(null);
+                                    }
+                                  }}
                                   className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white"
                                 />
                               </div>

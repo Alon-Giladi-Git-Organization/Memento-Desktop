@@ -12,6 +12,7 @@ import { TheorySection } from './components/TheorySection';
 import { TechniqueSummaryModal } from './components/TechniqueSummaryModal';
 import { GlobalAIMentorWidget } from './components/GlobalAIMentorWidget';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
+import { NumberLogicModule } from './components/NumberLogicModule';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<TabType>('workouts');
@@ -76,6 +77,7 @@ export default function App() {
     generateFeedbackAnalysis,
 
     majorDigits,
+    connectingLetters,
     majorItems,
     paoItems,
     shapePegs,
@@ -90,6 +92,7 @@ export default function App() {
 
     updateMajorDigit,
     resetMajorDigit,
+    updateConnectingLetters,
     recalculateMajor00_99FromDigits,
     addMajorItem,
     updateMajorItem,
@@ -178,6 +181,7 @@ export default function App() {
             selectedSubModule={selectedWorkoutSubModule}
             onSubModuleChange={setSelectedWorkoutSubModule}
             majorDigits={majorDigits}
+            connectingLetters={connectingLetters}
             majorItems={majorItems}
             paoItems={paoItems}
             shapePegs={shapePegs}
@@ -187,6 +191,7 @@ export default function App() {
             academicPoints={academicPoints}
             onEarnPoints={earnPoints}
             onUnlockBadge={unlockBadge}
+            onNavigateToLogicTab={() => setCurrentTab('logic')}
             onUpdateMajorDigit={updateMajorDigit}
             onResetMajorDigit={resetMajorDigit}
             onRecalculateMajor00_99FromDigits={recalculateMajor00_99FromDigits}
@@ -229,6 +234,22 @@ export default function App() {
             onDeleteAcademicPoint={deleteAcademicPoint}
             onResetAcademicPoints={resetAcademicPoints}
             onOpenSummary={(techId) => setActiveSummaryTechnique(techId)}
+          />
+        )}
+
+        {currentTab === 'logic' && (
+          <NumberLogicModule
+            majorDigits={majorDigits}
+            connectingLetters={connectingLetters}
+            onUpdateMajorDigit={updateMajorDigit}
+            onResetMajorDigit={resetMajorDigit}
+            onUpdateConnectingLetters={updateConnectingLetters}
+            onRecalculateMajor00_99FromDigits={recalculateMajor00_99FromDigits}
+            onEarnPoints={earnPoints}
+            onNavigateToWorkout={(cat) => {
+              setCurrentTab('workouts');
+              setSelectedWorkoutSubModule(cat);
+            }}
           />
         )}
 

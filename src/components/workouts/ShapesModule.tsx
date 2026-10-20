@@ -16,6 +16,13 @@ import confetti from 'canvas-confetti';
 import { AbstractShapeCard } from '../../types/memory';
 import { AIFieldGeneratorButton } from '../AIFieldGeneratorButton';
 import { isHebrewFuzzyMatch, isHebrewMultiFieldSearchMatch } from '../../lib/fuzzyMatch';
+import {
+  getCurrentOrInitialDeckItem,
+  advanceToNextDeckItem,
+  resetQuizDeck,
+  DeckProgress,
+} from '../../lib/quizDeckManager';
+import { QuizDeckProgressBar } from '../QuizDeckProgressBar';
 
 interface ShapesModuleProps {
   abstractShapes: AbstractShapeCard[];
@@ -59,11 +66,24 @@ export const ShapesModule: React.FC<ShapesModuleProps> = ({
   const [newShapeType, setNewShapeType] = useState<AbstractShapeCard['svgShapeType']>('blob');
   const [newTextureType, setNewTextureType] = useState<AbstractShapeCard['textureType']>('striped');
 
-  // Quiz State
+  // Quiz State (Strictly via non-repeating permutation cycle)
+  const [deckProgress, setDeckProgress] = useState<DeckProgress | null>(null);
   const [quizIndex, setQuizIndex] = useState(0);
   const [quizGuess, setQuizGuess] = useState('');
   const [quizFeedback, setQuizFeedback] = useState<'idle' | 'correct' | 'incorrect'>('idle');
   const [revealQuiz, setRevealQuiz] = useState(false);
+
+  // Peek on mount without burning an item
+  React.useEffect(() => {
+    if (abstractShapes.length > 0) {
+      const { item, progress } = getCurrentOrInitialDeckItem('workout_shapes', abstractShapes, (s) => s.id);
+      if (item) {
+        const idx = abstractShapes.findIndex((s) => s.id === item.id);
+        if (idx >= 0) setQuizIndex(idx);
+      }
+      setDeckProgress(progress);
+    }
+  }, [abstractShapes.length]);
 
   const handleAddNewShape = (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,7 +109,12 @@ export const ShapesModule: React.FC<ShapesModuleProps> = ({
 
   const handleNextQuizQuestion = () => {
     if (abstractShapes.length === 0) return;
-    setQuizIndex(Math.floor(Math.random() * abstractShapes.length));
+    const { item, progress } = advanceToNextDeckItem('workout_shapes', abstractShapes, (s) => s.id);
+    if (item) {
+      const idx = abstractShapes.findIndex((s) => s.id === item.id);
+      if (idx >= 0) setQuizIndex(idx);
+    }
+    setDeckProgress(progress);
     setQuizGuess('');
     setQuizFeedback('idle');
     setRevealQuiz(false);
@@ -579,8 +604,20 @@ export const ShapesModule: React.FC<ShapesModuleProps> = ({
               className="flex items-center gap-1.5 text-xs text-teal-400 hover:text-teal-300 bg-slate-800 px-3.5 py-1.5 rounded-xl cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span>צורה אקראית חדשה</span>
+              <span>שאלה הבאה בסבב</span>
             </button>
+          </div>
+
+          {/* Non-repeating Quiz Deck Progress Bar */}
+          <div className="max-w-xl mx-auto">
+            <QuizDeckProgressBar
+              progress={deckProgress}
+              onResetDeck={() => {
+                resetQuizDeck('workout_shapes');
+                handleNextQuizQuestion();
+              }}
+              deckTitle="צורות מופשטות"
+            />
           </div>
 
           {abstractShapes[quizIndex] && (

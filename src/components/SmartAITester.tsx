@@ -25,6 +25,13 @@ import {
   MemoryPalace,
   TestResult,
 } from '../types/memory';
+import {
+  getCurrentOrInitialDeckItem,
+  advanceToNextDeckItem,
+  resetQuizDeck,
+  DeckProgress,
+} from '../lib/quizDeckManager';
+import { QuizDeckProgressBar } from './QuizDeckProgressBar';
 
 interface SmartAITesterProps {
   majorItems: MajorItem[];
@@ -49,6 +56,7 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
   onSaveTestResult,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<TestCategory>('personal');
+  const [deckProgress, setDeckProgress] = useState<DeckProgress | null>(null);
   const [currentQuestion, setCurrentQuestion] = useState<{
     id: string;
     category: TestCategory;
@@ -71,8 +79,8 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
 
   const [showHistory, setShowHistory] = useState(false);
 
-  // Generate a new question based on the selected category
-  const generateNewQuestion = (cat: TestCategory = selectedCategory) => {
+  // Generate a new question using non-repeating permutation cycle
+  const generateNewQuestion = (cat: TestCategory = selectedCategory, advance = false) => {
     setEvaluation(null);
     setUserResponse('');
 
@@ -88,27 +96,35 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
     );
 
     if (cat === 'random') {
-      const pool: TestCategory[] = [];
-      if (personalAssociations.length > 0) pool.push('personal');
-      if (readyMajor.length > 0) pool.push('major');
-      if (readyPAO.length > 0) pool.push('pao');
-      if (readyPeople.length > 0) pool.push('names');
-      if (readyPalaceLoci.length > 0) pool.push('palace');
+      const eligibleCategories: TestCategory[] = [];
+      if (personalAssociations.length > 0) eligibleCategories.push('personal');
+      if (readyMajor.length > 0 || majorItems.length > 0) eligibleCategories.push('major');
+      if (readyPAO.length > 0 || paoItems.length > 0) eligibleCategories.push('pao');
+      if (readyPeople.length > 0 || peopleCards.length > 0) eligibleCategories.push('names');
+      if (readyPalaceLoci.length > 0) eligibleCategories.push('palace');
 
-      if (pool.length === 0) {
-        // Default to major if nothing ready
+      if (eligibleCategories.length === 0) {
         effectiveCat = 'major';
       } else {
-        effectiveCat = pool[Math.floor(Math.random() * pool.length)];
+        const catDeck = advance
+          ? advanceToNextDeckItem('smart_tester_mixed_cat', eligibleCategories, (c) => c)
+          : getCurrentOrInitialDeckItem('smart_tester_mixed_cat', eligibleCategories, (c) => c);
+        effectiveCat = catDeck.item || eligibleCategories[0];
       }
     }
 
     if (effectiveCat === 'personal') {
       if (personalAssociations.length === 0) {
-        generateNewQuestion('major');
+        generateNewQuestion('major', advance);
         return;
       }
-      const item = personalAssociations[Math.floor(Math.random() * personalAssociations.length)];
+      const deckKey = 'smart_tester_personal';
+      const draw = advance
+        ? advanceToNextDeckItem(deckKey, personalAssociations, (i) => i.id)
+        : getCurrentOrInitialDeckItem(deckKey, personalAssociations, (i) => i.id);
+      const item = draw.item || personalAssociations[0];
+      setDeckProgress(draw.progress);
+
       setCurrentQuestion({
         id: item.id,
         category: 'personal',
@@ -119,7 +135,13 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
       });
     } else if (effectiveCat === 'major') {
       const pool = readyMajor.length > 0 ? readyMajor : majorItems;
-      const item = pool[Math.floor(Math.random() * pool.length)];
+      const deckKey = 'smart_tester_major';
+      const draw = advance
+        ? advanceToNextDeckItem(deckKey, pool, (i) => i.number)
+        : getCurrentOrInitialDeckItem(deckKey, pool, (i) => i.number);
+      const item = draw.item || pool[0];
+      setDeckProgress(draw.progress);
+
       const targetWord = item.defaultWord;
       setCurrentQuestion({
         id: `major-${item.number}`,
@@ -131,7 +153,13 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
       });
     } else if (effectiveCat === 'pao') {
       const pool = readyPAO.length > 0 ? readyPAO : paoItems;
-      const item = pool[Math.floor(Math.random() * pool.length)];
+      const deckKey = 'smart_tester_pao';
+      const draw = advance
+        ? advanceToNextDeckItem(deckKey, pool, (i) => i.number)
+        : getCurrentOrInitialDeckItem(deckKey, pool, (i) => i.number);
+      const item = draw.item || pool[0];
+      setDeckProgress(draw.progress);
+
       const person = item.person;
       const action = item.action;
       const obj = item.object;
@@ -145,7 +173,13 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
       });
     } else if (effectiveCat === 'names') {
       const pool = readyPeople.length > 0 ? readyPeople : peopleCards;
-      const person = pool[Math.floor(Math.random() * pool.length)];
+      const deckKey = 'smart_tester_names';
+      const draw = advance
+        ? advanceToNextDeckItem(deckKey, pool, (i) => i.id)
+        : getCurrentOrInitialDeckItem(deckKey, pool, (i) => i.id);
+      const person = draw.item || pool[0];
+      setDeckProgress(draw.progress);
+
       setCurrentQuestion({
         id: person.id,
         category: 'names',
@@ -157,10 +191,16 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
       });
     } else if (effectiveCat === 'palace') {
       if (readyPalaceLoci.length === 0) {
-        generateNewQuestion('major');
+        generateNewQuestion('major', advance);
         return;
       }
-      const locus = readyPalaceLoci[Math.floor(Math.random() * readyPalaceLoci.length)];
+      const deckKey = 'smart_tester_palace';
+      const draw = advance
+        ? advanceToNextDeckItem(deckKey, readyPalaceLoci, (l) => l.id)
+        : getCurrentOrInitialDeckItem(deckKey, readyPalaceLoci, (l) => l.id);
+      const locus = draw.item || readyPalaceLoci[0];
+      setDeckProgress(draw.progress);
+
       setCurrentQuestion({
         id: locus.id,
         category: 'palace',
@@ -172,11 +212,9 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
     }
   };
 
-  // Run on mount if no question
+  // Run on mount or when category changes (peek first item without advancing)
   React.useEffect(() => {
-    if (!currentQuestion) {
-      generateNewQuestion();
-    }
+    generateNewQuestion(selectedCategory, false);
   }, [selectedCategory]);
 
   const handleSubmitAnswer = async (e: React.FormEvent) => {
@@ -285,6 +323,28 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
         </div>
       </div>
 
+      {/* Deck Progress Bar */}
+      <QuizDeckProgressBar
+        progress={deckProgress}
+        onResetDeck={() => {
+          resetQuizDeck(selectedCategory === 'random' ? 'smart_tester_mixed_cat' : `smart_tester_${selectedCategory}`);
+          generateNewQuestion(selectedCategory, true);
+        }}
+        deckTitle={
+          selectedCategory === 'major'
+            ? 'שיטת Major'
+            : selectedCategory === 'pao'
+            ? 'שלשות PAO'
+            : selectedCategory === 'personal'
+            ? 'אסוציאציות אישיות'
+            : selectedCategory === 'names'
+            ? 'שמות ופנים'
+            : selectedCategory === 'palace'
+            ? 'ארמון הזיכרון'
+            : 'אתגר מאסטר מעורב'
+        }
+      />
+
       {/* Main Testing Card */}
       {currentQuestion && (
         <div className="bg-white border-2 border-slate-200 border-b-6 border-b-slate-300 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
@@ -313,12 +373,12 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
                   משימת שליפה פעילה
                 </span>
                 <button
-                  onClick={() => generateNewQuestion()}
+                  onClick={() => generateNewQuestion(selectedCategory, true)}
                   className="btn-duo-neutral flex items-center gap-1 text-xs px-3 py-1 cursor-pointer"
-                  title="החלף שאלה"
+                  title="החלף לשאלה הבאה בסבב ללא חזרה"
                 >
                   <RotateCw className="w-3.5 h-3.5" />
-                  <span>שאלה אחרת</span>
+                  <span>שאלה הבאה בסבב</span>
                 </button>
               </div>
 
@@ -386,10 +446,10 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
               <div className="flex justify-end">
                 <button
                   type="button"
-                  onClick={() => generateNewQuestion()}
+                  onClick={() => generateNewQuestion(selectedCategory, true)}
                   className="btn-duo-blue flex items-center gap-2 px-6 py-2.5 text-xs cursor-pointer shadow-xs"
                 >
-                  <span>לשאלה הבאה</span>
+                  <span>לשאלה הבאה בסבב</span>
                   <ArrowRight className="w-4 h-4 rotate-180" />
                 </button>
               </div>

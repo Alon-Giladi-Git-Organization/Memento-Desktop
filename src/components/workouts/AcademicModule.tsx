@@ -17,6 +17,13 @@ import confetti from 'canvas-confetti';
 import { AcademicKeyPoint } from '../../types/memory';
 import { AIFieldGeneratorButton } from '../AIFieldGeneratorButton';
 import { isHebrewFuzzyMatch, isHebrewMultiFieldSearchMatch } from '../../lib/fuzzyMatch';
+import {
+  getCurrentOrInitialDeckItem,
+  advanceToNextDeckItem,
+  resetQuizDeck,
+  DeckProgress,
+} from '../../lib/quizDeckManager';
+import { QuizDeckProgressBar } from '../QuizDeckProgressBar';
 
 interface AcademicModuleProps {
   academicPoints: AcademicKeyPoint[];
@@ -63,11 +70,24 @@ export const AcademicModule: React.FC<AcademicModuleProps> = ({
   const [newLocus, setNewLocus] = useState('');
   const [newScene, setNewScene] = useState('');
 
-  // Quiz State
+  // Quiz State (Strictly via non-repeating permutation cycle)
+  const [deckProgress, setDeckProgress] = useState<DeckProgress | null>(null);
   const [quizIndex, setQuizIndex] = useState(0);
   const [quizGuess, setQuizGuess] = useState('');
   const [quizFeedback, setQuizFeedback] = useState<'idle' | 'correct' | 'incorrect'>('idle');
   const [revealQuiz, setRevealQuiz] = useState(false);
+
+  // Peek on mount without burning an item
+  React.useEffect(() => {
+    if (academicPoints.length > 0) {
+      const { item, progress } = getCurrentOrInitialDeckItem('workout_academic', academicPoints, (a) => a.id);
+      if (item) {
+        const idx = academicPoints.findIndex((a) => a.id === item.id);
+        if (idx >= 0) setQuizIndex(idx);
+      }
+      setDeckProgress(progress);
+    }
+  }, [academicPoints.length]);
 
   const disciplines = Array.from(new Set(academicPoints.map((p) => p.discipline)));
 
@@ -98,7 +118,12 @@ export const AcademicModule: React.FC<AcademicModuleProps> = ({
 
   const handleNextQuizQuestion = () => {
     if (academicPoints.length === 0) return;
-    setQuizIndex(Math.floor(Math.random() * academicPoints.length));
+    const { item, progress } = advanceToNextDeckItem('workout_academic', academicPoints, (a) => a.id);
+    if (item) {
+      const idx = academicPoints.findIndex((a) => a.id === item.id);
+      if (idx >= 0) setQuizIndex(idx);
+    }
+    setDeckProgress(progress);
     setQuizGuess('');
     setQuizFeedback('idle');
     setRevealQuiz(false);
@@ -437,142 +462,152 @@ export const AcademicModule: React.FC<AcademicModuleProps> = ({
                     </div>
 
                     {isEditing ? (
-                      <div className="space-y-2 pt-1 text-right">
-                        <div>
-                          <label className="text-[9px] text-slate-400 font-bold block mb-0.5">כותרת המושג:</label>
-                          <input
-                            type="text"
-                            value={editTitle}
-                            onChange={(e) => setEditTitle(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                onUpdateAcademicPoint?.(item.id, {
-                                  conceptTitle: editTitle.trim(),
-                                  discipline: editDiscipline.trim(),
-                                  sourceSummary: editSummary.trim(),
-                                  visualAnchor: editVisualAnchor.trim(),
-                                  mnemonicScene: editScene.trim(),
-                                });
-                                setEditingId(null);
-                              }
-                            }}
-                            placeholder="כותרת המושג..."
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-[9px] text-slate-400 font-bold block mb-0.5">תחום דעת:</label>
-                          <input
-                            type="text"
-                            value={editDiscipline}
-                            onChange={(e) => setEditDiscipline(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                onUpdateAcademicPoint?.(item.id, {
-                                  conceptTitle: editTitle.trim(),
-                                  discipline: editDiscipline.trim(),
-                                  sourceSummary: editSummary.trim(),
-                                  visualAnchor: editVisualAnchor.trim(),
-                                  mnemonicScene: editScene.trim(),
-                                });
-                                setEditingId(null);
-                              }
-                            }}
-                            placeholder="תחום דעת..."
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white"
-                          />
-                        </div>
-                        <div>
-                          <div className="flex items-center justify-between mb-0.5">
-                            <label className="text-[9px] text-slate-400 font-bold">הגדרה / תקציר:</label>
-                            <AIFieldGeneratorButton
-                              promptType="academic_concept"
-                              inputContext={editTitle || item.conceptTitle}
-                              extraContext={editDiscipline || item.discipline}
-                              onGenerated={(val) => setEditSummary(val)}
-                              label="תקציר עם AI"
-                              compact
-                            />
+                      (() => {
+                        const handleSave = () => {
+                          if (onUpdateAcademicPoint) {
+                            onUpdateAcademicPoint(item.id, {
+                              conceptTitle: editTitle.trim(),
+                              discipline: editDiscipline.trim(),
+                              sourceSummary: editSummary.trim(),
+                              visualAnchor: editVisualAnchor.trim(),
+                              mnemonicScene: editScene.trim(),
+                            });
+                          }
+                          setEditingId(null);
+                        };
+
+                        return (
+                          <div className="space-y-2 pt-1 text-right">
+                            <div>
+                              <label className="text-[9px] text-slate-400 font-bold block mb-0.5">כותרת המושג:</label>
+                              <input
+                                type="text"
+                                value={editTitle}
+                                onChange={(e) => setEditTitle(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleSave();
+                                  }
+                                }}
+                                placeholder="כותרת המושג..."
+                                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[9px] text-slate-400 font-bold block mb-0.5">תחום דעת:</label>
+                              <input
+                                type="text"
+                                value={editDiscipline}
+                                onChange={(e) => setEditDiscipline(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleSave();
+                                  }
+                                }}
+                                placeholder="תחום דעת..."
+                                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white"
+                              />
+                            </div>
+                            <div>
+                              <div className="flex items-center justify-between mb-0.5">
+                                <label className="text-[9px] text-slate-400 font-bold">הגדרה / תקציר:</label>
+                                <AIFieldGeneratorButton
+                                  promptType="academic_concept"
+                                  inputContext={editTitle || item.conceptTitle}
+                                  extraContext={editDiscipline || item.discipline}
+                                  onGenerated={(val) => setEditSummary(val)}
+                                  label="תקציר עם AI"
+                                  compact
+                                />
+                              </div>
+                              <textarea
+                                rows={2}
+                                value={editSummary}
+                                onChange={(e) => setEditSummary(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    handleSave();
+                                  }
+                                }}
+                                placeholder="הגדרה / סיכום..."
+                                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-300"
+                              />
+                            </div>
+                            <div>
+                              <div className="flex items-center justify-between mb-0.5">
+                                <label className="text-[9px] text-amber-400 font-bold">עוגן ויזואלי:</label>
+                                <AIFieldGeneratorButton
+                                  promptType="academic_concept"
+                                  inputContext={editTitle || item.conceptTitle}
+                                  extraContext={editDiscipline || item.discipline}
+                                  onGenerated={(val) => setEditVisualAnchor(val)}
+                                  label="עוגן עם AI"
+                                  compact
+                                />
+                              </div>
+                              <input
+                                type="text"
+                                value={editVisualAnchor}
+                                onChange={(e) => setEditVisualAnchor(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    handleSave();
+                                  }
+                                }}
+                                placeholder="עוגן ויזואלי..."
+                                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-amber-200"
+                              />
+                            </div>
+                            <div>
+                              <div className="flex items-center justify-between mb-0.5">
+                                <label className="text-[9px] text-emerald-400 font-bold">סצנה בארמון:</label>
+                                <AIFieldGeneratorButton
+                                  promptType="academic_scene"
+                                  inputContext={editTitle || item.conceptTitle}
+                                  extraContext={`עוגן: ${editVisualAnchor}, תקציר: ${editSummary}`}
+                                  onGenerated={(val) => setEditScene(val)}
+                                  label="סצנה עם AI"
+                                  compact
+                                />
+                              </div>
+                              <textarea
+                                rows={2}
+                                value={editScene}
+                                onChange={(e) => setEditScene(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' && !e.shiftKey) {
+                                    e.preventDefault();
+                                    handleSave();
+                                  }
+                                }}
+                                placeholder="סצנה בארמון..."
+                                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-emerald-200"
+                              />
+                            </div>
+                            <div className="flex items-center justify-between gap-1.5 pt-1">
+                              <span className="text-[9px] text-slate-500 font-mono">↵ Enter לשמירה</span>
+                              <div className="flex gap-1">
+                                <button
+                                  onClick={() => setEditingId(null)}
+                                  className="text-[10px] text-slate-400 hover:text-slate-200 px-2"
+                                >
+                                  ביטול
+                                </button>
+                                <button
+                                  onClick={handleSave}
+                                  className="text-[10px] bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-2.5 py-1 rounded cursor-pointer"
+                                >
+                                  שמור
+                                </button>
+                              </div>
+                            </div>
                           </div>
-                          <textarea
-                            rows={2}
-                            value={editSummary}
-                            onChange={(e) => setEditSummary(e.target.value)}
-                            placeholder="הגדרה / סיכום..."
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-300"
-                          />
-                        </div>
-                        <div>
-                          <div className="flex items-center justify-between mb-0.5">
-                            <label className="text-[9px] text-amber-400 font-bold">עוגן ויזואלי:</label>
-                            <AIFieldGeneratorButton
-                              promptType="academic_concept"
-                              inputContext={editTitle || item.conceptTitle}
-                              extraContext={editDiscipline || item.discipline}
-                              onGenerated={(val) => setEditVisualAnchor(val)}
-                              label="עוגן עם AI"
-                              compact
-                            />
-                          </div>
-                          <input
-                            type="text"
-                            value={editVisualAnchor}
-                            onChange={(e) => setEditVisualAnchor(e.target.value)}
-                            placeholder="עוגן ויזואלי..."
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-amber-200"
-                          />
-                        </div>
-                        <div>
-                          <div className="flex items-center justify-between mb-0.5">
-                            <label className="text-[9px] text-emerald-400 font-bold">סצנה בארמון:</label>
-                            <AIFieldGeneratorButton
-                              promptType="academic_scene"
-                              inputContext={editTitle || item.conceptTitle}
-                              extraContext={`עוגן: ${editVisualAnchor}, תקציר: ${editSummary}`}
-                              onGenerated={(val) => setEditScene(val)}
-                              label="סצנה עם AI"
-                              compact
-                            />
-                          </div>
-                          <textarea
-                            rows={2}
-                            value={editScene}
-                            onChange={(e) => setEditScene(e.target.value)}
-                            placeholder="סצנה בארמון..."
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-emerald-200"
-                          />
-                        </div>
-                        <div className="flex items-center justify-between gap-1.5 pt-1">
-                          <span className="text-[9px] text-slate-500 font-mono">↵ Enter לשמירה</span>
-                          <div className="flex gap-1">
-                            <button
-                              onClick={() => setEditingId(null)}
-                              className="text-[10px] text-slate-400 hover:text-slate-200 px-2"
-                            >
-                              ביטול
-                            </button>
-                            <button
-                              onClick={() => {
-                                if (onUpdateAcademicPoint) {
-                                  onUpdateAcademicPoint(item.id, {
-                                    conceptTitle: editTitle.trim(),
-                                    discipline: editDiscipline.trim(),
-                                    sourceSummary: editSummary.trim(),
-                                    visualAnchor: editVisualAnchor.trim(),
-                                    mnemonicScene: editScene.trim(),
-                                  });
-                                }
-                                setEditingId(null);
-                              }}
-                              className="text-[10px] bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-2.5 py-1 rounded cursor-pointer"
-                            >
-                              שמור
-                            </button>
-                          </div>
-                        </div>
-                      </div>
+                        );
+                      })()
                     ) : (
                       <>
                         <h4 className="text-base font-bold text-white">{item.conceptTitle}</h4>
@@ -610,8 +645,20 @@ export const AcademicModule: React.FC<AcademicModuleProps> = ({
               className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 bg-slate-800 px-3.5 py-1.5 rounded-xl cursor-pointer"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span>מושג אקראי חדש</span>
+              <span>שאלה הבאה בסבב</span>
             </button>
+          </div>
+
+          {/* Non-repeating Quiz Deck Progress Bar */}
+          <div className="max-w-xl mx-auto">
+            <QuizDeckProgressBar
+              progress={deckProgress}
+              onResetDeck={() => {
+                resetQuizDeck('workout_academic');
+                handleNextQuizQuestion();
+              }}
+              deckTitle="מושגים אקדמיים"
+            />
           </div>
 
           {academicPoints[quizIndex] && (

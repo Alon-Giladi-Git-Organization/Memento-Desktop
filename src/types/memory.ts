@@ -181,3 +181,9 @@ export interface AIFeedbackReport {
   nextTrainingPlan: string;
 }
 
+export interface NumberLogicRules {
+  majorDigits: MajorItem[];
+  connectingLetters: string[];
+  updatedAt?: number;
+}
+

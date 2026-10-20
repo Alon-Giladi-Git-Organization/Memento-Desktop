@@ -21,6 +21,13 @@ import confetti from 'canvas-confetti';
 import { PersonFaceCard } from '../../types/memory';
 import { AIFieldGeneratorButton } from '../AIFieldGeneratorButton';
 import { isHebrewFuzzyMatch, isHebrewMultiFieldSearchMatch } from '../../lib/fuzzyMatch';
+import {
+  getCurrentOrInitialDeckItem,
+  advanceToNextDeckItem,
+  resetQuizDeck,
+  DeckProgress,
+} from '../../lib/quizDeckManager';
+import { QuizDeckProgressBar } from '../QuizDeckProgressBar';
 
 interface NamesFacesModuleProps {
   peopleCards: PersonFaceCard[];
@@ -74,11 +81,24 @@ export const NamesFacesModule: React.FC<NamesFacesModuleProps> = ({
   const [newSubstitute, setNewSubstitute] = useState('');
   const [newScene, setNewScene] = useState('');
 
-  // Quiz state (Strictly over readyPeople)
+  // Quiz state (Strictly over readyPeople via non-repeating permutation cycle)
+  const [deckProgress, setDeckProgress] = useState<DeckProgress | null>(null);
   const [quizIndex, setQuizIndex] = useState(0);
   const [quizGuessName, setQuizGuessName] = useState('');
   const [quizFeedback, setQuizFeedback] = useState<'idle' | 'correct' | 'incorrect'>('idle');
   const [revealQuizAnswer, setRevealQuizAnswer] = useState(false);
+
+  // Peek on mount without burning an item
+  React.useEffect(() => {
+    if (readyPeople.length > 0) {
+      const { item, progress } = getCurrentOrInitialDeckItem('workout_names', readyPeople, (p) => p.id);
+      if (item) {
+        const idx = readyPeople.findIndex((p) => p.id === item.id);
+        if (idx >= 0) setQuizIndex(idx);
+      }
+      setDeckProgress(progress);
+    }
+  }, [readyPeople.length]);
 
   const safeQuizIndex = readyPeople.length > 0 ? quizIndex % readyPeople.length : 0;
   const currentQuizPerson = readyPeople.length > 0 ? readyPeople[safeQuizIndex] : null;
@@ -122,8 +142,12 @@ export const NamesFacesModule: React.FC<NamesFacesModuleProps> = ({
 
   const handleNextQuizQuestion = () => {
     if (readyPeople.length === 0) return;
-    const nextIdx = Math.floor(Math.random() * readyPeople.length);
-    setQuizIndex(nextIdx);
+    const { item, progress } = advanceToNextDeckItem('workout_names', readyPeople, (p) => p.id);
+    if (item) {
+      const idx = readyPeople.findIndex((p) => p.id === item.id);
+      if (idx >= 0) setQuizIndex(idx);
+    }
+    setDeckProgress(progress);
     setQuizGuessName('');
     setQuizFeedback('idle');
     setRevealQuizAnswer(false);
@@ -864,8 +888,20 @@ export const NamesFacesModule: React.FC<NamesFacesModuleProps> = ({
                   className="flex items-center gap-1.5 text-xs text-amber-700 hover:text-amber-900 bg-slate-100 font-bold px-3.5 py-1.5 rounded-xl border border-slate-200 cursor-pointer"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  <span>אדם אקראי חדש</span>
+                  <span>שאלה הבאה בסבב</span>
                 </button>
+              </div>
+
+              {/* Non-repeating Quiz Deck Progress Bar */}
+              <div className="max-w-xl mx-auto">
+                <QuizDeckProgressBar
+                  progress={deckProgress}
+                  onResetDeck={() => {
+                    resetQuizDeck('workout_names');
+                    handleNextQuizQuestion();
+                  }}
+                  deckTitle="מאגר שמות ופנים"
+                />
               </div>
 
               {currentQuizPerson && (

@@ -18,12 +18,15 @@ import {
   CloudOff,
   RefreshCw,
   Database,
+  Sliders,
+  Hash,
 } from 'lucide-react';
 import { UserProfileData } from '../lib/firebase';
 import { User as FirebaseUser } from 'firebase/auth';
 
 export type TabType =
   | 'workouts'
+  | 'logic'
   | 'palaces'
   | 'tester'
   | 'feedback'
@@ -75,6 +78,13 @@ export const Navbar: React.FC<NavbarProps> = ({
       label: 'מרכז האימונים',
       icon: <Dumbbell className="w-4 h-4 ml-1.5" />,
       color: 'text-[#58CC02]',
+    },
+    {
+      id: 'logic',
+      label: 'לוגיקת מספרים',
+      icon: <Sliders className="w-4 h-4 ml-1.5" />,
+      color: 'text-[#FFC800]',
+      badge: '0-9',
     },
     {
       id: 'palaces',

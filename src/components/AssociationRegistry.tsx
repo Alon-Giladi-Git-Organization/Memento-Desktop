@@ -367,6 +367,20 @@ export const AssociationRegistry: React.FC<AssociationRegistryProps> = ({
                         rows={2}
                         value={editMnemonic}
                         onChange={(e) => setEditMnemonic(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            if (onUpdateAssociation) {
+                              onUpdateAssociation(item.id, {
+                                targetSubject: editSubject.trim(),
+                                storedNumberOrFact: editFactOrNumber.trim(),
+                                encodedMnemonic: editMnemonic.trim(),
+                                methodUsed: editMethod,
+                              });
+                            }
+                            setEditingId(null);
+                          }
+                        }}
                         placeholder="סצנה קינטית..."
                         className="w-full bg-slate-50 border border-slate-300 rounded-lg px-2.5 py-1 text-xs text-slate-900"
                       />

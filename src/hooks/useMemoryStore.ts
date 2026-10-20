@@ -27,6 +27,7 @@ import {
   DEFAULT_PERSONAL_ASSOCIATIONS,
 } from '../data/defaultAssociations';
 import { generateWordForConsonants } from '../lib/majorWordGenerator';
+import { DEFAULT_CONNECTING_LETTERS } from '../lib/hebrewLogicValidator';
 import {
   ALL_BADGES,
   BENCHMARK_LEADERBOARD,
@@ -65,6 +66,7 @@ import {
 } from '../lib/cloudDbSync';
 
 const STORAGE_KEYS = {
+  CONNECTING_LETTERS: 'mem_connecting_letters_v1',
   MAJOR_DIGITS: 'mem_major_digits_0_9_v3',
   MAJOR: 'mem_major_00_99_v4',
   PAO: 'mem_pao_items',
@@ -160,6 +162,20 @@ export function useMemoryStore() {
       return saved ? JSON.parse(saved) : DEFAULT_MAJOR_DIGITS;
     } catch {
       return DEFAULT_MAJOR_DIGITS;
+    }
+  });
+
+  // Connecting Letters (אותיות מקשרות ללא ערך מספרי)
+  const [connectingLetters, setConnectingLetters] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.CONNECTING_LETTERS);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+      return DEFAULT_CONNECTING_LETTERS;
+    } catch {
+      return DEFAULT_CONNECTING_LETTERS;
     }
   });
 
@@ -319,6 +335,10 @@ export function useMemoryStore() {
   }, [majorDigits]);
 
   useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.CONNECTING_LETTERS, JSON.stringify(connectingLetters));
+  }, [connectingLetters]);
+
+  useEffect(() => {
     const valid = majorItems.filter((x) => typeof x?.number === 'number' && !isNaN(x.number) && isFinite(x.number) && x.numberStr !== 'NaN');
     localStorage.setItem(STORAGE_KEYS.MAJOR, JSON.stringify(valid));
   }, [majorItems]);
@@ -400,12 +420,34 @@ export function useMemoryStore() {
   // Continuous Real-Time Firestore Sync (onSnapshot)
   // Automatically mirrors edits from Rowy / Firebase Console directly into the active UI
   useEffect(() => {
+    // Purge any rogue NaN documents in Firestore pao_items and major_items
+    try {
+      deleteDoc(doc(db, 'pao_items', 'NaN')).catch(() => {});
+      deleteDoc(doc(db, 'pao_items', 'nan')).catch(() => {});
+      deleteDoc(doc(db, 'major_items', 'NaN')).catch(() => {});
+      deleteDoc(doc(db, 'major_items', 'nan')).catch(() => {});
+    } catch {
+      // ignore
+    }
+
     const unsubscribeRealtime = startRealtimeCloudSync({
       onMajorItems: (items) => {
-        setMajorItems((prev) => mergeWithRemoteItems(prev, items, (i) => String(i.numberStr ?? i.number).padStart(2, '0')));
+        setMajorItems((prev) =>
+          mergeWithRemoteItems(prev, items, (i) => {
+            const n = typeof i.number === 'number' && !isNaN(i.number) ? i.number : parseInt(String(i.numberStr || ''), 10);
+            if (isNaN(n) || n < 0 || n > 99) return '';
+            return (n < 10 ? `0${n}` : `${n}`).padStart(2, '0');
+          })
+        );
       },
       onPaoItems: (items) => {
-        setPaoItems((prev) => mergeWithRemoteItems(prev, items, (i) => String(i.numberStr ?? i.number).padStart(2, '0')));
+        setPaoItems((prev) =>
+          mergeWithRemoteItems(prev, items, (i) => {
+            const n = typeof i.number === 'number' && !isNaN(i.number) ? i.number : parseInt(String(i.numberStr || ''), 10);
+            if (isNaN(n) || n < 0 || n > 99) return '';
+            return (n < 10 ? `0${n}` : `${n}`).padStart(2, '0');
+          })
+        );
       },
       onBodyPegs: (items) => {
         setBodyPegs((prev) => mergeWithRemoteItems(prev, items, (i) => String(i.index)));
@@ -964,6 +1006,18 @@ export function useMemoryStore() {
     setMajorDigits((prev) => prev.map((d) => (d.number === digit ? updated : d)));
     if (isNetworkOnline()) {
       setDoc(doc(db, 'major_digits', String(digit)), updated, { merge: true }).catch(() => {});
+    }
+  };
+
+  const updateConnectingLetters = (letters: string[]) => {
+    const cleaned = Array.from(new Set(letters.filter(Boolean)));
+    setConnectingLetters(cleaned);
+    try {
+      localStorage.setItem(STORAGE_KEYS.CONNECTING_LETTERS, JSON.stringify(cleaned));
+    } catch {}
+    earnPoints(10, 'עדכון אותיות מקשרות');
+    if (isNetworkOnline()) {
+      setDoc(doc(db, 'app_settings', 'logic_rules'), { connectingLetters: cleaned, updatedAt: Date.now() }, { merge: true }).catch(() => {});
     }
   };
 
@@ -1751,6 +1805,7 @@ export function useMemoryStore() {
 
     // Data lists
     majorDigits,
+    connectingLetters,
     majorItems,
     paoItems,
     shapePegs,
@@ -1766,6 +1821,7 @@ export function useMemoryStore() {
     // Actions
     updateMajorDigit,
     resetMajorDigit,
+    updateConnectingLetters,
     recalculateMajor00_99FromDigits,
     addMajorItem,
     updateMajorItem,
