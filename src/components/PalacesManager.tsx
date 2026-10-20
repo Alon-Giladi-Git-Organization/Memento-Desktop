@@ -236,7 +236,7 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
   }, {} as { [room: string]: PalaceLocus[] }) || {};
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 pb-16">
+    <div className="w-full max-w-none space-y-8 pb-16">
       {/* Header Banner */}
       <div className="bg-white border-2 border-slate-200 border-b-6 border-b-slate-300 rounded-3xl p-6 sm:p-8 shadow-sm relative overflow-hidden text-slate-900">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6 relative z-10">

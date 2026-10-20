@@ -272,24 +272,50 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
     subtitle?: string;
     scene?: string;
     numberStr?: string;
+    number?: number;
   } | null>(null);
+
+  // In-Modal Edit/Replace Image State
+  const [modalIsEditing, setModalIsEditing] = useState(false);
+  const [modalNewImageUrl, setModalNewImageUrl] = useState('');
+  const [modalIsCompressing, setModalIsCompressing] = useState(false);
+  const [confirmDeleteModal, setConfirmDeleteModal] = useState(false);
+
+  // Drag-and-Drop Feedback States
+  const [dragOverCardNum, setDragOverCardNum] = useState<number | null>(null);
+  const [isModalDragOver, setIsModalDragOver] = useState(false);
+  const [isQuickUploadDragOver, setIsQuickUploadDragOver] = useState(false);
 
   // Quick Image Upload Modal State
   const [quickUploadItem, setQuickUploadItem] = useState<PAOItem | null>(null);
   const [quickUploadUrl, setQuickUploadUrl] = useState('');
   const [isCompressing, setIsCompressing] = useState(false);
 
+  // Validation Alert Modal
+  const [validationModal, setValidationModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    details?: string;
+    onConfirmBypass?: () => void;
+  } | null>(null);
+
   // Escape key light-dismiss handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        if (selectedPreviewImage) setSelectedPreviewImage(null);
+        if (selectedPreviewImage) {
+          setSelectedPreviewImage(null);
+          setModalIsEditing(false);
+          setConfirmDeleteModal(false);
+        }
         if (quickUploadItem) setQuickUploadItem(null);
+        if (validationModal) setValidationModal(null);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedPreviewImage, quickUploadItem]);
+  }, [selectedPreviewImage, quickUploadItem, validationModal]);
 
   // Edit PAO Item (Draft State)
   const [editingNum, setEditingNum] = useState<number | null>(null);
@@ -348,14 +374,6 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
   // Jump to specific number in registry
   const [highlightedNum, setHighlightedNum] = useState<number | null>(null);
 
-  // Validation Alert Modal
-  const [validationModal, setValidationModal] = useState<{
-    isOpen: boolean;
-    title: string;
-    message: string;
-    details?: string;
-    onConfirmBypass?: () => void;
-  } | null>(null);
 
   // --- Core Save Logic (Lifting State Up) ---
   const handleSaveItem = (itemNum: number, bypassValidation = false) => {
@@ -366,27 +384,38 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
     const sTrim = editScene.trim();
 
     if (!bypassValidation) {
-      // 1. Check duplicate person / action / object
-      const dup = checkPAODuplicates(paoItems, itemNum, { person: pTrim, action: aTrim, object: oTrim });
-      if (dup.hasDuplicate) {
-        setValidationModal({
-          isOpen: true,
-          title: 'הודעת ולידציה: ערך כפול',
-          message: dup.message, // e.g. "הפעולה הזו כבר מופיעה (עבור מספר 23)"
-          details: `במודולת PAO לכל מספר רצוי לייחד פעולה, דמות וחפץ בלעדיים כדי למנוע טעויות בשליפת רצפים.`,
-          onConfirmBypass: () => handleSaveItem(itemNum, true),
+      const existing = paoItems.find((p) => p.number === itemNum || parseInt(p.numberStr, 10) === itemNum);
+      const personChanged = existing ? pTrim !== (existing.person || '').trim() : false;
+      const actionChanged = existing ? aTrim !== (existing.action || '').trim() : false;
+      const objectChanged = existing ? oTrim !== (existing.object || '').trim() : false;
+
+      // 1. Check duplicate person / action / object only for modified fields
+      if (personChanged || actionChanged || objectChanged) {
+        const dup = checkPAODuplicates(paoItems, itemNum, {
+          person: personChanged ? pTrim : undefined,
+          action: actionChanged ? aTrim : undefined,
+          object: objectChanged ? oTrim : undefined,
         });
-        return;
+        if (dup.hasDuplicate) {
+          setValidationModal({
+            isOpen: true,
+            title: 'הודעת ולידציה: ערך כפול',
+            message: dup.message,
+            details: `במודולת PAO לכל מספר רצוי לייחד פעולה, דמות וחפץ בלעדיים כדי למנוע טעויות בשליפת רצפים.`,
+            onConfirmBypass: () => handleSaveItem(itemNum, true),
+          });
+          return;
+        }
       }
 
-      // 2. Check logic conformity for person
-      if (pTrim && majorDigits) {
+      // 2. Check logic conformity for person ONLY if changed
+      if (personChanged && pTrim && majorDigits) {
         const pLogic = validateHebrewLogic(pTrim, itemNum, majorDigits, connectingLetters, 'pao');
         if (!pLogic.isValid) {
           setValidationModal({
             isOpen: true,
             title: 'הודעת ולידציה: אי-התאמה לחוקי הלוגיקה',
-            message: pLogic.message, // "הדמות/החפץ אינו עונה לדרישות הלוגיקה הנוכחית"
+            message: pLogic.message,
             details: `הדמות "${pTrim}" אינה עונה לכללי הלוגיקה של מספר ${itemNum}. ${pLogic.details || ''}`,
             onConfirmBypass: () => handleSaveItem(itemNum, true),
           });
@@ -394,14 +423,14 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
         }
       }
 
-      // 3. Check logic conformity for object
-      if (oTrim && majorDigits) {
+      // 3. Check logic conformity for object ONLY if changed
+      if (objectChanged && oTrim && majorDigits) {
         const oLogic = validateHebrewLogic(oTrim, itemNum, majorDigits, connectingLetters, 'pao');
         if (!oLogic.isValid) {
           setValidationModal({
             isOpen: true,
             title: 'הודעת ולידציה: אי-התאמה לחוקי הלוגיקה',
-            message: oLogic.message, // "הדמות/החפץ אינו עונה לדרישות הלוגיקה הנוכחית"
+            message: oLogic.message,
             details: `החפץ "${oTrim}" אינו עונה לכללי הלוגיקה של מספר ${itemNum}. ${oLogic.details || ''}`,
             onConfirmBypass: () => handleSaveItem(itemNum, true),
           });
@@ -415,7 +444,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
       action: aTrim,
       object: oTrim,
       scene: sTrim,
-      imageUrl: editImageUrl.trim(),
+      imageUrl: editImageUrl ? editImageUrl.trim() : '',
     });
     setEditingNum(null);
     setEditImageUrl('');
@@ -649,19 +678,29 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
     const sTrim = quizEditScene.trim();
 
     if (!bypass) {
-      const dup = checkPAODuplicates(paoItems, currentQuizItem.number, { person: pTrim, action: aTrim, object: oTrim });
-      if (dup.hasDuplicate) {
-        setValidationModal({
-          isOpen: true,
-          title: 'הודעת ולידציה: ערך כפול',
-          message: dup.message,
-          details: `הערך כבר מוגדר עבור מספר אחר (${dup.conflictingNumberStr}).`,
-          onConfirmBypass: () => handleSaveQuizEdit(true),
+      const personChanged = pTrim !== (currentQuizItem.person || '').trim();
+      const actionChanged = aTrim !== (currentQuizItem.action || '').trim();
+      const objectChanged = oTrim !== (currentQuizItem.object || '').trim();
+
+      if (personChanged || actionChanged || objectChanged) {
+        const dup = checkPAODuplicates(paoItems, currentQuizItem.number, {
+          person: personChanged ? pTrim : undefined,
+          action: actionChanged ? aTrim : undefined,
+          object: objectChanged ? oTrim : undefined,
         });
-        return;
+        if (dup.hasDuplicate) {
+          setValidationModal({
+            isOpen: true,
+            title: 'הודעת ולידציה: ערך כפול',
+            message: dup.message,
+            details: `הערך כבר מוגדר עבור מספר אחר (${dup.conflictingNumberStr}).`,
+            onConfirmBypass: () => handleSaveQuizEdit(true),
+          });
+          return;
+        }
       }
 
-      if (pTrim && majorDigits) {
+      if (personChanged && pTrim && majorDigits) {
         const pLogic = validateHebrewLogic(pTrim, currentQuizItem.number, majorDigits, connectingLetters, 'pao');
         if (!pLogic.isValid) {
           setValidationModal({
@@ -675,7 +714,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
         }
       }
 
-      if (oTrim && majorDigits) {
+      if (objectChanged && oTrim && majorDigits) {
         const oLogic = validateHebrewLogic(oTrim, currentQuizItem.number, majorDigits, connectingLetters, 'pao');
         if (!oLogic.isValid) {
           setValidationModal({
@@ -954,7 +993,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
   const quizMeta = getQuizMeta();
 
   return (
-    <div className="bg-white border-2 border-slate-200 border-b-6 border-b-slate-300 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6 text-slate-900">
+    <div className="w-full max-w-none bg-white border-2 border-slate-200 border-b-6 border-b-slate-300 rounded-3xl p-4 sm:p-6 lg:p-8 shadow-sm space-y-6 text-slate-900">
       {/* Header and Sub-Tabs */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-4 border-b-2 border-slate-200">
         <div>
@@ -1355,6 +1394,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                                   subtitle: `${p} • ${a} • ${o}`,
                                   scene: s,
                                   numberStr: item.numberStr,
+                                  number: item.number,
                                 })
                               }
                               className="relative group cursor-pointer shrink-0"
@@ -1710,7 +1750,53 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
 
                           {/* Image Thumbnail Cell */}
                           <td className="py-2 px-2 text-center whitespace-nowrap">
-                            {item.imageUrl ? (
+                            {isEditing ? (
+                              <div className="flex items-center justify-center gap-1">
+                                {editImageUrl ? (
+                                  <div className="relative group shrink-0 inline-block">
+                                    <img
+                                      src={editImageUrl}
+                                      alt={item.numberStr}
+                                      className="w-8 h-8 object-cover rounded-lg border border-pink-500/50"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditImageUrl('')}
+                                      className="absolute -top-1 -right-1 bg-rose-600 hover:bg-rose-500 text-white rounded-full p-0.5 cursor-pointer shadow"
+                                      title="הסר תמונה"
+                                    >
+                                      <X className="w-2.5 h-2.5" />
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <label
+                                    className="p-1.5 rounded-lg border border-dashed border-pink-500/50 hover:border-pink-400 bg-pink-950/20 text-pink-300 hover:text-white cursor-pointer transition-all inline-flex items-center justify-center"
+                                    title="העלה תמונה לשלשה זו"
+                                  >
+                                    <Upload className="w-3.5 h-3.5" />
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      className="hidden"
+                                      disabled={isCompressing}
+                                      onChange={async (e) => {
+                                        const file = e.target.files?.[0];
+                                        if (!file) return;
+                                        try {
+                                          setIsCompressing(true);
+                                          const comp = await compressImageFile(file);
+                                          setEditImageUrl(comp);
+                                        } catch (err) {
+                                          console.error(err);
+                                        } finally {
+                                          setIsCompressing(false);
+                                        }
+                                      }}
+                                    />
+                                  </label>
+                                )}
+                              </div>
+                            ) : item.imageUrl ? (
                               <div
                                 onClick={() =>
                                   setSelectedPreviewImage({
@@ -1719,6 +1805,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                                     subtitle: `${p} • ${a} • ${o}`,
                                     scene: s,
                                     numberStr: item.numberStr,
+                                    number: item.number,
                                   })
                                 }
                                 className="relative inline-block group cursor-pointer"
@@ -1999,7 +2086,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
               </div>
 
               {/* Non-repeating Quiz Deck Progress Bar */}
-              <div className="max-w-xl mx-auto">
+              <div className="w-full max-w-4xl mx-auto">
                 <QuizDeckProgressBar
                   progress={deckProgress}
                   onResetDeck={() => {
@@ -2014,7 +2101,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
               </div>
 
               {currentQuizItem && quizMeta && (
-                <div className="max-w-xl mx-auto space-y-6 text-center">
+                <div className="w-full max-w-4xl mx-auto space-y-6 text-center">
                   {/* Dynamic Themed Question Card */}
                   <div className={`p-6 sm:p-8 rounded-3xl ${quizMeta.cardBg} border ${quizMeta.cardBorder} shadow-inner space-y-4`}>
                     <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
@@ -2461,6 +2548,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                                         subtitle: `${currentQuizItem.person} • ${currentQuizItem.action} • ${currentQuizItem.object}`,
                                         scene: currentQuizItem.scene || `${currentQuizItem.person} ${currentQuizItem.action} ${currentQuizItem.object}`,
                                         numberStr: currentQuizItem.numberStr,
+                                        number: currentQuizItem.number,
                                       })
                                     }
                                     className="relative group cursor-pointer shrink-0"
@@ -2544,6 +2632,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                                           subtitle: `${item.person} • ${item.action} • ${item.object}`,
                                           scene: item.scene,
                                           numberStr: item.numberStr,
+                                          number: item.number,
                                         })
                                       }
                                       className="relative group cursor-pointer"
@@ -2623,15 +2712,159 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                   )}
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setSelectedPreviewImage(null)}
-                className="p-1.5 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
-                title="סגור (Esc או לחיצה מחוץ לתמונה)"
-              >
-                <X className="w-5 h-5" />
-              </button>
+
+              {/* Action Buttons: Replace, Delete, Close */}
+              <div className="flex items-center gap-2">
+                {typeof selectedPreviewImage.number === 'number' && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModalIsEditing((prev) => !prev);
+                        setModalNewImageUrl(selectedPreviewImage.url);
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                        modalIsEditing
+                          ? 'bg-indigo-600 text-white shadow-md'
+                          : 'bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30'
+                      }`}
+                      title="החלף תמונה לשלשת PAO זו"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                      <span>{modalIsEditing ? 'סגור עריכה' : 'החלף תמונה'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (typeof selectedPreviewImage.number === 'number') {
+                          if (window.confirm('האם אתה בטוח שברצונך למחוק את התמונה עבור שלשה זו?')) {
+                            onUpdatePAOItem(selectedPreviewImage.number, {
+                              imageUrl: '',
+                            });
+                            setSelectedPreviewImage(null);
+                            setModalIsEditing(false);
+                            setModalNewImageUrl('');
+                          }
+                        }
+                      }}
+                      className="px-2.5 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 hover:text-white border border-rose-500/30 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
+                      title="מחק תמונה זו לחלוטין"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">מחק</span>
+                    </button>
+                  </>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedPreviewImage(null);
+                    setModalIsEditing(false);
+                  }}
+                  className="p-1.5 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                  title="סגור (Esc או לחיצה מחוץ לתמונה)"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
+
+            {/* In-Modal Image Replace Drawer */}
+            {modalIsEditing && typeof selectedPreviewImage.number === 'number' && (
+              <div className="bg-slate-950/95 border-b border-indigo-500/30 p-4 space-y-3 animate-fadeIn">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
+                    <Edit3 className="w-4 h-4 text-indigo-400" />
+                    <span>החלפת תמונה לשלשת PAO #{selectedPreviewImage.numberStr}:</span>
+                  </span>
+                  <span className="text-[11px] text-slate-400">
+                    בחר קובץ חדש או הדבק קישור לתמונה
+                  </span>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-2.5">
+                  <label className="w-full sm:w-auto py-2 px-3.5 rounded-xl border border-dashed border-indigo-500/50 hover:border-indigo-400 bg-indigo-950/40 text-xs text-indigo-200 hover:text-white flex items-center justify-center gap-2 cursor-pointer transition-all shrink-0">
+                    <Upload className="w-4 h-4 text-indigo-400" />
+                    <span className="font-semibold">
+                      {modalIsCompressing ? 'דוחס קובץ...' : 'העלה קובץ מהמכשיר'}
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      disabled={modalIsCompressing}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        try {
+                          setModalIsCompressing(true);
+                          const comp = await compressImageFile(file);
+                          setModalNewImageUrl(comp);
+                          if (typeof selectedPreviewImage.number === 'number') {
+                            onUpdatePAOItem(selectedPreviewImage.number, {
+                              imageUrl: comp,
+                            });
+                            setSelectedPreviewImage((prev) => (prev ? { ...prev, url: comp } : null));
+                            setModalIsEditing(false);
+                            onEarnPoints(10, 'עדכון תמונה ויזואלית לסצנה');
+                          }
+                        } catch (err) {
+                          console.error(err);
+                        } finally {
+                          setModalIsCompressing(false);
+                        }
+                      }}
+                    />
+                  </label>
+
+                  <input
+                    type="url"
+                    value={modalNewImageUrl.startsWith('data:') ? '' : modalNewImageUrl}
+                    onChange={(e) => setModalNewImageUrl(e.target.value)}
+                    placeholder="או הדבק קישור (URL) לתמונה..."
+                    className="flex-1 w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && modalNewImageUrl.trim()) {
+                        e.preventDefault();
+                        if (typeof selectedPreviewImage.number === 'number') {
+                          onUpdatePAOItem(selectedPreviewImage.number, {
+                            imageUrl: modalNewImageUrl.trim(),
+                          });
+                          setSelectedPreviewImage((prev) =>
+                            prev ? { ...prev, url: modalNewImageUrl.trim() } : null
+                          );
+                          setModalIsEditing(false);
+                          onEarnPoints(10, 'עדכון תמונה ויזואלית לסצנה');
+                        }
+                      }
+                    }}
+                  />
+
+                  <button
+                    type="button"
+                    disabled={!modalNewImageUrl || modalNewImageUrl === selectedPreviewImage.url}
+                    onClick={() => {
+                      if (typeof selectedPreviewImage.number === 'number' && modalNewImageUrl) {
+                        onUpdatePAOItem(selectedPreviewImage.number, {
+                          imageUrl: modalNewImageUrl.trim(),
+                        });
+                        setSelectedPreviewImage((prev) =>
+                          prev ? { ...prev, url: modalNewImageUrl.trim() } : null
+                        );
+                        setModalIsEditing(false);
+                        onEarnPoints(10, 'עדכון תמונה ויזואלית לסצנה');
+                      }
+                    }}
+                    className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-md transition-all shrink-0"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>שמור תמונה</span>
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* High-Resolution Image Viewport */}
             <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-black/60 min-h-[300px]">
@@ -2779,6 +3012,52 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                 className="px-4 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl cursor-pointer shadow-md transition-all"
               >
                 שמור תמונה
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Validation Alert Modal */}
+      {validationModal && validationModal.isOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4" dir="rtl">
+          <div className="bg-slate-900 border-2 border-amber-500/80 rounded-3xl max-w-md w-full p-6 text-right space-y-4 shadow-2xl animate-in fade-in zoom-in-95">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-6 h-6 text-amber-400" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-white">
+                  {validationModal.title}
+                </h3>
+                <p className="text-xs text-amber-300 font-bold mt-0.5">
+                  {validationModal.message}
+                </p>
+              </div>
+            </div>
+
+            {validationModal.details && (
+              <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 text-xs text-slate-300 leading-relaxed">
+                {validationModal.details}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-800">
+              {validationModal.onConfirmBypass && (
+                <button
+                  type="button"
+                  onClick={validationModal.onConfirmBypass}
+                  className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-3 py-2 rounded-xl transition-all cursor-pointer"
+                >
+                  שמור בכל זאת כמקרה חריג
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setValidationModal(null)}
+                className="text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-4 py-2 rounded-xl transition-all cursor-pointer shadow-md"
+              >
+                חזור ותקן ערך
               </button>
             </div>
           </div>

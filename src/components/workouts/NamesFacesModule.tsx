@@ -188,7 +188,7 @@ export const NamesFacesModule: React.FC<NamesFacesModuleProps> = ({
   });
 
   return (
-    <div className="bg-white border-2 border-slate-200 border-b-6 border-b-slate-300 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6 text-slate-900">
+    <div className="w-full max-w-none bg-white border-2 border-slate-200 border-b-6 border-b-slate-300 rounded-3xl p-4 sm:p-6 lg:p-8 shadow-sm space-y-6 text-slate-900">
       {/* Header and Sub-Tabs */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-4 border-b-2 border-slate-200">
         <div>
@@ -893,7 +893,7 @@ export const NamesFacesModule: React.FC<NamesFacesModuleProps> = ({
               </div>
 
               {/* Non-repeating Quiz Deck Progress Bar */}
-              <div className="max-w-xl mx-auto">
+              <div className="w-full max-w-4xl mx-auto">
                 <QuizDeckProgressBar
                   progress={deckProgress}
                   onResetDeck={() => {
@@ -905,7 +905,7 @@ export const NamesFacesModule: React.FC<NamesFacesModuleProps> = ({
               </div>
 
               {currentQuizPerson && (
-                <div className="max-w-xl mx-auto space-y-6 text-center">
+                <div className="w-full max-w-4xl mx-auto space-y-6 text-center">
                   <div className="p-8 rounded-3xl bg-white border-2 border-slate-200 border-b-6 border-b-slate-300 shadow-sm space-y-4">
                     <img
                       src={currentQuizPerson.avatarUrl}

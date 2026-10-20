@@ -120,7 +120,7 @@ export const NumberLogicModule: React.FC<NumberLogicModuleProps> = ({
     : null;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8 text-right" dir="rtl">
+    <div className="w-full max-w-none py-6 space-y-8 text-right" dir="rtl">
       {/* Save Success Banner */}
       {saveSuccessNotice && (
         <div className="fixed bottom-6 left-6 z-50 bg-emerald-600 text-white font-bold px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2 animate-bounce">

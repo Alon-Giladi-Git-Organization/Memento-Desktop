@@ -266,7 +266,7 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
   };
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6 pb-12 text-slate-900">
+    <div className="w-full max-w-none space-y-6 pb-12 text-slate-900">
       {/* Hero Header */}
       <div className="bg-white border-2 border-slate-200 border-b-6 border-b-slate-300 rounded-3xl p-6 sm:p-8 shadow-sm relative overflow-hidden">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 relative z-10">

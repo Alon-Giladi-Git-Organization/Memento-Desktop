@@ -101,7 +101,7 @@ export const AssociationRegistry: React.FC<AssociationRegistryProps> = ({
   };
 
   return (
-    <div className="max-w-5xl mx-auto space-y-8 pb-16 text-slate-900">
+    <div className="w-full max-w-none space-y-8 pb-16 text-slate-900">
       {/* Header */}
       <div className="bg-white border-2 border-slate-200 border-b-6 border-b-slate-300 rounded-3xl p-6 sm:p-8 shadow-sm relative overflow-hidden">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative z-10">

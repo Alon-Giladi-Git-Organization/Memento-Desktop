@@ -107,6 +107,7 @@ export async function seedAllDefaultsToFirestore(): Promise<{ success: boolean; 
         action: item.action,
         object: item.object,
         scene: item.scene || null,
+        imageUrl: item.imageUrl || null,
         is_ready_for_practice: item.is_ready_for_practice ?? false,
         updatedAt: now,
       }, { merge: true });
@@ -301,9 +302,14 @@ export function mergeWithRemoteItems<T extends { updatedAt?: number }>(
       if (different) {
         // Any difference arriving from Firestore (Rowy, Firebase Console, or other tabs)
         // must be accepted immediately without requiring updatedAt to be artificially higher.
+        const prevImg = (prevItem as any).imageUrl;
+        const remoteImg = (remoteItem as any).imageUrl;
+        const finalImg = remoteImg !== undefined ? remoteImg : prevImg;
+
         merged.push({
           ...prevItem,
           ...remoteItem,
+          ...(finalImg !== undefined ? { imageUrl: finalImg } : {}),
           updatedAt: Math.max(prevTime, remoteTime, Date.now()),
         });
         hasAnyChanges = true;
@@ -393,14 +399,19 @@ async function syncCollectionBidirectional<T extends { id?: string | number; num
         );
         const localTime = getTimestampMillis(localItem.updatedAt);
 
-        // Check for content differences between remote (e.g. edited in Rowy) and local
-        const remoteDefaultWord = remoteItem.defaultWord !== undefined ? remoteItem.defaultWord : null;
-        const localDefaultWord = (localItem as any).defaultWord !== undefined ? (localItem as any).defaultWord : null;
-        const contentChangedInRowy = remoteDefaultWord !== localDefaultWord;
+        // Check for content differences between remote and local
+        const different = isItemDifferent(localItem, remoteItem);
 
-        if (remoteTime > localTime || (remoteTime === 0 && contentChangedInRowy) || (remoteTime === localTime && contentChangedInRowy)) {
-          // Remote is newer or edited in Rowy: take remote
-          mergedList.push({ ...localItem, ...remoteItem });
+        if (remoteTime > localTime || (remoteTime === 0 && different) || (remoteTime === localTime && different)) {
+          // Remote is newer or edited in Rowy: take remote, preserving local imageUrl if remote has none
+          const localImg = (localItem as any).imageUrl;
+          const remoteImg = (remoteItem as any).imageUrl;
+          const finalImg = remoteImg !== undefined ? remoteImg : localImg;
+          mergedList.push({
+            ...localItem,
+            ...remoteItem,
+            ...(finalImg !== undefined ? { imageUrl: finalImg } : {}),
+          });
           downloadedCount++;
         } else if (localTime > remoteTime) {
           // Local is newer (e.g. edited locally in app while offline): upload to remote
@@ -411,7 +422,14 @@ async function syncCollectionBidirectional<T extends { id?: string | number; num
           mergedList.push(localItem);
         } else {
           // In sync: merge fields
-          mergedList.push({ ...localItem, ...remoteItem });
+          const localImg = (localItem as any).imageUrl;
+          const remoteImg = (remoteItem as any).imageUrl;
+          const finalImg = remoteImg !== undefined ? remoteImg : localImg;
+          mergedList.push({
+            ...localItem,
+            ...remoteItem,
+            ...(finalImg !== undefined ? { imageUrl: finalImg } : {}),
+          });
         }
       }
     }
@@ -730,6 +748,7 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks): () => 
           let action = (data.action && data.action !== 'null') ? data.action : '';
           let object = (data.object && data.object !== 'null') ? data.object : '';
           let scene = (data.scene && data.scene !== 'null') ? data.scene : '';
+          let imageUrl = (data.imageUrl && data.imageUrl !== 'null') ? data.imageUrl : (data.imageUrl === '' ? '' : undefined);
 
           items.push({
             id: numStr,
@@ -739,6 +758,7 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks): () => 
             action,
             object,
             scene,
+            imageUrl: imageUrl || (data.imageUrl === '' ? '' : undefined),
             is_ready_for_practice: Boolean(data.is_ready_for_practice),
             updatedAt: Math.max(
               getTimestampMillis(data.updatedAt),

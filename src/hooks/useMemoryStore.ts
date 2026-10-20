@@ -345,7 +345,11 @@ export function useMemoryStore() {
 
   useEffect(() => {
     const valid = paoItems.filter((x) => typeof x?.number === 'number' && !isNaN(x.number) && isFinite(x.number) && x.numberStr !== 'NaN');
-    localStorage.setItem(STORAGE_KEYS.PAO, JSON.stringify(valid));
+    try {
+      localStorage.setItem(STORAGE_KEYS.PAO, JSON.stringify(valid));
+    } catch (e) {
+      console.warn('LocalStorage quota warning for PAO:', e);
+    }
   }, [paoItems]);
 
   useEffect(() => {

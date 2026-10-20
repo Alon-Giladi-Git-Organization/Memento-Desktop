@@ -170,7 +170,7 @@ export const AcademicModule: React.FC<AcademicModuleProps> = ({
   });
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl space-y-6">
+    <div className="w-full max-w-none bg-slate-900 border border-slate-800 rounded-3xl p-4 sm:p-6 lg:p-8 shadow-xl space-y-6">
       {/* Header and Sub-Tabs */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-4 border-b border-slate-800">
         <div>
@@ -650,7 +650,7 @@ export const AcademicModule: React.FC<AcademicModuleProps> = ({
           </div>
 
           {/* Non-repeating Quiz Deck Progress Bar */}
-          <div className="max-w-xl mx-auto">
+          <div className="w-full max-w-4xl mx-auto">
             <QuizDeckProgressBar
               progress={deckProgress}
               onResetDeck={() => {
@@ -662,7 +662,7 @@ export const AcademicModule: React.FC<AcademicModuleProps> = ({
           </div>
 
           {academicPoints[quizIndex] && (
-            <div className="max-w-xl mx-auto space-y-6 text-center">
+            <div className="w-full max-w-4xl mx-auto space-y-6 text-center">
               <div className="p-8 rounded-3xl bg-slate-950 border border-slate-800 shadow-inner space-y-3">
                 <span className="text-xs font-bold text-indigo-400 uppercase tracking-widest block">
                   שליפת עוגן וסצנה למושג:

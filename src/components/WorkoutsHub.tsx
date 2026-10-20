@@ -224,20 +224,20 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
   ];
 
   return (
-    <div className="space-y-8 pb-16">
+    <div className="w-full max-w-none space-y-8 pb-16">
       {/* Quick Access to Global Number Logic */}
       {onNavigateToLogicTab && (
-        <div className="flex items-center justify-between flex-wrap gap-3 bg-amber-500/10 border-2 border-amber-500/30 p-3.5 rounded-2xl shadow-xs">
-          <div className="flex items-center gap-2.5">
-            <span className="text-xl">⚙️</span>
-            <div>
+        <div className="w-full flex items-center justify-between flex-wrap gap-3 bg-amber-500/10 border-2 border-amber-500/30 p-3.5 rounded-2xl shadow-xs">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="text-xl shrink-0">⚙️</span>
+            <div className="min-w-0">
               <span className="text-xs font-black text-amber-950 block">הגדרת לוגיקת המספרים והאותיות:</span>
-              <span className="text-[11px] text-amber-800">הגדר קישורי ספרות 0-9 לעיצורים ואותיות מקשרות לכל האפליקציה</span>
+              <span className="text-[11px] text-amber-800 break-words">הגדר קישורי ספרות 0-9 לעיצורים ואותיות מקשרות לכל האפליקציה</span>
             </div>
           </div>
           <button
             onClick={onNavigateToLogicTab}
-            className="text-xs font-black bg-amber-500 hover:bg-amber-400 text-slate-950 px-3.5 py-1.5 rounded-xl transition-all cursor-pointer shadow-xs"
+            className="text-xs font-black bg-amber-500 hover:bg-amber-400 text-slate-950 px-3.5 py-1.5 rounded-xl transition-all cursor-pointer shadow-xs shrink-0"
           >
             פתח עריכת לוגיקה ←
           </button>
@@ -245,7 +245,7 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
       )}
 
       {/* Category Tabs Header */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 w-full">
         {modulesList.map((m) => {
           const Icon = m.icon;
           const isActive = activeModule === m.id;

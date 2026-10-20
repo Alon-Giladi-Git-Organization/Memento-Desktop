@@ -176,7 +176,7 @@ export default function App() {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-6 lg:px-8 pt-4 sm:pt-8 pb-12 overflow-x-hidden">
+      <main className="flex-1 w-full max-w-none px-3 sm:px-6 lg:px-8 xl:px-12 pt-4 sm:pt-8 pb-12 overflow-x-hidden">
         {currentTab === 'workouts' && (
           <WorkoutsHub
             selectedSubModule={selectedWorkoutSubModule}
@@ -396,7 +396,7 @@ export default function App() {
 
       {/* Footer */}
       <footer className="border-t border-slate-200 bg-white/90 py-6 text-center text-xs text-slate-500 shadow-xs w-full max-w-full overflow-hidden">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="w-full max-w-none px-4 sm:px-6 lg:px-8 xl:px-12 mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 flex-wrap">
           <p className="font-medium text-slate-600">
             ממנטו (Memento) • מבוסס על מחקרי נובל 2014, פרופ' אלינור מגווייר (UCL) ותקן אלופי העולם בזיכרון (WMC)
           </p>
