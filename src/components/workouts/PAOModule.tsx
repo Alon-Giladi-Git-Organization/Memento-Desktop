@@ -48,6 +48,7 @@ import {
 } from '../../lib/quizDeckManager';
 import { QuizDeckProgressBar } from '../QuizDeckProgressBar';
 import { compressImageFile } from '../../lib/imageCompression';
+import { ImageDropzone } from '../ImageDropzone';
 
 export type PAOColumnKey = 'number' | 'image' | 'person' | 'action' | 'object' | 'scene' | 'ready' | 'actions';
 
@@ -1347,8 +1348,8 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
           {/* PAO Cards Grid OR List View with Side Navigator */}
           <div className="flex gap-3 items-start">
             {viewMode === 'grid' ? (
-              /* Main Cards Grid */
-              <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 max-h-[620px] overflow-y-auto pr-1 scroll-smooth">
+              /* Main Cards Grid - Responsive Full-Width */
+              <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-3.5 max-h-[680px] overflow-y-auto pr-1 scroll-smooth w-full">
                 {filteredItems.map((item) => {
                   const isEditing = editingNum === item.number;
                   const p = item.person;
@@ -1362,14 +1363,52 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                     <div
                       id={`pao-item-${item.number}`}
                       key={item.number}
-                      className={`bg-slate-950 border rounded-2xl p-4 transition-all duration-300 flex flex-col justify-between ${
-                        isHighlighted
+                      onDragOver={(e) => {
+                        e.preventDefault();
+                        if (dragOverCardNum !== item.number) {
+                          setDragOverCardNum(item.number);
+                        }
+                      }}
+                      onDragLeave={(e) => {
+                        e.preventDefault();
+                        if (dragOverCardNum === item.number) {
+                          setDragOverCardNum(null);
+                        }
+                      }}
+                      onDrop={async (e) => {
+                        e.preventDefault();
+                        setDragOverCardNum(null);
+                        const file = e.dataTransfer.files?.[0];
+                        if (!file || !file.type.startsWith('image/')) return;
+                        try {
+                          setIsCompressing(true);
+                          const comp = await compressImageFile(file);
+                          onUpdatePAOItem(item.number, { imageUrl: comp });
+                          onEarnPoints(10, 'העלאת תמונה לשלשת PAO בגרירה');
+                        } catch (err) {
+                          console.error(err);
+                        } finally {
+                          setIsCompressing(false);
+                        }
+                      }}
+                      className={`relative bg-slate-950 border rounded-2xl p-4 transition-all duration-300 flex flex-col justify-between overflow-hidden ${
+                        dragOverCardNum === item.number
+                          ? 'border-indigo-400 ring-4 ring-indigo-400/40 scale-[1.02] shadow-xl bg-indigo-950/40'
+                          : isHighlighted
                           ? 'border-indigo-400 ring-4 ring-indigo-400/30 scale-[1.02] shadow-xl shadow-indigo-500/20 bg-indigo-950/20'
                           : isCustom
                           ? 'border-indigo-500/50 shadow-sm shadow-indigo-500/10'
                           : 'border-slate-800 hover:border-slate-700'
                       }`}
                     >
+                      {/* Drag overlay when hovering with an image file */}
+                      {dragOverCardNum === item.number && (
+                        <div className="absolute inset-0 z-20 bg-indigo-950/90 border-2 border-dashed border-indigo-400 rounded-2xl flex flex-col items-center justify-center p-3 text-center animate-fadeIn pointer-events-none">
+                          <Upload className="w-7 h-7 text-indigo-300 animate-bounce mb-1.5" />
+                          <span className="text-xs font-black text-white">שחרר להגדרת תמונה!</span>
+                          <span className="text-[10px] text-indigo-200">שלשת PAO #{item.numberStr}</span>
+                        </div>
+                      )}
                     <div className="space-y-3">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
@@ -1565,40 +1604,55 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                           </div>
 
                           {/* Image Attachment in Edit Mode */}
-                          <div className="bg-slate-900/70 border border-pink-500/25 rounded-xl p-2.5 space-y-1.5">
-                            <label className="text-xs text-pink-300 font-bold flex items-center gap-1">
-                              <ImageIcon className="w-3 h-3 text-pink-400" />
-                              <span>תמונה ויזואלית לסצנה:</span>
-                            </label>
-                            <div className="flex items-center gap-2">
+                          <div className="bg-slate-900/90 border border-indigo-500/30 rounded-2xl p-3.5 space-y-3">
+                            <div className="flex items-center justify-between">
+                              <label className="text-xs text-indigo-300 font-bold flex items-center gap-1.5">
+                                <ImageIcon className="w-3.5 h-3.5 text-indigo-400" />
+                                <span>תמונה ויזואלית לסצנה:</span>
+                              </label>
                               {editImageUrl && (
-                                <div className="relative group shrink-0">
-                                  <img
-                                    src={editImageUrl}
-                                    alt="סצנה"
-                                    className="w-10 h-10 object-cover rounded-lg border border-pink-500/40"
-                                  />
+                                <button
+                                  type="button"
+                                  onClick={() => setEditImageUrl('')}
+                                  className="text-[11px] text-rose-400 hover:text-rose-300 flex items-center gap-1 cursor-pointer transition-colors"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                  <span>הסר תמונה</span>
+                                </button>
+                              )}
+                            </div>
+
+                            {editImageUrl ? (
+                              <div className="space-y-3">
+                                <div className="flex items-center justify-between bg-slate-950 p-2.5 rounded-2xl border border-slate-800">
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <img
+                                      src={editImageUrl}
+                                      alt="סצנה"
+                                      className="w-14 h-14 object-cover rounded-xl border border-indigo-500/40 shrink-0"
+                                    />
+                                    <div className="min-w-0">
+                                      <span className="text-xs font-bold text-slate-200 block truncate">תמונה קיימת</span>
+                                      <span className="text-[10px] text-slate-400 block">גרור קובץ או לחץ להחלפה למטה</span>
+                                    </div>
+                                  </div>
                                   <button
                                     type="button"
                                     onClick={() => setEditImageUrl('')}
-                                    className="absolute -top-1 -right-1 bg-rose-600 hover:bg-rose-500 text-white rounded-full p-0.5 cursor-pointer shadow"
+                                    className="px-2.5 py-1 text-xs text-rose-300 hover:text-white bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 rounded-xl flex items-center gap-1 cursor-pointer transition-all shrink-0"
                                     title="הסר תמונה"
                                   >
-                                    <X className="w-2.5 h-2.5" />
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <span>מחק תמונה</span>
                                   </button>
                                 </div>
-                              )}
-                              <label className="py-1 px-2.5 rounded-lg border border-dashed border-slate-700 hover:border-indigo-400 bg-slate-950 text-xs text-slate-300 hover:text-white flex items-center gap-1 cursor-pointer transition-all">
-                                <Upload className="w-3.5 h-3.5 text-indigo-400" />
-                                <span className="text-[11px] font-medium">{isCompressing ? 'דוחס...' : 'העלה קובץ'}</span>
-                                <input
-                                  type="file"
-                                  accept="image/*"
-                                  className="hidden"
-                                  disabled={isCompressing}
-                                  onChange={async (e) => {
-                                    const file = e.target.files?.[0];
-                                    if (!file) return;
+
+                                <ImageDropzone
+                                  isProcessing={isCompressing}
+                                  title="בחר קובץ או גרור לכאן להחלפת התמונה"
+                                  subtitle="Choose a file or drag it here • JPG, PNG, WebP"
+                                  className="py-6 px-3"
+                                  onImageSelected={async (file) => {
                                     try {
                                       setIsCompressing(true);
                                       const comp = await compressImageFile(file);
@@ -1610,13 +1664,35 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                                     }
                                   }}
                                 />
-                              </label>
+                              </div>
+                            ) : (
+                              <ImageDropzone
+                                isProcessing={isCompressing}
+                                title="בחר קובץ או גרור לכאן"
+                                subtitle="Choose a file or drag it here • JPG, PNG, WebP"
+                                className="py-6 px-3"
+                                onImageSelected={async (file) => {
+                                  try {
+                                    setIsCompressing(true);
+                                    const comp = await compressImageFile(file);
+                                    setEditImageUrl(comp);
+                                  } catch (err) {
+                                    console.error(err);
+                                  } finally {
+                                    setIsCompressing(false);
+                                  }
+                                }}
+                              />
+                            )}
+
+                            <div className="flex items-center gap-2 pt-1">
+                              <span className="text-[11px] text-slate-400 shrink-0">או קישור:</span>
                               <input
                                 type="url"
                                 value={editImageUrl.startsWith('data:') ? '' : editImageUrl}
                                 onChange={(e) => setEditImageUrl(e.target.value)}
-                                placeholder="או הזן URL..."
-                                className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white"
+                                placeholder="https://example.com/image.jpg"
+                                className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-indigo-500"
                               />
                             </div>
                           </div>
@@ -1729,8 +1805,39 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                         <tr
                           id={`pao-item-${item.number}`}
                           key={item.number}
+                          onDragOver={(e) => {
+                            e.preventDefault();
+                            if (dragOverCardNum !== item.number) {
+                              setDragOverCardNum(item.number);
+                            }
+                          }}
+                          onDragLeave={(e) => {
+                            e.preventDefault();
+                            if (dragOverCardNum === item.number) {
+                              setDragOverCardNum(null);
+                            }
+                          }}
+                          onDrop={async (e) => {
+                            e.preventDefault();
+                            setDragOverCardNum(null);
+                            const file = e.dataTransfer.files?.[0];
+                            if (!file || !file.type.startsWith('image/')) return;
+                            try {
+                              setIsCompressing(true);
+                              const comp = await compressImageFile(file);
+                              onUpdatePAOItem(item.number, { imageUrl: comp });
+                              if (isEditing) setEditImageUrl(comp);
+                              onEarnPoints(10, 'העלאת תמונה לשלשת PAO בגרירה');
+                            } catch (err) {
+                              console.error(err);
+                            } finally {
+                              setIsCompressing(false);
+                            }
+                          }}
                           className={`transition-colors ${
-                            isHighlighted
+                            dragOverCardNum === item.number
+                              ? 'bg-indigo-950/80 ring-2 ring-indigo-400'
+                              : isHighlighted
                               ? 'bg-indigo-950/40 ring-1 ring-indigo-500'
                               : item.is_ready_for_practice
                               ? 'bg-indigo-950/10 hover:bg-slate-900/80'
@@ -1757,7 +1864,12 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                                     <img
                                       src={editImageUrl}
                                       alt={item.numberStr}
-                                      className="w-8 h-8 object-cover rounded-lg border border-pink-500/50"
+                                      className="w-8 h-8 object-cover rounded-lg border border-pink-500/50 cursor-pointer hover:opacity-80"
+                                      onClick={() => {
+                                        setQuickUploadItem(item);
+                                        setQuickUploadUrl(editImageUrl);
+                                      }}
+                                      title="לחץ להחלפה בקונטיינר גדול"
                                     />
                                     <button
                                       type="button"
@@ -1769,31 +1881,17 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                                     </button>
                                   </div>
                                 ) : (
-                                  <label
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setQuickUploadItem(item);
+                                      setQuickUploadUrl(editImageUrl || item.imageUrl || '');
+                                    }}
                                     className="p-1.5 rounded-lg border border-dashed border-pink-500/50 hover:border-pink-400 bg-pink-950/20 text-pink-300 hover:text-white cursor-pointer transition-all inline-flex items-center justify-center"
-                                    title="העלה תמונה לשלשה זו"
+                                    title="פתח קונטיינר העלאה וגרירה לתמונה זו"
                                   >
                                     <Upload className="w-3.5 h-3.5" />
-                                    <input
-                                      type="file"
-                                      accept="image/*"
-                                      className="hidden"
-                                      disabled={isCompressing}
-                                      onChange={async (e) => {
-                                        const file = e.target.files?.[0];
-                                        if (!file) return;
-                                        try {
-                                          setIsCompressing(true);
-                                          const comp = await compressImageFile(file);
-                                          setEditImageUrl(comp);
-                                        } catch (err) {
-                                          console.error(err);
-                                        } finally {
-                                          setIsCompressing(false);
-                                        }
-                                      }}
-                                    />
-                                  </label>
+                                  </button>
                                 )}
                               </div>
                             ) : item.imageUrl ? (
@@ -2103,7 +2201,13 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
               {currentQuizItem && quizMeta && (
                 <div className="w-full max-w-4xl mx-auto space-y-6 text-center">
                   {/* Dynamic Themed Question Card */}
-                  <div className={`p-6 sm:p-8 rounded-3xl ${quizMeta.cardBg} border ${quizMeta.cardBorder} shadow-inner space-y-4`}>
+                  <div className={`p-6 sm:p-8 rounded-3xl ${quizMeta.cardBg} border ${quizMeta.cardBorder} shadow-inner space-y-4 transition-all ${
+                    quizFeedback === 'incorrect'
+                      ? 'animate-shake ring-2 ring-rose-500/50'
+                      : quizFeedback === 'correct'
+                      ? 'animate-pop ring-2 ring-emerald-500/50'
+                      : ''
+                  }`}>
                     <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
                       <span
                         className={`inline-flex items-center gap-1.5 text-xs font-black px-3 py-1 rounded-xl border ${quizMeta.badgeColor}`}
@@ -2410,7 +2514,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                     </div>
 
                     {quizFeedback === 'correct' && (
-                      <div className="p-4 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 flex flex-col items-center justify-center gap-1.5 animate-fadeIn">
+                      <div className="p-4 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 flex flex-col items-center justify-center gap-1.5 animate-pop shadow-md">
                         <div className="flex items-center gap-2">
                           <CheckCircle2 className="w-5 h-5 text-emerald-400" />
                           <span className="font-bold text-sm">מעולה! שליפה מדויקת (+20 XP)</span>
@@ -2422,7 +2526,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                     )}
 
                     {quizFeedback === 'incorrect' && (
-                      <div className="p-4 rounded-2xl bg-rose-500/15 border border-rose-500/40 text-rose-300 flex flex-col items-center justify-center gap-1.5 animate-fadeIn">
+                      <div className="p-4 rounded-2xl bg-rose-500/15 border border-rose-500/40 text-rose-300 flex flex-col items-center justify-center gap-1.5 animate-shake shadow-md">
                         <div className="flex items-center gap-2">
                           <XCircle className="w-5 h-5 text-rose-400" />
                           <span className="font-bold text-sm">תשובה שגויה - התשובה הנכונה מוצגת למטה</span>
@@ -2715,53 +2819,65 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
 
               {/* Action Buttons: Replace, Delete, Close */}
               <div className="flex items-center gap-2">
-                {typeof selectedPreviewImage.number === 'number' && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setModalIsEditing((prev) => !prev);
-                        setModalNewImageUrl(selectedPreviewImage.url);
-                      }}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                        modalIsEditing
-                          ? 'bg-indigo-600 text-white shadow-md'
-                          : 'bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30'
-                      }`}
-                      title="החלף תמונה לשלשת PAO זו"
-                    >
-                      <Edit3 className="w-3.5 h-3.5" />
-                      <span>{modalIsEditing ? 'סגור עריכה' : 'החלף תמונה'}</span>
-                    </button>
+                {(() => {
+                  const targetItemNumber =
+                    typeof selectedPreviewImage.number === 'number'
+                      ? selectedPreviewImage.number
+                      : selectedPreviewImage.numberStr !== undefined
+                      ? parseInt(selectedPreviewImage.numberStr, 10)
+                      : NaN;
+                  const canManageItem = !isNaN(targetItemNumber) && targetItemNumber >= 0 && targetItemNumber <= 99;
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (typeof selectedPreviewImage.number === 'number') {
-                          if (window.confirm('האם אתה בטוח שברצונך למחוק את התמונה עבור שלשה זו?')) {
-                            onUpdatePAOItem(selectedPreviewImage.number, {
-                              imageUrl: '',
-                            });
-                            setSelectedPreviewImage(null);
-                            setModalIsEditing(false);
-                            setModalNewImageUrl('');
-                          }
-                        }
-                      }}
-                      className="px-2.5 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 hover:text-white border border-rose-500/30 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-                      title="מחק תמונה זו לחלוטין"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span className="hidden sm:inline">מחק</span>
-                    </button>
-                  </>
-                )}
+                  if (!canManageItem) return null;
+
+                  return (
+                    <>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setModalIsEditing((prev) => !prev);
+                          setModalNewImageUrl(selectedPreviewImage.url);
+                        }}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                          modalIsEditing
+                            ? 'bg-indigo-600 text-white shadow-md'
+                            : 'bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 border border-indigo-500/30'
+                        }`}
+                        title="החלף תמונה לשלשת PAO זו"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        <span>{modalIsEditing ? 'סגור החלפה' : 'החלף תמונה'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onUpdatePAOItem(targetItemNumber, {
+                            imageUrl: '',
+                          });
+                          setSelectedPreviewImage(null);
+                          setModalIsEditing(false);
+                          setModalNewImageUrl('');
+                          setConfirmDeleteModal(false);
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md"
+                        title="מחק תמונה זו לחלוטין"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>מחק תמונה</span>
+                      </button>
+                    </>
+                  );
+                })()}
 
                 <button
                   type="button"
                   onClick={() => {
                     setSelectedPreviewImage(null);
                     setModalIsEditing(false);
+                    setConfirmDeleteModal(false);
                   }}
                   className="p-1.5 rounded-full text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
                   title="סגור (Esc או לחיצה מחוץ לתמונה)"
@@ -2773,57 +2889,49 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
 
             {/* In-Modal Image Replace Drawer */}
             {modalIsEditing && typeof selectedPreviewImage.number === 'number' && (
-              <div className="bg-slate-950/95 border-b border-indigo-500/30 p-4 space-y-3 animate-fadeIn">
+              <div className="bg-slate-950/95 border-b border-indigo-500/30 p-4 sm:p-6 space-y-4 animate-fadeIn">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-indigo-300 flex items-center gap-1.5">
+                  <span className="text-sm font-bold text-indigo-300 flex items-center gap-2">
                     <Edit3 className="w-4 h-4 text-indigo-400" />
                     <span>החלפת תמונה לשלשת PAO #{selectedPreviewImage.numberStr}:</span>
                   </span>
-                  <span className="text-[11px] text-slate-400">
-                    בחר קובץ חדש או הדבק קישור לתמונה
+                  <span className="text-xs text-slate-400">
+                    העלה קובץ חדש או הדבק קישור לתמונה
                   </span>
                 </div>
 
-                <div className="flex flex-col sm:flex-row items-center gap-2.5">
-                  <label className="w-full sm:w-auto py-2 px-3.5 rounded-xl border border-dashed border-indigo-500/50 hover:border-indigo-400 bg-indigo-950/40 text-xs text-indigo-200 hover:text-white flex items-center justify-center gap-2 cursor-pointer transition-all shrink-0">
-                    <Upload className="w-4 h-4 text-indigo-400" />
-                    <span className="font-semibold">
-                      {modalIsCompressing ? 'דוחס קובץ...' : 'העלה קובץ מהמכשיר'}
-                    </span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      disabled={modalIsCompressing}
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        try {
-                          setModalIsCompressing(true);
-                          const comp = await compressImageFile(file);
-                          setModalNewImageUrl(comp);
-                          if (typeof selectedPreviewImage.number === 'number') {
-                            onUpdatePAOItem(selectedPreviewImage.number, {
-                              imageUrl: comp,
-                            });
-                            setSelectedPreviewImage((prev) => (prev ? { ...prev, url: comp } : null));
-                            setModalIsEditing(false);
-                            onEarnPoints(10, 'עדכון תמונה ויזואלית לסצנה');
-                          }
-                        } catch (err) {
-                          console.error(err);
-                        } finally {
-                          setModalIsCompressing(false);
-                        }
-                      }}
-                    />
-                  </label>
+                {/* Big Drag and Drop Container Matching Reference Image */}
+                <ImageDropzone
+                  isProcessing={modalIsCompressing}
+                  title="בחר קובץ או גרור לכאן להחלפת התמונה"
+                  subtitle="Choose a file or drag it here • JPG, PNG, WebP"
+                  onImageSelected={async (file) => {
+                    try {
+                      setModalIsCompressing(true);
+                      const comp = await compressImageFile(file);
+                      if (typeof selectedPreviewImage.number === 'number') {
+                        onUpdatePAOItem(selectedPreviewImage.number, {
+                          imageUrl: comp,
+                        });
+                        setSelectedPreviewImage((prev) => (prev ? { ...prev, url: comp } : null));
+                        setModalIsEditing(false);
+                        onEarnPoints(10, 'עדכון תמונה ויזואלית לסצנה');
+                      }
+                    } catch (err) {
+                      console.error(err);
+                    } finally {
+                      setModalIsCompressing(false);
+                    }
+                  }}
+                />
 
+                <div className="flex flex-col sm:flex-row items-center gap-2 pt-1">
+                  <span className="text-xs text-slate-400 shrink-0">או הדבק קישור (URL) לתמונה:</span>
                   <input
                     type="url"
                     value={modalNewImageUrl.startsWith('data:') ? '' : modalNewImageUrl}
                     onChange={(e) => setModalNewImageUrl(e.target.value)}
-                    placeholder="או הדבק קישור (URL) לתמונה..."
+                    placeholder="https://example.com/image.jpg"
                     className="flex-1 w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && modalNewImageUrl.trim()) {
@@ -2841,7 +2949,6 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                       }
                     }}
                   />
-
                   <button
                     type="button"
                     disabled={!modalNewImageUrl || modalNewImageUrl === selectedPreviewImage.url}
@@ -2860,14 +2967,51 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                     className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-md transition-all shrink-0"
                   >
                     <Save className="w-3.5 h-3.5" />
-                    <span>שמור תמונה</span>
+                    <span>שמור קישור</span>
                   </button>
                 </div>
               </div>
             )}
 
-            {/* High-Resolution Image Viewport */}
-            <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-black/60 min-h-[300px]">
+            {/* High-Resolution Image Viewport with drag-and-drop replacement */}
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsModalDragOver(true);
+              }}
+              onDragLeave={(e) => {
+                e.preventDefault();
+                setIsModalDragOver(false);
+              }}
+              onDrop={async (e) => {
+                e.preventDefault();
+                setIsModalDragOver(false);
+                const file = e.dataTransfer.files?.[0];
+                if (!file || !file.type.startsWith('image/')) return;
+                try {
+                  setModalIsCompressing(true);
+                  const comp = await compressImageFile(file);
+                  if (typeof selectedPreviewImage.number === 'number') {
+                    onUpdatePAOItem(selectedPreviewImage.number, { imageUrl: comp });
+                    setSelectedPreviewImage((prev) => (prev ? { ...prev, url: comp } : null));
+                    setModalIsEditing(false);
+                    onEarnPoints(10, 'עדכון תמונה ויזואלית לסצנה');
+                  }
+                } catch (err) {
+                  console.error(err);
+                } finally {
+                  setModalIsCompressing(false);
+                }
+              }}
+              className="relative flex-1 overflow-auto p-4 flex items-center justify-center bg-black/60 min-h-[300px]"
+            >
+              {isModalDragOver && (
+                <div className="absolute inset-0 z-20 bg-indigo-950/85 border-4 border-dashed border-indigo-400 rounded-2xl flex flex-col items-center justify-center p-6 text-center animate-fadeIn">
+                  <Upload className="w-12 h-12 text-indigo-300 animate-bounce mb-3" />
+                  <span className="text-lg font-black text-white">שחרר כאן להחלפת התמונה!</span>
+                  <span className="text-xs text-indigo-200 mt-1">שלשת PAO #{selectedPreviewImage.numberStr}</span>
+                </div>
+              )}
               <img
                 src={selectedPreviewImage.url}
                 alt={selectedPreviewImage.title}
@@ -2925,57 +3069,56 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
             </div>
 
             {/* Image Preview & Upload Input */}
-            <div className="space-y-3">
+            <div className="space-y-4">
               {(quickUploadUrl || quickUploadItem.imageUrl) && quickUploadUrl !== 'REMOVE' && (
-                <div className="flex justify-center">
+                <div className="flex flex-col items-center justify-center gap-2">
                   <div className="relative group">
                     <img
                       src={quickUploadUrl || quickUploadItem.imageUrl}
                       alt="סצנה"
-                      className="w-36 h-36 object-cover rounded-2xl border-2 border-pink-500/50 shadow-md"
+                      className="w-40 h-40 object-cover rounded-2xl border-2 border-indigo-500/50 shadow-md"
                     />
                     <button
                       type="button"
                       onClick={() => setQuickUploadUrl('REMOVE')}
-                      className="absolute -top-2 -right-2 bg-rose-600 hover:bg-rose-500 text-white rounded-full p-1 cursor-pointer shadow"
+                      className="absolute -top-2 -right-2 bg-rose-600 hover:bg-rose-500 text-white rounded-full p-1.5 cursor-pointer shadow hover:scale-110 transition-transform"
                       title="הסר תמונה"
                     >
                       <X className="w-3.5 h-3.5" />
                     </button>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setQuickUploadUrl('REMOVE')}
+                    className="px-3 py-1 bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>מחק תמונה</span>
+                  </button>
                 </div>
               )}
 
-              <div className="space-y-2">
-                <label className="block text-xs font-bold text-pink-300">
-                  העלה קובץ תמונה מהמכשיר:
-                </label>
-                <label className="w-full py-2.5 px-4 rounded-xl border border-dashed border-pink-500/40 hover:border-pink-400 bg-pink-950/20 text-xs text-pink-200 hover:text-white flex items-center justify-center gap-2 cursor-pointer transition-all">
-                  <Upload className="w-4 h-4 text-pink-400" />
-                  <span className="font-semibold">
-                    {isCompressing ? 'דוחס ומכין תמונה...' : 'בחר תמונה מהמחשב או הנייד'}
-                  </span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    disabled={isCompressing}
-                    onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (!file) return;
-                      try {
-                        setIsCompressing(true);
-                        const compressed = await compressImageFile(file);
-                        setQuickUploadUrl(compressed);
-                      } catch (err) {
-                        console.error(err);
-                      } finally {
-                        setIsCompressing(false);
-                      }
-                    }}
-                  />
-                </label>
-              </div>
+              {/* Big tactile drag-and-drop container matching user's reference */}
+              <ImageDropzone
+                isProcessing={isCompressing}
+                title={
+                  (quickUploadUrl || quickUploadItem.imageUrl) && quickUploadUrl !== 'REMOVE'
+                    ? "בחר קובץ או גרור לכאן להחלפת התמונה"
+                    : "בחר קובץ או גרור לכאן"
+                }
+                subtitle="Choose a file or drag it here • JPG, PNG, WebP"
+                onImageSelected={async (file) => {
+                  try {
+                    setIsCompressing(true);
+                    const compressed = await compressImageFile(file);
+                    setQuickUploadUrl(compressed);
+                  } catch (err) {
+                    console.error(err);
+                  } finally {
+                    setIsCompressing(false);
+                  }
+                }}
+              />
 
               <div className="space-y-1">
                 <label className="block text-xs text-slate-400">
@@ -2986,7 +3129,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                   value={quickUploadUrl === 'REMOVE' ? '' : quickUploadUrl.startsWith('data:') ? '' : quickUploadUrl}
                   onChange={(e) => setQuickUploadUrl(e.target.value)}
                   placeholder="https://example.com/image.jpg"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-pink-500 focus:ring-1 focus:ring-pink-500"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
             </div>
@@ -3021,7 +3164,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
       {/* Validation Alert Modal */}
       {validationModal && validationModal.isOpen && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4" dir="rtl">
-          <div className="bg-slate-900 border-2 border-amber-500/80 rounded-3xl max-w-md w-full p-6 text-right space-y-4 shadow-2xl animate-in fade-in zoom-in-95">
+          <div className="bg-slate-900 border-2 border-amber-500/80 rounded-3xl max-w-md w-full p-6 text-right space-y-4 shadow-2xl animate-shake animate-scaleUp">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0">
                 <AlertTriangle className="w-6 h-6 text-amber-400" />

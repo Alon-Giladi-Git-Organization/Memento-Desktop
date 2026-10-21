@@ -145,7 +145,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => onTabChange('workouts')}
             className="flex items-center gap-2 sm:gap-3 cursor-pointer group shrink-0 min-w-0"
           >
-            <div className="relative flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-[#58CC02] border-b-4 border-[#46a302] shadow-sm group-hover:scale-105 active:translate-y-0.5 transition-all shrink-0">
+            <div className="relative flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-[#58CC02] border-b-4 border-[#46a302] shadow-sm group-hover:scale-105 active:translate-y-0.5 transition-all shrink-0 animate-float">
               <Brain className="w-5 h-5 sm:w-6 sm:h-6 text-white font-black drop-shadow" />
               <div className="absolute -top-1 -right-1 w-2.5 h-2.5 sm:w-3 sm:h-3 bg-[#FFC800] rounded-full border-2 border-white animate-pulse" />
             </div>
@@ -200,7 +200,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               title="רצף ימי אימון יומי"
               className="flex items-center gap-1 bg-[#FF9600]/15 border-2 border-[#FF9600]/40 px-2 sm:px-3 py-1 sm:py-1.5 rounded-xl sm:rounded-2xl text-[#c76500] font-black text-[11px] sm:text-xs cursor-pointer hover:bg-[#FF9600]/25 transition-all hover:scale-105 active:scale-95 whitespace-nowrap"
             >
-              <Flame className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-[#FF9600]" />
+              <Flame className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-[#FF9600] animate-glow" />
               <span>{profile.dailyStreak}</span>
               <span className="hidden xs:inline"> ימים</span>
             </div>

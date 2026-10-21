@@ -213,3 +213,76 @@
 .animate-fadeIn {
   animation: fadeIn 0.18s ease-out forwards;
 }
+
+@keyframes scaleUp {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-scaleUp {
+  animation: scaleUp 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* User Triggered: Shake for errors, wrong answers, validation alerts */
+@keyframes shakeSoft {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+
+.animate-shake {
+  animation: shakeSoft 0.42s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+/* User Triggered: Pop on correct answer / achievement */
+@keyframes popSuccess {
+  0% { transform: scale(0.93); }
+  50% { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+
+.animate-pop {
+  animation: popSuccess 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* Ambient / Looping: Floating logo or icons */
+@keyframes floatSubtle {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-3.5px); }
+}
+
+.animate-float {
+  animation: floatSubtle 3.2s ease-in-out infinite;
+}
+
+/* Ambient / Looping: Soft breathing glow */
+@keyframes pulseGlow {
+  0%, 100% { filter: drop-shadow(0 0 1px rgba(88, 204, 2, 0.2)); opacity: 1; }
+  50% { filter: drop-shadow(0 0 7px rgba(88, 204, 2, 0.5)); opacity: 0.95; }
+}
+
+.animate-glow {
+  animation: pulseGlow 2.5s ease-in-out infinite;
+}
+
+/* Page / Tab transitions */
+@keyframes pageSlide {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-page {
+  animation: pageSlide 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

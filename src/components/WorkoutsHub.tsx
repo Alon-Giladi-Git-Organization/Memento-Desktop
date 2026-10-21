@@ -292,8 +292,9 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
       </div>
 
       {/* RENDER THE ACTIVE MODULE */}
-      {activeModule === 'major' && (
-        <MajorModule
+      <div key={activeModule} className="w-full animate-page">
+        {activeModule === 'major' && (
+          <MajorModule
           majorDigits={majorDigits}
           connectingLetters={connectingLetters}
           majorItems={majorItems}
@@ -382,6 +383,7 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
           onOpenSummary={onOpenSummary}
         />
       )}
+      </div>
     </div>
   );
 };

@@ -177,7 +177,8 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 w-full max-w-none px-3 sm:px-6 lg:px-8 xl:px-12 pt-4 sm:pt-8 pb-12 overflow-x-hidden">
-        {currentTab === 'workouts' && (
+        <div key={currentTab} className="w-full animate-page">
+          {currentTab === 'workouts' && (
           <WorkoutsHub
             selectedSubModule={selectedWorkoutSubModule}
             onSubModuleChange={setSelectedWorkoutSubModule}
@@ -328,6 +329,7 @@ export default function App() {
         )}
 
         {currentTab === 'theory' && <TheorySection />}
+        </div>
       </main>
 
       {/* Global AI Mentor Floating Widget */}
