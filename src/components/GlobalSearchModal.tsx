@@ -366,8 +366,12 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
       className="fixed inset-0 z-50 flex items-start justify-center p-3 sm:p-6 bg-slate-900/40 backdrop-blur-xs animate-fadeIn"
       onClick={onClose}
     >
+      {/* דפוס M3 מספר 1: Container Transform (טרנספורמציית קונטיינר)
+          נבחר עבור פלטת החיפוש הכללית (GlobalSearchModal).
+          לפי הנחיות Google Material Motion, שורת החיפוש ב-Navbar נפתחת ומתרחבת באופן רציף
+          לתוך חלונית החיפוש המלאה תוך שמירה על רציפות ויזואלית וריכוך אלגנטי. */}
       <div
-        className="bg-white border border-slate-200 rounded-3xl w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col mt-8 sm:mt-16 max-h-[82vh]"
+        className="bg-white border border-slate-200 rounded-3xl w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col mt-8 sm:mt-16 max-h-[82vh] m3-container-transform"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Search Header */}

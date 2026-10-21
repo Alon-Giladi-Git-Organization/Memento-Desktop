@@ -345,9 +345,14 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
         }
       />
 
-      {/* Main Testing Card */}
+      {/* דפוס M3 מספר 2: Shared Axis - ציר Y (מעבר סדרתי בין שאלות)
+          נבחר עבור שאלות השליפה. בעת מעבר לשאלה הבאה בסבב, התוכן מתחלף לאורך ציר Y
+          עם עקומת תאוטה מדורגת (M3 emphasized decelerate) הממקדת את תשומת הלב של התלמיד בשאלה החדשה. */}
       {currentQuestion && (
-        <div className="bg-white border-2 border-slate-200 border-b-6 border-b-slate-300 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6">
+        <div
+          key={currentQuestion.id}
+          className="bg-white border-2 border-slate-200 border-b-6 border-b-slate-300 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6 m3-shared-axis-y"
+        >
           {/* Question Banner */}
           <div className="flex flex-col sm:flex-row items-start gap-4 pb-4 border-b-2 border-slate-200">
             {currentQuestion.avatarUrl ? (
@@ -427,7 +432,7 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
                 <button
                   type="submit"
                   disabled={!userResponse.trim() || isLoading}
-                  className="btn-duo-green flex items-center gap-2 px-6 py-2.5 text-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-xs"
+                  className="btn-duo-green flex items-center gap-2 px-6 py-2.5 text-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed shadow-xs m3-chip-interactive"
                 >
                   {isLoading ? (
                     <>
@@ -447,7 +452,7 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
                 <button
                   type="button"
                   onClick={() => generateNewQuestion(selectedCategory, true)}
-                  className="btn-duo-blue flex items-center gap-2 px-6 py-2.5 text-xs cursor-pointer shadow-xs"
+                  className="btn-duo-blue flex items-center gap-2 px-6 py-2.5 text-xs cursor-pointer shadow-xs m3-chip-interactive"
                 >
                   <span>לשאלה הבאה בסבב</span>
                   <ArrowRight className="w-4 h-4 rotate-180" />
@@ -456,13 +461,16 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
             )}
           </form>
 
-          {/* AI Evaluation Box */}
+          {/* דפוס M3 מספר 4: Shape Morphing / Expressive Spring
+              נבחר עבור משוב ה-AI לשליפה:
+              - תשובה נכונה: קפיצה פיזיקלית הרמונית (Harmonic Spring Pop) המעניקה חיזוק דופמינרגי מיידי.
+              - תשובה שגויה: רעד קפיצי מרוסן (Damped Spring Shake) המאותת מיד על צורך בחידוד הזיכרון. */}
           {evaluation && (
             <div
-              className={`rounded-2xl p-5 border-2 transition-all animate-fadeIn ${
+              className={`rounded-2xl p-5 border-2 transition-all ${
                 evaluation.isCorrect
-                  ? 'bg-emerald-50 border-emerald-300'
-                  : 'bg-amber-50 border-amber-300'
+                  ? 'bg-emerald-50 border-emerald-300 m3-spring-pop'
+                  : 'bg-amber-50 border-amber-300 animate-shake'
               }`}
             >
               <div className="flex items-start justify-between gap-4">

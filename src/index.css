@@ -198,60 +198,212 @@
   background: #94a3b8;
 }
 
-/* Utility Animations */
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: scale(0.98);
+/* ==========================================================================
+   Google Material Design 3 (M3 Expressive) Web Motion Design System
+   ========================================================================== */
+
+:root {
+  /* M3 Expressive Easing Tokens (Physics & Spring Curves) */
+  --m3-easing-emphasized: cubic-bezier(0.2, 0.0, 0.0, 1.0);
+  --m3-easing-emphasized-decelerate: cubic-bezier(0.05, 0.7, 0.1, 1.0);
+  --m3-easing-emphasized-accelerate: cubic-bezier(0.3, 0.0, 0.8, 0.15);
+  --m3-easing-standard: cubic-bezier(0.2, 0.0, 0.0, 1.0);
+  --m3-easing-standard-decelerate: cubic-bezier(0.0, 0.0, 0.2, 1.0);
+  --m3-easing-spring-fast: cubic-bezier(0.34, 1.56, 0.64, 1.0);
+  --m3-easing-spring-expressive: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  
+  /* M3 Duration Tokens */
+  --m3-duration-short: 180ms;
+  --m3-duration-medium: 280ms;
+  --m3-duration-long: 380ms;
+  --m3-duration-extra-long: 480ms;
+}
+
+/* ==========================================================================
+   PATTERN 1: Container Transform (טרנספורמציית קונטיינר)
+   מורפינג רציף של אלמנט מקור (כרטיס, כפתור) למודל מורחב / תצוגת פרטים מלאה
+   משתמש ב-transform + opacity + border-radius כדי למנוע Layout Thrashing לחלוטין.
+   ========================================================================== */
+@keyframes m3ContainerTransformExpand {
+  0% {
+    opacity: 0.2;
+    transform: scale(0.92) translateY(12px);
+    border-radius: 2.25rem;
   }
-  to {
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    border-radius: 1.5rem;
+  }
+}
+
+.m3-container-transform {
+  will-change: transform, opacity, border-radius;
+  animation: m3ContainerTransformExpand var(--m3-duration-long) var(--m3-easing-emphasized-decelerate) forwards;
+}
+
+/* ==========================================================================
+   PATTERN 2: Shared Axis (ציר משותף: X, Y, Z)
+   מעברים בעלי קשר היררכי, סדרתי או ניווטי (טאבים ברצף, שאלות מבחן, דפדוף)
+   תומך בכיווניות עברית (RTL) בציר X.
+   ========================================================================== */
+@keyframes m3SharedAxisXForward {
+  0% {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+  30% {
+    opacity: 0.45;
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes m3SharedAxisXBackward {
+  0% {
+    opacity: 0;
+    transform: translateX(-28px);
+  }
+  30% {
+    opacity: 0.45;
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes m3SharedAxisY {
+  0% {
+    opacity: 0;
+    transform: translateY(22px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes m3SharedAxisZ {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+  100% {
     opacity: 1;
     transform: scale(1);
   }
 }
 
-.animate-fadeIn {
-  animation: fadeIn 0.18s ease-out forwards;
+.m3-shared-axis-x-forward {
+  will-change: transform, opacity;
+  animation: m3SharedAxisXForward var(--m3-duration-medium) var(--m3-easing-emphasized-decelerate) forwards;
 }
 
-@keyframes scaleUp {
-  from {
+.m3-shared-axis-x-backward {
+  will-change: transform, opacity;
+  animation: m3SharedAxisXBackward var(--m3-duration-medium) var(--m3-easing-emphasized-decelerate) forwards;
+}
+
+.m3-shared-axis-y {
+  will-change: transform, opacity;
+  animation: m3SharedAxisY var(--m3-duration-medium) var(--m3-easing-emphasized-decelerate) forwards;
+}
+
+.m3-shared-axis-z {
+  will-change: transform, opacity;
+  animation: m3SharedAxisZ var(--m3-duration-medium) var(--m3-easing-emphasized-decelerate) forwards;
+}
+
+/* ==========================================================================
+   PATTERN 3: Fade Through (דהייה והחלפה קונטקסטואלית)
+   החלפת מסכים ראשיים / תצוגות שאינן בעלות קשר סדרתי (ניווט עליון, מעבר טבלה/כרטיסים)
+   יוצר דהייה חלקה עם סקייל מ-0.96 ל-1.0 למניעת הבהוב או התנגשות ויזואלית.
+   ========================================================================== */
+@keyframes m3FadeThrough {
+  0% {
     opacity: 0;
-    transform: scale(0.95);
+    transform: scale(0.965);
   }
-  to {
+  40% {
+    opacity: 0.5;
+  }
+  100% {
     opacity: 1;
     transform: scale(1);
   }
 }
 
-.animate-scaleUp {
-  animation: scaleUp 0.22s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+.m3-fade-through {
+  will-change: transform, opacity;
+  animation: m3FadeThrough var(--m3-duration-medium) var(--m3-easing-emphasized-decelerate) forwards;
 }
 
-/* User Triggered: Shake for errors, wrong answers, validation alerts */
-@keyframes shakeSoft {
+/* ==========================================================================
+   PATTERN 4: Shape Morphing / Expressive Spring (שינוי צורה וקפיציות פיזיקלית)
+   מיקרו-אינטראקציות קינטיות, ריחוף כפתורים, שינויי רדיוס פינות, שבבי בחירה וקפיצות הצלחה
+   ========================================================================== */
+.m3-shape-morph {
+  transition: transform 220ms var(--m3-easing-spring-fast),
+              border-radius 220ms var(--m3-easing-spring-fast),
+              box-shadow 220ms var(--m3-easing-emphasized-decelerate),
+              border-color 180ms ease,
+              background-color 180ms ease;
+  will-change: transform, border-radius;
+}
+.m3-shape-morph:hover {
+  transform: translateY(-2.5px) scale(1.02);
+  border-radius: 1.35rem;
+}
+.m3-shape-morph:active {
+  transform: translateY(1.5px) scale(0.97);
+  border-radius: 0.85rem;
+}
+
+/* Expressive Chip Micro-Interaction */
+.m3-chip-interactive {
+  transition: all 180ms var(--m3-easing-spring-expressive);
+  will-change: transform, border-radius;
+}
+.m3-chip-interactive:hover {
+  transform: scale(1.045);
+}
+.m3-chip-interactive:active {
+  transform: scale(0.95);
+}
+
+/* Harmonic Spring Pop for correct answers and success states */
+@keyframes m3SpringBounce {
+  0% { transform: scale(0.85); opacity: 0.8; }
+  45% { transform: scale(1.07); opacity: 1; }
+  70% { transform: scale(0.97); }
+  85% { transform: scale(1.015); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.m3-spring-pop {
+  will-change: transform, opacity;
+  animation: m3SpringBounce 440ms var(--m3-easing-spring-fast) forwards;
+}
+
+/* Damped Harmonic Spring Shake for validation alerts and errors */
+@keyframes m3SpringShake {
   0%, 100% { transform: translateX(0); }
-  20%, 60% { transform: translateX(-6px); }
-  40%, 80% { transform: translateX(6px); }
+  18% { transform: translateX(-7px); }
+  36% { transform: translateX(6px); }
+  54% { transform: translateX(-4px); }
+  72% { transform: translateX(3px); }
+  88% { transform: translateX(-1px); }
 }
 
 .animate-shake {
-  animation: shakeSoft 0.42s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+  will-change: transform;
+  animation: m3SpringShake 440ms var(--m3-easing-spring-fast) both;
 }
 
-/* User Triggered: Pop on correct answer / achievement */
-@keyframes popSuccess {
-  0% { transform: scale(0.93); }
-  50% { transform: scale(1.04); }
-  100% { transform: scale(1); }
-}
-
-.animate-pop {
-  animation: popSuccess 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both;
-}
-
-/* Ambient / Looping: Floating logo or icons */
+/* Ambient / Looping Animations */
 @keyframes floatSubtle {
   0%, 100% { transform: translateY(0px); }
   50% { transform: translateY(-3.5px); }
@@ -261,7 +413,6 @@
   animation: floatSubtle 3.2s ease-in-out infinite;
 }
 
-/* Ambient / Looping: Soft breathing glow */
 @keyframes pulseGlow {
   0%, 100% { filter: drop-shadow(0 0 1px rgba(88, 204, 2, 0.2)); opacity: 1; }
   50% { filter: drop-shadow(0 0 7px rgba(88, 204, 2, 0.5)); opacity: 0.95; }
@@ -271,18 +422,19 @@
   animation: pulseGlow 2.5s ease-in-out infinite;
 }
 
-/* Page / Tab transitions */
-@keyframes pageSlide {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.animate-pop {
+  will-change: transform;
+  animation: m3SpringBounce 400ms var(--m3-easing-spring-fast) both;
+}
+
+.animate-fadeIn {
+  animation: m3FadeThrough 220ms var(--m3-easing-emphasized-decelerate) forwards;
+}
+
+.animate-scaleUp {
+  animation: m3ContainerTransformExpand var(--m3-duration-medium) var(--m3-easing-emphasized-decelerate) forwards;
 }
 
 .animate-page {
-  animation: pageSlide 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: m3FadeThrough var(--m3-duration-medium) var(--m3-easing-emphasized-decelerate) forwards;
 }

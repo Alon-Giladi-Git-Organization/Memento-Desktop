@@ -463,8 +463,11 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
       </div>
 
       {/* SUB-VIEW 2: TABLE 00-99 & CUSTOM */}
+      {/* דפוס M3 מספר 3: Fade Through (דהייה והחלפה קונטקסטואלית)
+          נבחר עבור החלפת תתי-המצבים בשיטת Major: מאגר 00-99, מיפוי ספרות 0-9 ומבחן שליפה.
+          לפי Google Material Motion, שינוי מצב תוכן ראשי דוהה החוצה ונכנס בריכוך עדין למניעת הבהוב. */}
       {subView === 'table' && (
-        <div className="space-y-4">
+        <div key="major-table" className="space-y-4 m3-fade-through">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
               <div className="relative flex-1 sm:w-60">
@@ -750,7 +753,8 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
             </form>
           )}
 
-          <div className="flex gap-4 items-start">
+          {/* דפוס M3 מספר 3: Fade Through (דהייה והחלפה בין כוורת לרשימה) */}
+          <div key={viewMode} className="flex gap-4 items-start m3-fade-through">
             {viewMode === 'grid' ? (
               /* Main Cards Grid */
               <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5 max-h-[640px] overflow-y-auto pr-1 scroll-smooth">
@@ -762,11 +766,12 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                   const isCustom = false;
                   const isHighlighted = highlightedNum === item.number;
 
+                  // דפוס M3 מספר 4: Shape Morphing / Expressive Spring (שינוי צורה וקפיציות בכרטיס Major)
                   return (
                     <div
                       id={`major-item-${item.number}`}
                       key={item.number}
-                      className={`bg-slate-950 border rounded-2xl p-4 transition-all duration-300 flex flex-col justify-between ${
+                      className={`bg-slate-950 border rounded-2xl p-4 transition-all duration-300 flex flex-col justify-between m3-shape-morph ${
                         item.is_ready_for_practice
                           ? 'border-emerald-500/60 ring-2 ring-emerald-500/20 bg-emerald-950/15'
                           : isHighlighted
@@ -1402,8 +1407,14 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                 />
               </div>
 
+              {/* דפוס M3 מספר 2: Shared Axis - ציר X (מעבר אופקי בשאלות שליפה)
+                  נבחר עבור מעבר בין שאלות רצופות במבחן השליפה של שיטת Major.
+                  מאפשר חוויית מעבר כרטיסיית Flashcard טבעית קדימה בציר האופקי. */}
               {currentQuizItem && (
-                <div className="w-full max-w-4xl mx-auto space-y-6 text-center">
+                <div
+                  key={`${currentQuizItem.numberStr}-${quizFeedback}`}
+                  className="w-full max-w-4xl mx-auto space-y-6 text-center m3-shared-axis-x-forward"
+                >
                   <div className="p-8 rounded-3xl bg-slate-950 border border-slate-800 shadow-inner space-y-3 relative overflow-hidden">
                     <span className="text-xs font-bold text-amber-400 uppercase tracking-widest">
                       מה המילה המנמונית של המספר:
@@ -1475,8 +1486,9 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                       )}
                     </div>
 
+                    {/* דפוס M3 מספר 4: Harmonic Spring Pop (קפיצה הרמונית בהצלחה) */}
                     {quizFeedback === 'correct' && (
-                      <div className="p-4 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 flex flex-col items-center justify-center gap-1.5 animate-fadeIn">
+                      <div className="p-4 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 flex flex-col items-center justify-center gap-1.5 m3-spring-pop shadow-md">
                         <div className="flex items-center gap-2">
                           <CheckCircle2 className="w-5 h-5 text-emerald-400" />
                           <span className="font-bold text-sm">מעולה! תשובה מדויקת ב-100% (+15 XP)</span>
@@ -1487,8 +1499,9 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                       </div>
                     )}
 
+                    {/* דפוס M3 מספר 4: Damped Harmonic Spring Shake (רטט שגיאה) */}
                     {quizFeedback === 'incorrect' && (
-                      <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center gap-2 animate-fadeIn">
+                      <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center gap-2 animate-shake shadow-md">
                         <XCircle className="w-5 h-5" />
                         <span className="font-bold text-sm">לא מדויק. לחץ Ctrl+Enter לחשיפת התשובה או דלג הלאה</span>
                       </div>

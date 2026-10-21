@@ -325,11 +325,12 @@ export const NamesFacesModule: React.FC<NamesFacesModuleProps> = ({
             </div>
           </div>
 
-          {/* Add New Card Form */}
+          {/* דפוס M3 מספר 1: Container Transform (טרנספורמציית קונטיינר)
+              התרחבות כפתור "הוסף כרטיס" לטופס יצירת עוגן מורפולוגי חדש */}
           {showAddForm && (
             <form
               onSubmit={handleAddNewCard}
-              className="bg-white border-2 border-amber-300 rounded-2xl p-4 sm:p-5 space-y-3 animate-fadeIn shadow-md text-slate-900"
+              className="bg-white border-2 border-amber-300 rounded-2xl p-4 sm:p-5 space-y-3 shadow-md text-slate-900 m3-container-transform"
             >
               <h4 className="text-xs font-bold text-amber-800">הוספת כרטיס אישי חדש (שם, עוגן מורפולוגי והתנגשות)</h4>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-right">
@@ -450,10 +451,12 @@ export const NamesFacesModule: React.FC<NamesFacesModuleProps> = ({
             {filteredPeople.map((person) => {
               const isEditing = editingId === person.id;
 
+              // דפוס M3 מספר 4: Shape Morphing / Expressive Spring
+              // כרטיס הדמות מגיב בריחוף עדין ושינוי רדיוס פינות באמצעות עקומת קפיץ פיזיקלית
               return (
                 <div
                   key={person.id}
-                  className="bg-white border-2 border-slate-200 border-b-4 border-b-slate-300 hover:border-slate-300 rounded-2xl p-4 transition-all flex flex-col justify-between space-y-3 shadow-2xs text-slate-900"
+                  className="bg-white border-2 border-slate-200 border-b-4 border-b-slate-300 hover:border-slate-300 rounded-2xl p-4 m3-shape-morph flex flex-col justify-between space-y-3 shadow-2xs text-slate-900"
                 >
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
@@ -958,8 +961,11 @@ export const NamesFacesModule: React.FC<NamesFacesModuleProps> = ({
                       </button>
                     </div>
 
+                    {/* דפוס M3 מספר 4: Shape Morphing / Expressive Spring (משוב קינטי לתשובה)
+                        - הצלחה: קפיצה פיזיקלית הרמונית (m3-spring-pop)
+                        - שגיאה: רעד קפיצי מרוסן (animate-shake) המאותת על שגיאה ללא הבהוב מסך */}
                     {quizFeedback === 'correct' && (
-                      <div className="p-4 rounded-2xl bg-emerald-50 border-2 border-emerald-300 text-emerald-900 flex flex-col items-center justify-center gap-1.5 animate-fadeIn">
+                      <div className="p-4 rounded-2xl bg-emerald-50 border-2 border-emerald-300 text-emerald-900 flex flex-col items-center justify-center gap-1.5 m3-spring-pop">
                         <div className="flex items-center gap-2">
                           <CheckCircle2 className="w-5 h-5 text-emerald-600" />
                           <span className="font-bold text-sm">מדויק ב-100%! זיכרון שמות פנומנלי (+20 XP)</span>
@@ -971,7 +977,7 @@ export const NamesFacesModule: React.FC<NamesFacesModuleProps> = ({
                     )}
 
                     {quizFeedback === 'incorrect' && (
-                      <div className="p-4 rounded-2xl bg-rose-50 border-2 border-rose-300 text-rose-800 flex items-center justify-center gap-2 animate-fadeIn">
+                      <div className="p-4 rounded-2xl bg-rose-50 border-2 border-rose-300 text-rose-800 flex items-center justify-center gap-2 animate-shake">
                         <XCircle className="w-5 h-5 text-rose-600" />
                         <span className="font-bold text-sm">לא מדויק. נסה שוב או חשוף את השם</span>
                       </div>

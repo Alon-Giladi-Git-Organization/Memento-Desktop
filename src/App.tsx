@@ -177,7 +177,11 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="flex-1 w-full max-w-none px-3 sm:px-6 lg:px-8 xl:px-12 pt-4 sm:pt-8 pb-12 overflow-x-hidden">
-        <div key={currentTab} className="w-full animate-page">
+        {/* דפוס M3 מספר 3: Fade Through (דהייה והחלפה קונטקסטואלית)
+            נבחר עבור הניווט הראשי בין מסכי האפליקציה (Workouts, Palaces, AI Tester, Logic וכו').
+            לפי הנחיות Google Material Motion, כאשר עוברים בין יעדים שאין ביניהם קשר ציר או סדרתיות ישירה,
+            האלמנט היוצא דוהה החוצה והנכנס מבצע Scale מ-0.96 ל-1.0 עם דהייה רכה, ללא Layout Thrashing. */}
+        <div key={currentTab} className="w-full m3-fade-through">
           {currentTab === 'workouts' && (
           <WorkoutsHub
             selectedSubModule={selectedWorkoutSubModule}

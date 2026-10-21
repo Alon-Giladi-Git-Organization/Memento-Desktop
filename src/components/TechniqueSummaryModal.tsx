@@ -114,9 +114,12 @@ export const TechniqueSummaryModal: React.FC<TechniqueSummaryModalProps> = ({
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/40 backdrop-blur-xs animate-fadeIn"
       onClick={onClose}
     >
-      {/* Modal Card */}
+      {/* דפוס M3 מספר 1: Container Transform (טרנספורמציית קונטיינר)
+          נבחר עבור מודל סיכום הטכניקה (TechniqueSummaryModal).
+          לפי הנחיות Google Material Design 3, לחיצה על כפתור "סיכום ודוגמאות" מבצעת מורפינג רציף
+          מהאלמנט הלחוץ לתוך חלונית התוכן המלאה, תוך שמירה על רדיוס פינות מדורג ומניעת קפיצות פריסה. */}
       <div
-        className={`bg-white border rounded-3xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden relative ${getBorderColor()}`}
+        className={`bg-white border rounded-3xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden relative m3-container-transform ${getBorderColor()}`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

@@ -1050,9 +1050,12 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
         </div>
       </div>
 
-      {/* SUB-VIEW 1: REGISTRY 00-99 & CUSTOM */}
+      {/* דפוס M3 מספר 3: Fade Through (דהייה והחלפה קונטקסטואלית)
+          נבחר עבור החלפת מצבי תצוגה ראשיים ב-PAO: מאגר השלשות (Registry) לעומת מבחן שליפה פעילה (Quiz).
+          לפי Google Material Motion, שינוי קונטקסט מלא מתבצע ב-Fade Through עם Scale עדין,
+          המונע תנועה חדה בציר שאינו קיים ומאפשר למשתמש להתמקד במצב הלמידה החדש. */}
       {subView === 'registry' && (
-        <div className="space-y-4">
+        <div key="pao-registry" className="space-y-4 m3-fade-through">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
             <div className="flex items-center gap-2 w-full sm:w-auto flex-wrap">
               <div className="relative flex-1 sm:w-64">
@@ -1345,8 +1348,10 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
             </div>
           </div>
 
-          {/* PAO Cards Grid OR List View with Side Navigator */}
-          <div className="flex gap-3 items-start">
+          {/* דפוס M3 מספר 3: Fade Through (דהייה והחלפה בין כוורת לטבלה)
+              החלפה בין תצוגת כרטיסים לתצוגת שורות טבלה מבוצעת ב-Fade Through,
+              למניעת קפיצות גלילה וליצירת מעבר חלק וזורם לעין. */}
+          <div key={viewMode} className="flex gap-3 items-start m3-fade-through">
             {viewMode === 'grid' ? (
               /* Main Cards Grid - Responsive Full-Width */
               <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-3.5 max-h-[680px] overflow-y-auto pr-1 scroll-smooth w-full">
@@ -1359,6 +1364,9 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                   const isCustom = Boolean(item.scene);
                   const isHighlighted = highlightedNum === item.number;
 
+                  // דפוס M3 מספר 4: Shape Morphing / Expressive Spring (שינוי צורה וקפיציות בכרטיס)
+                  // כל כרטיס PAO נהנה משינוי רדיוס פינות עדין ותנועת ריחוף פיזיקלית ב-hover/active
+                  // באמצעות עקומת Spring מהירה (M3 fast spring).
                   return (
                     <div
                       id={`pao-item-${item.number}`}
@@ -1391,7 +1399,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                           setIsCompressing(false);
                         }
                       }}
-                      className={`relative bg-slate-950 border rounded-2xl p-4 transition-all duration-300 flex flex-col justify-between overflow-hidden ${
+                      className={`relative bg-slate-950 border rounded-2xl p-4 transition-all duration-300 flex flex-col justify-between overflow-hidden m3-shape-morph ${
                         dragOverCardNum === item.number
                           ? 'border-indigo-400 ring-4 ring-indigo-400/40 scale-[1.02] shadow-xl bg-indigo-950/40'
                           : isHighlighted
@@ -2098,8 +2106,9 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
       )}
 
       {/* SUB-VIEW 3: QUIZ */}
+      {/* דפוס M3 מספר 3: Fade Through (מעבר קונטקסטואלי מלא למבחן שליפה) */}
       {subView === 'quiz' && (
-        <div className="space-y-6">
+        <div key="pao-quiz-mode" className="space-y-6 m3-fade-through">
           {readyPaoItems.length === 0 ? (
             <div className="bg-amber-50 border-2 border-dashed border-amber-300 rounded-3xl p-8 sm:p-12 text-center space-y-4 max-w-xl mx-auto my-6 text-slate-900 animate-fadeIn">
               <div className="w-16 h-16 bg-amber-100 text-amber-700 rounded-2xl flex items-center justify-center mx-auto shadow-sm">
@@ -2198,14 +2207,21 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                 />
               </div>
 
+              {/* דפוס M3 מספר 2: Shared Axis - ציר X (מעבר אופקי בשאלות שליפה)
+                  נבחר עבור מעבר בין שאלות רצופות במבחן השליפה.
+                  לפי Google Material Motion, מעבר בין כרטיסיות שאלות ברצף למידה נע על ציר X
+                  האופקי, ומעניק תחושה טבעית של התקדמות פלאשקארד ברצף השליפה. */}
               {currentQuizItem && quizMeta && (
-                <div className="w-full max-w-4xl mx-auto space-y-6 text-center">
+                <div
+                  key={`${currentQuizItem.numberStr}-${quizFilter}-${quizFeedback}`}
+                  className="w-full max-w-4xl mx-auto space-y-6 text-center m3-shared-axis-x-forward"
+                >
                   {/* Dynamic Themed Question Card */}
                   <div className={`p-6 sm:p-8 rounded-3xl ${quizMeta.cardBg} border ${quizMeta.cardBorder} shadow-inner space-y-4 transition-all ${
                     quizFeedback === 'incorrect'
                       ? 'animate-shake ring-2 ring-rose-500/50'
                       : quizFeedback === 'correct'
-                      ? 'animate-pop ring-2 ring-emerald-500/50'
+                      ? 'm3-spring-pop ring-2 ring-emerald-500/50'
                       : ''
                   }`}>
                     <div className="flex items-center justify-between border-b border-slate-800/80 pb-3">
@@ -2793,8 +2809,11 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
           className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn"
           onClick={() => setSelectedPreviewImage(null)}
         >
+          {/* דפוס M3 מספר 1: Container Transform (טרנספורמציית קונטיינר)
+              התמונה הממוזערת מהכרטיס מורחבת רציף למודל תצוגה מפורטת במסך מלא.
+              האלמנט מתרחב ומשנה רדיוס פינות מ-2.25rem ל-1.5rem עם עקומת תאוטה מודגשת. */}
           <div
-            className="relative max-w-4xl w-full bg-slate-900 border border-slate-700 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[92vh] animate-scaleUp"
+            className="relative max-w-4xl w-full bg-slate-900 border border-slate-700 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[92vh] m3-container-transform"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
@@ -3041,8 +3060,10 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
           className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn"
           onClick={() => setQuickUploadItem(null)}
         >
+          {/* דפוס M3 מספר 1: Container Transform (טרנספורמציית קונטיינר)
+              מורפינג רציף של כפתור ההעלאה מהכרטיס/השורה לקונטיינר גרירה והעלאה ייעודי. */}
           <div
-            className="max-w-md w-full bg-slate-900 border border-pink-500/40 rounded-3xl p-6 text-right space-y-4 shadow-2xl animate-scaleUp"
+            className="max-w-md w-full bg-slate-900 border border-pink-500/40 rounded-3xl p-6 text-right space-y-4 shadow-2xl m3-container-transform"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
@@ -3163,8 +3184,17 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
 
       {/* Validation Alert Modal */}
       {validationModal && validationModal.isOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4" dir="rtl">
-          <div className="bg-slate-900 border-2 border-amber-500/80 rounded-3xl max-w-md w-full p-6 text-right space-y-4 shadow-2xl animate-shake animate-scaleUp">
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn"
+          onClick={() => setValidationModal(null)}
+        >
+          {/* דפוס M3 מספר 1 ומספר 4: Container Transform + Damped Harmonic Spring Shake
+              הודעת האזהרה נפתחת בהתרחבות קונטיינר ומגיבה ברטט קפיצי הרמוני (Spring Shake)
+              כדי לסמן באופן אינטואיטיבי חריגה מכללי הלוגיקה והוולידציה. */}
+          <div
+            className="bg-slate-900 border-2 border-amber-500/80 rounded-3xl max-w-md w-full p-6 text-right space-y-4 shadow-2xl m3-container-transform animate-shake"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0">
                 <AlertTriangle className="w-6 h-6 text-amber-400" />

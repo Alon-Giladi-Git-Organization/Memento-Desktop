@@ -712,8 +712,11 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
           className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn"
           onClick={() => setIsWalkthroughOpen(false)}
         >
+          {/* דפוס M3 מספר 1: Container Transform (טרנספורמציית קונטיינר)
+              נבחר עבור מודל סיור הארמון המלא (Interactive Palace Walkthrough).
+              לחיצה על "התחל סיור ותרגול שליפה" מרחיבה את הכפתור/הכרטיס לחלון מודלי מפורט עם עקומת תאוטה מודגשת. */}
           <div
-            className="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl relative space-y-6"
+            className="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl relative space-y-6 m3-container-transform"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Top Bar */}
@@ -758,8 +761,11 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
                 const locus = currentPalace.loci[walkthroughIndex];
                 if (!locus) return null;
 
+                // דפוס M3 מספר 2: Shared Axis - ציר X
+                // מעבר סדרתי בין תחנות הארמון לאורך ציר הניווט (תחנה 1 -> תחנה 2 -> תחנה 3),
+                // הממחיש לתלמיד את ההתקדמות הפיזית במסלול כיוון השעון של ארמון הזיכרון.
                 return (
-                  <div className="space-y-6">
+                  <div key={walkthroughIndex} className="space-y-6 m3-shared-axis-x-forward">
                     {/* Location Card */}
                     <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 text-center space-y-3 relative overflow-hidden">
                       <div className="inline-block bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 text-xs font-bold px-3 py-1 rounded-full">
@@ -1055,8 +1061,10 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
           className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn"
           onClick={() => setShowAddPalaceModal(false)}
         >
+          {/* דפוס M3 מספר 1: Container Transform (טרנספורמציית קונטיינר)
+              התרחבות כפתור "בנה ארמון חדש" לקונטיינר הטופס המלא במרכז המסך */}
           <div
-            className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl"
+            className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl m3-container-transform"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">

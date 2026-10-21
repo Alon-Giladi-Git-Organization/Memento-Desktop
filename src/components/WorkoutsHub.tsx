@@ -158,14 +158,27 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
   onOpenSummary,
 }) => {
   const [activeModule, setActiveModule] = useState<WorkoutCategory>(selectedSubModule || 'pao');
+  // מעקב אחר כיוון התנועה בציר X עבור דפוס M3 Shared Axis
+  const [slideDirection, setSlideDirection] = useState<'forward' | 'backward'>('forward');
+  const prevModuleRef = React.useRef<WorkoutCategory>(activeModule);
+
+  const moduleOrder: WorkoutCategory[] = ['pao', 'major', 'names', 'pegs', 'academic'];
 
   React.useEffect(() => {
     if (selectedSubModule && selectedSubModule !== activeModule) {
+      const prevIdx = moduleOrder.indexOf(prevModuleRef.current);
+      const newIdx = moduleOrder.indexOf(selectedSubModule);
+      setSlideDirection(newIdx >= prevIdx ? 'forward' : 'backward');
+      prevModuleRef.current = selectedSubModule;
       setActiveModule(selectedSubModule);
     }
   }, [selectedSubModule]);
 
   const handleSelectModule = (mod: WorkoutCategory) => {
+    const prevIdx = moduleOrder.indexOf(activeModule);
+    const newIdx = moduleOrder.indexOf(mod);
+    setSlideDirection(newIdx >= prevIdx ? 'forward' : 'backward');
+    prevModuleRef.current = mod;
     setActiveModule(mod);
     onSubModuleChange?.(mod);
   };
@@ -250,11 +263,14 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
           const Icon = m.icon;
           const isActive = activeModule === m.id;
 
+          // דפוס M3 מספר 4: Shape Morphing / Expressive Spring (שינוי צורה וקפיציות במיקרו-אינטראקציה)
+          // כפתורי המודולות מגיבים בריחוף עם שינוי רדיוס פינות וקפיציות פיזיקלית (M3 spring curves),
+          // ומעניקים פידבק קינטי מודרני בעת בחירה.
           return (
             <button
               key={m.id}
               onClick={() => handleSelectModule(m.id)}
-              className={`p-3 sm:p-4 rounded-2xl border-2 text-right transition-all flex flex-col justify-between cursor-pointer active:translate-y-0.5 ${
+              className={`p-3 sm:p-4 rounded-2xl border-2 text-right m3-shape-morph flex flex-col justify-between cursor-pointer active:translate-y-0.5 ${
                 isActive
                   ? m.bgActive
                   : 'bg-white border-slate-200 hover:border-slate-300 hover:bg-slate-50 border-b-4 border-b-slate-300 shadow-xs'
@@ -262,7 +278,7 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
             >
               <div className="flex items-center justify-between w-full mb-3">
                 <div
-                  className="w-10 h-10 rounded-xl flex items-center justify-center transition-transform shadow-xs"
+                  className="w-10 h-10 rounded-xl flex items-center justify-center transition-transform shadow-xs m3-chip-interactive"
                   style={{
                     backgroundColor: isActive ? m.color : '#f1f5f9',
                     color: isActive ? '#ffffff' : '#64748b',
@@ -271,7 +287,7 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
                   <Icon className="w-5 h-5 font-black" />
                 </div>
                 <span
-                  className={`text-[11px] px-2.5 py-0.5 rounded-full font-black ${
+                  className={`text-[11px] px-2.5 py-0.5 rounded-full font-black m3-chip-interactive ${
                     isActive ? m.badgeBg : 'bg-slate-100 text-slate-600 border border-slate-200'
                   }`}
                 >
@@ -291,8 +307,16 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
         })}
       </div>
 
-      {/* RENDER THE ACTIVE MODULE */}
-      <div key={activeModule} className="w-full animate-page">
+      {/* דפוס M3 מספר 2: Shared Axis - ציר X (מעבר אופקי סדרתי)
+          נבחר עבור החלפת תתי-האימונים (PAO -> Major -> Names -> Pegs -> Academic)
+          לפי Google Material Motion, מעבר בין טאבים בעלי סדר לימודי מוגדר נע לאורך ציר ה-X,
+          ומעניק לתלמיד תחושת התקדמות טבעית ויציבות מרחבית. */}
+      <div
+        key={activeModule}
+        className={`w-full ${
+          slideDirection === 'forward' ? 'm3-shared-axis-x-forward' : 'm3-shared-axis-x-backward'
+        }`}
+      >
         {activeModule === 'major' && (
           <MajorModule
           majorDigits={majorDigits}
