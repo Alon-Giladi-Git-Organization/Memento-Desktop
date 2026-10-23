@@ -15,14 +15,18 @@ const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 app.use(express.json({ limit: '10mb' }));
 
 // Initialize Gemini Client
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY || '',
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
+export function getGeminiClient(): GoogleGenAI {
+  return new GoogleGenAI({
+    apiKey: process.env.GEMINI_API_KEY,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      },
     },
-  },
-});
+  });
+}
+
+const ai = getGeminiClient();
 
 // System prompt grounded in world memory championships and Hebrew Major mapping
 const MEMORY_CHAMPION_SYSTEM_PROMPT = `הגדרה קבועה למנטור ה-AI:
@@ -762,6 +766,238 @@ ${JSON.stringify((testHistory || []).slice(0, 15))}
         longTermRetention: 72,
       },
       nextTrainingPlan: 'שבוע התמקדות בארכיטקטורת ארמונות זיכרון: צור 2 חדרים חדשים ותרגל שליפה לאחור.',
+    });
+  }
+});
+
+// API Endpoint: Generate PAO Mnemonic Scene Image with Gemini Nano Banana
+app.post('/api/gemini/generate-pao-image', async (req: Request, res: Response) => {
+  // Set generous socket timeout so client's 120s timeout handles early aborts
+  req.setTimeout(130000);
+
+  try {
+    const { userId, userEmail, person, action, object, userStylePrompt, numberStr, scene } = req.body;
+
+    // Authentication check: User must be signed in
+    if (!userId || !userEmail) {
+      return res.status(401).json({
+        error: 'AUTH_REQUIRED',
+        message: 'כדי לייצר תמונות עם Gemini Nano Banana, יש להתחבר תחילה עם חשבון Google שלך (התחבר בסרגל העליון).',
+      });
+    }
+
+    if (!person && !action && !object) {
+      return res.status(400).json({
+        error: 'MISSING_PAO',
+        message: 'שלשת ה-PAO חסרה ערכים (אדם, פעולה, חפץ) לצורך יצירת הדימוי המנמוני.',
+      });
+    }
+
+    const hasScene = Boolean(scene && typeof scene === 'string' && scene.trim().length > 0);
+    const sceneText = hasScene ? (scene as string).trim() : '';
+    const client = getGeminiClient();
+
+    // Text embedding instruction derived from user specifications:
+    // Person name on clothes/nearby object, Action word in comic bubble like POW or GLUG, Object name on a label/tag.
+    const textEmbeddingDirective = `Naturally and visually integrate legible text into the illustration for the Person, Action, and Object:
+1. Write the person's name or title ("${person || ''}") visibly on their clothing (e.g. embroidered on a shirt, nametag, or suit) or on an object directly beside them.
+2. Display a lively word related to the action ("${action || ''}") inside an energetic comic-book style text bubble like "POW!" or "GLUG!" or the action word.
+3. Write the exact name of the object ("${object || ''}") on a distinct label, sticker, or tag on or right next to the object.
+4. Ensure all embedded text is crisp, legible, and subtle without overpowering the main illustration frame.`;
+
+    // 1. Synthesize a vivid, filter-proof abstract caricature prompt using gemini-3.8-flash
+    // Real celebrity/fictional names MUST be converted into abstract caricature archetypes
+    // to prevent gemini-nano-banana-2.1 from returning IMAGE_OTHER safety filter rejections.
+    let synthesizedPrompt = '';
+    try {
+      const flashSynthesis = await client.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: `You are an expert cognitive illustration prompter specializing in the PAO mnemonic memory system and abstract caricature art.
+Convert the following Hebrew PAO triplet and complete scene into a single, vibrant, humorous abstract caricature cartoon image generation prompt in English.
+
+Input Data:
+- Person/Persona: "${person || ''}"
+- Action: "${action || ''}"
+- Object: "${object || ''}"
+${hasScene ? `- Full Scene Details: "${sceneText}"` : ''}
+${userStylePrompt ? `- User Style/Notes: "${userStylePrompt.trim()}"` : ''}
+
+CRITICAL RULES (TO GUARANTEE FIRST-ATTEMPT ACCEPTANCE BY THE IMAGE MODEL):
+1. MANDATORY ABSTRACT CARICATURE ARCHETYPE:
+- Portray the person EXCLUSIVELY as an exaggerated, humorous artistic abstract 2D cartoon caricature archetype.
+- ABSOLUTELY NEVER include any real celebrity name, politician name, public figure name, or copyrighted brand in the output prompt (not in text, not in quotes, not on badges, not anywhere). If any real public figure name appears, Gemini Nano Banana will immediately reject the image with IMAGE_OTHER.
+- Convert "${person || ''}" into a vivid, descriptive visual archetype (e.g., if politician: "an exaggerated eccentric cartoon statesman with swept silver hair in an oversized navy suit"; if action star/athlete: "a hyper-muscular cartoon action champion in athletic attire"; if singer/performer: "an flamboyant cartoon pop icon with wild sparkling stage costume").
+2. VISUAL STYLE:
+- Vibrant, colorful abstract caricature cartoon illustration in expressive 2D comic art style. Bold clean outlines, saturated dynamic palette, comedic exaggerated poses, high visual clarity in a single cohesive camera frame.
+3. VISUAL TEXT EMBEDDINGS (NATURAL & SUBTLE):
+- On the Person's clothing or nearby prop: Instead of a real celebrity name, write a playful archetype title, role, or generic moniker (such as "CHIEF", "HERO", "STAR", "BOSS", "DOC", or initials) delicately on a nametag or shirt patch.
+- For the Action: Display an expressive comic sound-effect or verb bubble (e.g., "POW!", "GLUG!", "BAM!", "WHOOSH!").
+- For the Object: Write the exact descriptive object name ("${object || ''}") clearly on a neat label, price tag, or sticker on or beside the object.
+- Ensure all text elements are legible, subtle, and harmonious without dominating the illustration.
+4. FULL SCENE INTEGRATION:
+- Faithfully incorporate all specific props, interactions, settings, and comedic nuances from the "Full Scene Details".
+5. OUTPUT:
+- Output ONLY the final concise image generation prompt in English. No introductory text or conversational markdown.`,
+      });
+
+      if (flashSynthesis.text) {
+        synthesizedPrompt = flashSynthesis.text.trim();
+      }
+    } catch (synthesisErr) {
+      console.warn('Flash synthesis note:', synthesisErr);
+    }
+
+    // Fallback prompt if synthesis was empty - strictly uses abstract caricature archetype
+    const fallbackCaricature = `A colorful, humorous abstract caricature cartoon illustration in expressive 2D comic art style of an exaggerated cartoon archetype character performing an action with an object for a memory mnemonic system. Action: "${action || ''}". Object: "${object || ''}". ${hasScene ? `Scene details: ${sceneText}. ` : ''}${userStylePrompt ? `Style notes: ${userStylePrompt}. ` : ''}Include subtle embedded text: a comic-style action sound bubble like POW or GLUG, and a neat label with "${object || ''}" on the object. Single unified frame, vibrant colors.`;
+
+    let finalPrompt = synthesizedPrompt || fallbackCaricature;
+
+    // Safety guard: Sanitize prompt to ensure no direct celebrity/person names leak into finalPrompt
+    if (person && person.trim().length > 1) {
+      const sanitizedRegex = new RegExp(person.trim(), 'gi');
+      finalPrompt = finalPrompt.replace(sanitizedRegex, 'the cartoon caricature archetype');
+    }
+
+    console.log(`[Gemini Nano Banana] Generating image with prompt: "${finalPrompt.substring(0, 160)}..."`);
+
+    let generatedImageUrl = '';
+
+    try {
+      const response = await client.models.generateContent({
+        model: 'gemini-nano-banana-2.1',
+        contents: {
+          parts: [{ text: finalPrompt }],
+        },
+        config: {
+          imageConfig: {
+            aspectRatio: '1:1',
+            imageSize: '1K',
+          },
+        },
+      });
+
+      for (const part of response.candidates?.[0]?.content?.parts || []) {
+        if (part.inlineData) {
+          const base64 = part.inlineData.data;
+          const mime = part.inlineData.mimeType || 'image/png';
+          generatedImageUrl = `data:${mime};base64,${base64}`;
+          break;
+        }
+      }
+
+      // If the model filtered the image, retry with a further abstracted caricature prompt
+      if (!generatedImageUrl && response.candidates?.[0]) {
+        const finish = response.candidates[0].finishReason;
+        if (finish === 'IMAGE_OTHER' || finish === 'IMAGE_SAFETY') {
+          console.log(`First image attempt ended with ${finish}, attempting caricature abstraction...`);
+          const caricaturePrompt = `A colorful, humorous abstract caricature cartoon illustration of an expressive cartoon archetype character performing an action with an object for a memory mnemonic system. Action: "${action || ''}". Object: "${object || ''}". ${hasScene ? `Scene details: ${sceneText}. ` : ''}${userStylePrompt ? `Style notes: ${userStylePrompt}. ` : ''}Single unified frame, vibrant colors.`;
+          
+          try {
+            const retryRes = await client.models.generateContent({
+              model: 'gemini-nano-banana-2.1',
+              contents: { parts: [{ text: caricaturePrompt }] },
+              config: { imageConfig: { aspectRatio: '1:1', imageSize: '1K' } },
+            });
+            for (const part of retryRes.candidates?.[0]?.content?.parts || []) {
+              if (part.inlineData) {
+                const base64 = part.inlineData.data;
+                const mime = part.inlineData.mimeType || 'image/png';
+                generatedImageUrl = `data:${mime};base64,${base64}`;
+                break;
+              }
+            }
+          } catch (retryErr) {
+            console.warn('Caricature retry note:', retryErr);
+          }
+        }
+      }
+    } catch (genError: any) {
+      console.warn('gemini-nano-banana-2.1 call note, attempting image generation fallback:', genError?.message || genError);
+      
+      const errStr = (genError?.message || String(genError)).toLowerCase();
+      if (errStr.includes('api_key_invalid') || errStr.includes('api key not valid')) {
+        return res.status(401).json({
+          error: 'API_KEY_INVALID',
+          message: 'מפתח ה-API של Gemini אינו תקין או פג תוקפו. יש לבחור או להגדיר מפתח תקין בלוח ההגדרות של AI Studio.',
+        });
+      }
+      if (errStr.includes('quota') || errStr.includes('429') || errStr.includes('resource_exhausted')) {
+        return res.status(429).json({
+          error: 'QUOTA_EXHAUSTED',
+          message: 'מכסת הטוקנים היומית של Gemini לחשבונך מוצתה לסשן זה. תוכל להעלות תמונה מהמכשיר או לנסות שוב מאוחר יותר.',
+        });
+      }
+
+      // Fallback to gemini-3.1-flash-lite-image (modern image model via generateContent)
+      try {
+        const fallbackRes = await client.models.generateContent({
+          model: 'gemini-3.1-flash-lite-image',
+          contents: {
+            parts: [{ text: finalPrompt }],
+          },
+          config: {
+            imageConfig: {
+              aspectRatio: '1:1',
+            },
+          },
+        });
+
+        for (const part of fallbackRes.candidates?.[0]?.content?.parts || []) {
+          if (part.inlineData) {
+            const base64 = part.inlineData.data;
+            const mime = part.inlineData.mimeType || 'image/png';
+            generatedImageUrl = `data:${mime};base64,${base64}`;
+            break;
+          }
+        }
+      } catch (fallbackError: any) {
+        const fbErrStr = (fallbackError?.message || String(fallbackError)).toLowerCase();
+        if (fbErrStr.includes('api_key_invalid') || fbErrStr.includes('api key not valid')) {
+          return res.status(401).json({
+            error: 'API_KEY_INVALID',
+            message: 'מפתח ה-API של Gemini אינו תקין או פג תוקפו. יש לבחור מפתח תקין ב-AI Studio.',
+          });
+        }
+        if (fbErrStr.includes('quota') || fbErrStr.includes('429') || fbErrStr.includes('resource_exhausted')) {
+          return res.status(429).json({
+            error: 'QUOTA_EXHAUSTED',
+            message: 'מכסת הטוקנים היומית של Gemini לחשבונך מוצתה לסשן זה. תוכל להעלות תמונה מהמכשיר או לנסות שוב מאוחר יותר.',
+          });
+        }
+        throw genError;
+      }
+    }
+
+    if (!generatedImageUrl) {
+      return res.status(422).json({
+        error: 'GENERATION_FILTERED',
+        message: 'לא התקבלה תמונה מ-Gemini עבור ערכים אלו (ייתכן שעקב שמות דמויות מוכרות או מדיניות תוכן). נסה להזין תיאור כללי של הדמות (לדוגמה: "סוכן חשאי" במקום שם מפורסם ספציפי) או לנסח סגנון אחר.',
+      });
+    }
+
+    return res.json({
+      success: true,
+      imageUrl: generatedImageUrl,
+      numberStr,
+    });
+  } catch (error: any) {
+    console.error('Error generating PAO image:', error);
+    const msg = (error?.message || String(error)).toLowerCase();
+    if (msg.includes('api_key_invalid') || msg.includes('api key not valid')) {
+      return res.status(401).json({
+        error: 'API_KEY_INVALID',
+        message: 'מפתח ה-API של Gemini אינו תקין או שאינו מוגדר. יש לבחור מפתח תקין ב-AI Studio.',
+      });
+    }
+    if (msg.includes('quota') || msg.includes('429') || msg.includes('resource_exhausted')) {
+      return res.status(429).json({
+        error: 'QUOTA_EXHAUSTED',
+        message: 'מכסת הטוקנים היומית של Gemini לחשבונך מוצתה לסשן זה. תוכל להעלות תמונה מהמכשיר או לנסות שוב מאוחר יותר.',
+      });
+    }
+    return res.status(500).json({
+      error: 'SERVER_ERROR',
+      message: 'אירעה שגיאה ביצירת התמונה עם Gemini. תוכל להעלות קובץ ידנית מהמכשיר.',
     });
   }
 });

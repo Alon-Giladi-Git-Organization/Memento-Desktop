@@ -9,6 +9,9 @@ import {
   serverTimestamp,
   onSnapshot,
   cleanForFirestore,
+  query,
+  where,
+  limit,
 } from './firebase';
 import {
   MajorItem,
@@ -219,6 +222,257 @@ export async function seedAllDefaultsToFirestore(): Promise<{ success: boolean; 
 }
 
 /**
+ * Initializes an isolated database branch for a specific user in Firestore.
+ * Clones the baseline dataset into user-partitioned documents with composite IDs (${userId}_${rawId})
+ * and tags them with userId, userEmail, isDefault: false.
+ * Compatible with Rowy dashboard table filtering.
+ */
+export async function seedUserBranchFromDefaults(
+  userId: string,
+  userEmail?: string | null,
+  initialData?: {
+    majorItems?: MajorItem[];
+    paoItems?: PAOItem[];
+    bodyPegs?: BodyPegItem[];
+    shapePegs?: PegShapeItem[];
+    palaces?: MemoryPalace[];
+    peopleCards?: PersonFaceCard[];
+    abstractShapes?: AbstractShapeCard[];
+    academicPoints?: AcademicKeyPoint[];
+    personalAssociations?: PersonalContactAssociation[];
+  }
+): Promise<{ success: boolean; message: string; count: number }> {
+  try {
+    let totalCount = 0;
+    const now = Date.now();
+    const email = userEmail || '';
+
+    const majorSource = initialData?.majorItems && initialData.majorItems.length > 0
+      ? initialData.majorItems
+      : DEFAULT_MAJOR_00_99;
+    const paoSource = initialData?.paoItems && initialData.paoItems.length > 0
+      ? initialData.paoItems
+      : DEFAULT_PAO_ITEMS;
+    const bodySource = initialData?.bodyPegs && initialData.bodyPegs.length > 0
+      ? initialData.bodyPegs
+      : DEFAULT_BODY_PEGS;
+    const shapeSource = initialData?.shapePegs && initialData.shapePegs.length > 0
+      ? initialData.shapePegs
+      : DEFAULT_NUMBER_SHAPE_PEGS;
+    const palacesSource = initialData?.palaces && initialData.palaces.length > 0
+      ? initialData.palaces
+      : DEFAULT_PALACES;
+    const peopleSource = initialData?.peopleCards && initialData.peopleCards.length > 0
+      ? initialData.peopleCards
+      : DEFAULT_PEOPLE_CARDS;
+    const shapesSource = initialData?.abstractShapes && initialData.abstractShapes.length > 0
+      ? initialData.abstractShapes
+      : DEFAULT_ABSTRACT_SHAPES;
+    const academicSource = initialData?.academicPoints && initialData.academicPoints.length > 0
+      ? initialData.academicPoints
+      : DEFAULT_ACADEMIC_POINTS;
+    const personalSource = initialData?.personalAssociations && initialData.personalAssociations.length > 0
+      ? initialData.personalAssociations
+      : DEFAULT_PERSONAL_ASSOCIATIONS;
+
+    // Batch 1: Major items (100 rows)
+    const majorBatch = writeBatch(db);
+    for (const item of majorSource) {
+      const rawId = (item.number < 10 ? `0${item.number}` : String(item.number)).padStart(2, '0');
+      const docId = `${userId}_${rawId}`;
+      const docRef = doc(db, 'major_items', docId);
+      majorBatch.set(docRef, cleanForFirestore({
+        ...item,
+        id: docId,
+        rawId,
+        userId,
+        userEmail: email,
+        isDefault: false,
+        updatedAt: item.updatedAt || now,
+      }), { merge: true });
+      totalCount++;
+    }
+    await majorBatch.commit();
+
+    // Batch 2: PAO items (100 rows)
+    const paoBatch = writeBatch(db);
+    for (const item of paoSource) {
+      const rawId = (item.number < 10 ? `0${item.number}` : String(item.number)).padStart(2, '0');
+      const docId = `${userId}_${rawId}`;
+      const docRef = doc(db, 'pao_items', docId);
+      paoBatch.set(docRef, cleanForFirestore({
+        ...item,
+        id: docId,
+        rawId,
+        userId,
+        userEmail: email,
+        isDefault: false,
+        updatedAt: item.updatedAt || now,
+      }), { merge: true });
+      totalCount++;
+    }
+    await paoBatch.commit();
+
+    // Batch 3: Pegs, Palaces, People, Shapes, Academic, Personal
+    const remainingBatch = writeBatch(db);
+
+    for (const b of bodySource) {
+      const rawId = String(b.index);
+      const docId = `${userId}_${rawId}`;
+      remainingBatch.set(doc(db, 'body_pegs', docId), cleanForFirestore({
+        ...b,
+        id: docId,
+        rawId,
+        userId,
+        userEmail: email,
+        isDefault: false,
+        updatedAt: b.updatedAt || now,
+      }), { merge: true });
+      totalCount++;
+    }
+
+    for (const s of shapeSource) {
+      const rawId = String(s.number);
+      const docId = `${userId}_${rawId}`;
+      remainingBatch.set(doc(db, 'shape_pegs', docId), cleanForFirestore({
+        ...s,
+        id: docId,
+        rawId,
+        userId,
+        userEmail: email,
+        isDefault: false,
+        updatedAt: s.updatedAt || now,
+      }), { merge: true });
+      totalCount++;
+    }
+
+    for (const p of palacesSource) {
+      const rawId = p.id;
+      const docId = `${userId}_${rawId}`;
+      remainingBatch.set(doc(db, 'palaces', docId), cleanForFirestore({
+        ...p,
+        id: docId,
+        rawId,
+        userId,
+        userEmail: email,
+        isDefault: false,
+        updatedAt: p.updatedAt || now,
+      }), { merge: true });
+      totalCount++;
+    }
+
+    for (const pe of peopleSource) {
+      const rawId = pe.id;
+      const docId = `${userId}_${rawId}`;
+      remainingBatch.set(doc(db, 'people_cards', docId), cleanForFirestore({
+        ...pe,
+        id: docId,
+        rawId,
+        userId,
+        userEmail: email,
+        isDefault: false,
+        updatedAt: pe.updatedAt || now,
+      }), { merge: true });
+      totalCount++;
+    }
+
+    for (const sh of shapesSource) {
+      const rawId = sh.id;
+      const docId = `${userId}_${rawId}`;
+      remainingBatch.set(doc(db, 'abstract_shapes', docId), cleanForFirestore({
+        ...sh,
+        id: docId,
+        rawId,
+        userId,
+        userEmail: email,
+        isDefault: false,
+        updatedAt: sh.updatedAt || now,
+      }), { merge: true });
+      totalCount++;
+    }
+
+    for (const ac of academicSource) {
+      const rawId = ac.id;
+      const docId = `${userId}_${rawId}`;
+      remainingBatch.set(doc(db, 'academic_points', docId), cleanForFirestore({
+        ...ac,
+        id: docId,
+        rawId,
+        userId,
+        userEmail: email,
+        isDefault: false,
+        updatedAt: ac.updatedAt || now,
+      }), { merge: true });
+      totalCount++;
+    }
+
+    for (const pa of personalSource) {
+      const rawId = pa.id;
+      const docId = `${userId}_${rawId}`;
+      remainingBatch.set(doc(db, 'personal_associations', docId), cleanForFirestore({
+        ...pa,
+        id: docId,
+        rawId,
+        userId,
+        userEmail: email,
+        isDefault: false,
+        updatedAt: pa.updatedAt || now,
+      }), { merge: true });
+      totalCount++;
+    }
+
+    await remainingBatch.commit();
+
+    return {
+      success: true,
+      message: `מאגר נתונים אישי אותחל בהצלחה (${totalCount} רשומות)`,
+      count: totalCount,
+    };
+  } catch (err: any) {
+    console.error('Error seeding user branch:', err);
+    return {
+      success: false,
+      message: `שגיאה באיתחול ענף נתונים אישי: ${err?.message || err}`,
+      count: 0,
+    };
+  }
+}
+
+/**
+ * Checks if a user already has an isolated database branch in Firestore.
+ * If not, automatically provisions one populated with the baseline associations.
+ */
+export async function ensureUserBranchExists(
+  userId: string,
+  userEmail?: string | null,
+  initialData?: {
+    majorItems?: MajorItem[];
+    paoItems?: PAOItem[];
+    bodyPegs?: BodyPegItem[];
+    shapePegs?: PegShapeItem[];
+    palaces?: MemoryPalace[];
+    peopleCards?: PersonFaceCard[];
+    abstractShapes?: AbstractShapeCard[];
+    academicPoints?: AcademicKeyPoint[];
+    personalAssociations?: PersonalContactAssociation[];
+  }
+): Promise<{ seeded: boolean; message: string }> {
+  try {
+    const q = query(collection(db, 'pao_items'), where('userId', '==', userId), limit(1));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      return { seeded: false, message: 'הענף האישי קיים ומוכן' };
+    }
+
+    const res = await seedUserBranchFromDefaults(userId, userEmail, initialData);
+    return { seeded: res.success, message: res.message };
+  } catch (err: any) {
+    console.error('Error ensuring user branch exists:', err);
+    return { seeded: false, message: `שגיאה בבדיקת ענף נתונים: ${err?.message || err}` };
+  }
+}
+
+/**
  * Safely extracts timestamp in milliseconds from numbers, Firestore Timestamps, ISO strings, etc.
  */
 export function getTimestampMillis(val: any): number {
@@ -332,18 +586,22 @@ export function mergeWithRemoteItems<T extends { updatedAt?: number }>(
 
 /**
  * Generic Bidirectional Sync with Last-Write-Wins conflict resolution & Rowy _updatedAt support
+ * Supports multi-tenant isolation via userId and composite doc IDs (${userId}_${rawId}).
  */
 async function syncCollectionBidirectional<T extends { id?: string | number; numberStr?: string; index?: number; updatedAt?: number }>(
   collectionName: string,
   localItems: T[],
-  getId: (item: T) => string
+  getId: (item: T) => string,
+  userId?: string | null,
+  userEmail?: string | null
 ): Promise<{ mergedItems: T[]; uploadedCount: number; downloadedCount: number; error?: string }> {
   let uploadedCount = 0;
   let downloadedCount = 0;
 
   try {
-    const colRef = collection(db, collectionName);
-    const snap = await getDocs(colRef);
+    const snap = userId
+      ? await getDocs(query(collection(db, collectionName), where('userId', '==', userId)))
+      : await getDocs(collection(db, collectionName));
 
     const remoteMap = new Map<string, any>();
     snap.forEach((d) => {
@@ -353,17 +611,34 @@ async function syncCollectionBidirectional<T extends { id?: string | number; num
         deleteDoc(doc(db, collectionName, d.id)).catch(() => {});
         return;
       }
-      remoteMap.set(d.id, { ...d.data(), id: d.id });
+      const data = d.data();
+      const rawId = data.rawId || (userId && d.id.startsWith(`${userId}_`) ? d.id.slice(userId.length + 1) : d.id);
+      remoteMap.set(rawId, { ...data, id: rawId });
     });
+
+    const getDocId = (rawId: string) => (userId ? `${userId}_${rawId}` : rawId);
 
     // If remote collection is completely empty and local items exist, upload all local items
     if (remoteMap.size === 0 && localItems.length > 0) {
       const batch = writeBatch(db);
       for (const item of localItems) {
-        const id = getId(item);
-        if (!id || id === 'NaN' || id === 'nan' || id === 'undefined' || id === 'null') continue;
-        const docRef = doc(db, collectionName, id);
-        batch.set(docRef, cleanForFirestore({ ...item, id, updatedAt: item.updatedAt || Date.now() }), { merge: true });
+        const rawId = getId(item);
+        if (!rawId || rawId === 'NaN' || rawId === 'nan' || rawId === 'undefined' || rawId === 'null') continue;
+        const docId = getDocId(rawId);
+        const docRef = doc(db, collectionName, docId);
+        batch.set(
+          docRef,
+          cleanForFirestore({
+            ...item,
+            id: docId,
+            rawId,
+            userId: userId || 'system_default',
+            userEmail: userEmail || '',
+            isDefault: !userId,
+            updatedAt: item.updatedAt || Date.now(),
+          }),
+          { merge: true }
+        );
         uploadedCount++;
       }
       await batch.commit();
@@ -372,9 +647,9 @@ async function syncCollectionBidirectional<T extends { id?: string | number; num
 
     const localMap = new Map<string, T>();
     for (const item of localItems) {
-      const id = getId(item);
-      if (!id || id === 'NaN' || id === 'nan' || id === 'undefined' || id === 'null') continue;
-      localMap.set(id, item);
+      const rawId = getId(item);
+      if (!rawId || rawId === 'NaN' || rawId === 'nan' || rawId === 'undefined' || rawId === 'null') continue;
+      localMap.set(rawId, item);
     }
 
     const mergedList: T[] = [];
@@ -382,9 +657,9 @@ async function syncCollectionBidirectional<T extends { id?: string | number; num
     let batchHasOperations = false;
 
     // Check all remote items
-    for (const [id, remoteItem] of remoteMap.entries()) {
-      if (!id || id === 'NaN' || id === 'nan' || id === 'undefined' || id === 'null') continue;
-      const localItem = localMap.get(id);
+    for (const [rawId, remoteItem] of remoteMap.entries()) {
+      if (!rawId || rawId === 'NaN' || rawId === 'nan' || rawId === 'undefined' || rawId === 'null') continue;
+      const localItem = localMap.get(rawId);
 
       if (!localItem) {
         // Item exists in remote (e.g. added in Rowy) but not locally: download to local
@@ -415,8 +690,21 @@ async function syncCollectionBidirectional<T extends { id?: string | number; num
           downloadedCount++;
         } else if (localTime > remoteTime) {
           // Local is newer (e.g. edited locally in app while offline): upload to remote
-          const docRef = doc(db, collectionName, id);
-          uploadBatch.set(docRef, cleanForFirestore({ ...localItem, id, updatedAt: localTime }), { merge: true });
+          const docId = getDocId(rawId);
+          const docRef = doc(db, collectionName, docId);
+          uploadBatch.set(
+            docRef,
+            cleanForFirestore({
+              ...localItem,
+              id: docId,
+              rawId,
+              userId: userId || 'system_default',
+              userEmail: userEmail || '',
+              isDefault: !userId,
+              updatedAt: localTime,
+            }),
+            { merge: true }
+          );
           batchHasOperations = true;
           uploadedCount++;
           mergedList.push(localItem);
@@ -435,11 +723,24 @@ async function syncCollectionBidirectional<T extends { id?: string | number; num
     }
 
     // Check if any local items were created locally and don't exist remotely
-    for (const [id, localItem] of localMap.entries()) {
-      if (!id || id === 'NaN' || id === 'nan' || id === 'undefined' || id === 'null') continue;
-      if (!remoteMap.has(id)) {
-        const docRef = doc(db, collectionName, id);
-        uploadBatch.set(docRef, cleanForFirestore({ ...localItem, id, updatedAt: localItem.updatedAt || Date.now() }), { merge: true });
+    for (const [rawId, localItem] of localMap.entries()) {
+      if (!rawId || rawId === 'NaN' || rawId === 'nan' || rawId === 'undefined' || rawId === 'null') continue;
+      if (!remoteMap.has(rawId)) {
+        const docId = getDocId(rawId);
+        const docRef = doc(db, collectionName, docId);
+        uploadBatch.set(
+          docRef,
+          cleanForFirestore({
+            ...localItem,
+            id: docId,
+            rawId,
+            userId: userId || 'system_default',
+            userEmail: userEmail || '',
+            isDefault: !userId,
+            updatedAt: localItem.updatedAt || Date.now(),
+          }),
+          { merge: true }
+        );
         batchHasOperations = true;
         uploadedCount++;
         mergedList.push(localItem);
@@ -464,19 +765,24 @@ async function syncCollectionBidirectional<T extends { id?: string | number; num
 
 /**
  * Full Bidirectional Two-Way Sync across all memory collections
+ * Partitions writes and reads per user when userId is specified.
  */
-export async function performFullBidirectionalSync(currentData: {
-  majorDigits: MajorItem[];
-  majorItems: MajorItem[];
-  paoItems: PAOItem[];
-  shapePegs: PegShapeItem[];
-  bodyPegs: BodyPegItem[];
-  palaces: MemoryPalace[];
-  peopleCards: PersonFaceCard[];
-  abstractShapes: AbstractShapeCard[];
-  academicPoints: AcademicKeyPoint[];
-  personalAssociations: PersonalContactAssociation[];
-}): Promise<SyncResult> {
+export async function performFullBidirectionalSync(
+  currentData: {
+    majorDigits: MajorItem[];
+    majorItems: MajorItem[];
+    paoItems: PAOItem[];
+    shapePegs: PegShapeItem[];
+    bodyPegs: BodyPegItem[];
+    palaces: MemoryPalace[];
+    peopleCards: PersonFaceCard[];
+    abstractShapes: AbstractShapeCard[];
+    academicPoints: AcademicKeyPoint[];
+    personalAssociations: PersonalContactAssociation[];
+  },
+  userId?: string | null,
+  userEmail?: string | null
+): Promise<SyncResult> {
   if (!isNetworkOnline()) {
     return {
       success: true,
@@ -504,7 +810,9 @@ export async function performFullBidirectionalSync(currentData: {
         const n = typeof item.number === 'number' && !isNaN(item.number) ? item.number : parseInt(item.numberStr, 10);
         if (isNaN(n)) return '';
         return (n < 10 && n >= 0 ? `0${n}` : `${n}`).padStart(2, '0');
-      }
+      },
+      userId,
+      userEmail
     );
     stats.uploaded += majorRes.uploadedCount;
     stats.downloaded += majorRes.downloadedCount;
@@ -521,7 +829,9 @@ export async function performFullBidirectionalSync(currentData: {
         const n = typeof item.number === 'number' && !isNaN(item.number) ? item.number : parseInt(item.numberStr, 10);
         if (isNaN(n)) return '';
         return (n < 10 && n >= 0 ? `0${n}` : `${n}`).padStart(2, '0');
-      }
+      },
+      userId,
+      userEmail
     );
     stats.uploaded += paoRes.uploadedCount;
     stats.downloaded += paoRes.downloadedCount;
@@ -531,7 +841,9 @@ export async function performFullBidirectionalSync(currentData: {
     const bodyRes = await syncCollectionBidirectional(
       'body_pegs',
       currentData.bodyPegs,
-      (item) => String(item.index)
+      (item) => String(item.index),
+      userId,
+      userEmail
     );
     stats.uploaded += bodyRes.uploadedCount;
     stats.downloaded += bodyRes.downloadedCount;
@@ -541,7 +853,9 @@ export async function performFullBidirectionalSync(currentData: {
     const shapeRes = await syncCollectionBidirectional(
       'shape_pegs',
       currentData.shapePegs,
-      (item) => String(item.number)
+      (item) => String(item.number),
+      userId,
+      userEmail
     );
     stats.uploaded += shapeRes.uploadedCount;
     stats.downloaded += shapeRes.downloadedCount;
@@ -551,7 +865,9 @@ export async function performFullBidirectionalSync(currentData: {
     const palacesRes = await syncCollectionBidirectional(
       'palaces',
       currentData.palaces,
-      (item) => item.id
+      (item) => item.id,
+      userId,
+      userEmail
     );
     stats.uploaded += palacesRes.uploadedCount;
     stats.downloaded += palacesRes.downloadedCount;
@@ -561,7 +877,9 @@ export async function performFullBidirectionalSync(currentData: {
     const personalRes = await syncCollectionBidirectional(
       'personal_associations',
       currentData.personalAssociations,
-      (item) => item.id
+      (item) => item.id,
+      userId,
+      userEmail
     );
     stats.uploaded += personalRes.uploadedCount;
     stats.downloaded += personalRes.downloadedCount;
@@ -571,7 +889,9 @@ export async function performFullBidirectionalSync(currentData: {
     const peopleRes = await syncCollectionBidirectional(
       'people_cards',
       currentData.peopleCards,
-      (item) => item.id
+      (item) => item.id,
+      userId,
+      userEmail
     );
     stats.uploaded += peopleRes.uploadedCount;
     stats.downloaded += peopleRes.downloadedCount;
@@ -580,7 +900,9 @@ export async function performFullBidirectionalSync(currentData: {
     const abstractRes = await syncCollectionBidirectional(
       'abstract_shapes',
       currentData.abstractShapes,
-      (item) => item.id
+      (item) => item.id,
+      userId,
+      userEmail
     );
     stats.uploaded += abstractRes.uploadedCount;
     stats.downloaded += abstractRes.downloadedCount;
@@ -589,7 +911,9 @@ export async function performFullBidirectionalSync(currentData: {
     const academicRes = await syncCollectionBidirectional(
       'academic_points',
       currentData.academicPoints,
-      (item) => item.id
+      (item) => item.id,
+      userId,
+      userEmail
     );
     stats.uploaded += academicRes.uploadedCount;
     stats.downloaded += academicRes.downloadedCount;
@@ -670,16 +994,21 @@ export interface RealtimeSyncCallbacks {
 }
 
 /**
- * Starts real-time onSnapshot listeners for all Firestore collections.
- * Automatically synchronizes changes made in Rowy or other browser sessions directly to the local UI in real time.
+ * Starts real-time onSnapshot listeners for Firestore collections.
+ * When userId is provided, queries only documents belonging to that user's isolated branch (where('userId', '==', userId)),
+ * preventing cross-user pollution while keeping Rowy tables fully synchronized.
  */
-export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks): () => void {
+export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks, userId?: string | null): () => void {
   const unsubs: (() => void)[] = [];
 
   try {
     // 1. major_items (00-99)
+    const majorTarget = userId
+      ? query(collection(db, 'major_items'), where('userId', '==', userId))
+      : collection(db, 'major_items');
+
     const unsubMajor = onSnapshot(
-      collection(db, 'major_items'),
+      majorTarget,
       (snap) => {
         if (snap.empty) return;
         const items: MajorItem[] = [];
@@ -689,7 +1018,8 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks): () => 
             return;
           }
           const data = d.data();
-          const parsedNum = typeof data.number === 'number' ? data.number : parseInt(String(data.numberStr || d.id), 10);
+          const rawId = data.rawId || (userId && d.id.startsWith(`${userId}_`) ? d.id.slice(userId.length + 1) : d.id);
+          const parsedNum = typeof data.number === 'number' ? data.number : parseInt(String(data.numberStr || rawId), 10);
           if (isNaN(parsedNum) || parsedNum < 0 || parsedNum > 99) {
             return;
           }
@@ -726,8 +1056,12 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks): () => 
     unsubs.push(unsubMajor);
 
     // 2. pao_items (00-99)
+    const paoTarget = userId
+      ? query(collection(db, 'pao_items'), where('userId', '==', userId))
+      : collection(db, 'pao_items');
+
     const unsubPao = onSnapshot(
-      collection(db, 'pao_items'),
+      paoTarget,
       (snap) => {
         if (snap.empty) return;
         const items: PAOItem[] = [];
@@ -737,7 +1071,8 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks): () => 
             return;
           }
           const data = d.data();
-          const parsedNum = typeof data.number === 'number' ? data.number : parseInt(String(data.numberStr || d.id), 10);
+          const rawId = data.rawId || (userId && d.id.startsWith(`${userId}_`) ? d.id.slice(userId.length + 1) : d.id);
+          const parsedNum = typeof data.number === 'number' ? data.number : parseInt(String(data.numberStr || rawId), 10);
           if (isNaN(parsedNum) || parsedNum < 0 || parsedNum > 99) {
             return;
           }
@@ -777,20 +1112,25 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks): () => 
     unsubs.push(unsubPao);
 
     // 3. body_pegs
+    const bodyTarget = userId
+      ? query(collection(db, 'body_pegs'), where('userId', '==', userId))
+      : collection(db, 'body_pegs');
+
     const unsubBody = onSnapshot(
-      collection(db, 'body_pegs'),
+      bodyTarget,
       (snap) => {
         if (snap.empty) return;
         const items: BodyPegItem[] = [];
         snap.forEach((d) => {
           const data = d.data();
-          const idx = typeof data.index === 'number' ? data.index : parseInt(d.id, 10);
+          const rawId = data.rawId || (userId && d.id.startsWith(`${userId}_`) ? d.id.slice(userId.length + 1) : d.id);
+          const idx = typeof data.index === 'number' ? data.index : parseInt(rawId, 10);
           const bodyPart = (data.bodyPartHebrew && data.bodyPartHebrew !== 'null') ? data.bodyPartHebrew : '';
           const defaultObj = (data.defaultObject && data.defaultObject !== 'null') ? data.defaultObject : '';
           const tip = (data.kineticTip && data.kineticTip !== 'null') ? data.kineticTip : '';
 
           items.push({
-            id: d.id,
+            id: rawId,
             index: isNaN(idx) ? 1 : idx,
             bodyPartHebrew: bodyPart,
             defaultObject: defaultObj,
@@ -812,20 +1152,25 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks): () => 
     unsubs.push(unsubBody);
 
     // 4. shape_pegs
+    const shapeTarget = userId
+      ? query(collection(db, 'shape_pegs'), where('userId', '==', userId))
+      : collection(db, 'shape_pegs');
+
     const unsubShape = onSnapshot(
-      collection(db, 'shape_pegs'),
+      shapeTarget,
       (snap) => {
         if (snap.empty) return;
         const items: PegShapeItem[] = [];
         snap.forEach((d) => {
           const data = d.data();
-          const num = typeof data.number === 'number' ? data.number : parseInt(d.id, 10);
+          const rawId = data.rawId || (userId && d.id.startsWith(`${userId}_`) ? d.id.slice(userId.length + 1) : d.id);
+          const num = typeof data.number === 'number' ? data.number : parseInt(rawId, 10);
           const shapeName = (data.shapeName && data.shapeName !== 'null') ? data.shapeName : '';
           const defaultObj = (data.defaultObject && data.defaultObject !== 'null') ? data.defaultObject : '';
           const tip = (data.kineticTip && data.kineticTip !== 'null') ? data.kineticTip : '';
 
           items.push({
-            id: d.id,
+            id: rawId,
             number: isNaN(num) ? 0 : num,
             shapeName,
             visualMetaphor: data.visualMetaphor || '',
@@ -848,15 +1193,20 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks): () => 
     unsubs.push(unsubShape);
 
     // 5. palaces
+    const palacesTarget = userId
+      ? query(collection(db, 'palaces'), where('userId', '==', userId))
+      : collection(db, 'palaces');
+
     const unsubPalaces = onSnapshot(
-      collection(db, 'palaces'),
+      palacesTarget,
       (snap) => {
         if (snap.empty) return;
         const items: MemoryPalace[] = [];
         snap.forEach((d) => {
           const data = d.data();
+          const rawId = data.rawId || (userId && d.id.startsWith(`${userId}_`) ? d.id.slice(userId.length + 1) : d.id);
           items.push({
-            id: d.id,
+            id: rawId,
             name: data.name || 'ארמון',
             description: data.description || '',
             icon: data.icon || 'Building',
@@ -877,15 +1227,20 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks): () => 
     unsubs.push(unsubPalaces);
 
     // 6. personal_associations
+    const personalTarget = userId
+      ? query(collection(db, 'personal_associations'), where('userId', '==', userId))
+      : collection(db, 'personal_associations');
+
     const unsubPersonal = onSnapshot(
-      collection(db, 'personal_associations'),
+      personalTarget,
       (snap) => {
         if (snap.empty) return;
         const items: PersonalContactAssociation[] = [];
         snap.forEach((d) => {
           const data = d.data();
+          const rawId = data.rawId || (userId && d.id.startsWith(`${userId}_`) ? d.id.slice(userId.length + 1) : d.id);
           items.push({
-            id: d.id,
+            id: rawId,
             targetSubject: data.targetSubject || '',
             storedNumberOrFact: data.storedNumberOrFact || '',
             encodedMnemonic: data.encodedMnemonic || '',
@@ -908,15 +1263,20 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks): () => 
     unsubs.push(unsubPersonal);
 
     // 7. people_cards
+    const peopleTarget = userId
+      ? query(collection(db, 'people_cards'), where('userId', '==', userId))
+      : collection(db, 'people_cards');
+
     const unsubPeople = onSnapshot(
-      collection(db, 'people_cards'),
+      peopleTarget,
       (snap) => {
         if (snap.empty) return;
         const items: PersonFaceCard[] = [];
         snap.forEach((d) => {
           const data = d.data();
+          const rawId = data.rawId || (userId && d.id.startsWith(`${userId}_`) ? d.id.slice(userId.length + 1) : d.id);
           items.push({
-            id: d.id,
+            id: rawId,
             name: data.name || '',
             roleOrJob: data.roleOrJob || '',
             avatarUrl: data.avatarUrl || '',
@@ -939,15 +1299,20 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks): () => 
     unsubs.push(unsubPeople);
 
     // 8. abstract_shapes
+    const abstractTarget = userId
+      ? query(collection(db, 'abstract_shapes'), where('userId', '==', userId))
+      : collection(db, 'abstract_shapes');
+
     const unsubAbstract = onSnapshot(
-      collection(db, 'abstract_shapes'),
+      abstractTarget,
       (snap) => {
         if (snap.empty) return;
         const items: AbstractShapeCard[] = [];
         snap.forEach((d) => {
           const data = d.data();
+          const rawId = data.rawId || (userId && d.id.startsWith(`${userId}_`) ? d.id.slice(userId.length + 1) : d.id);
           items.push({
-            id: d.id,
+            id: rawId,
             title: data.title || '',
             svgShapeType: data.svgShapeType || 'spiral',
             textureType: data.textureType || 'smooth',
@@ -969,15 +1334,20 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks): () => 
     unsubs.push(unsubAbstract);
 
     // 9. academic_points
+    const academicTarget = userId
+      ? query(collection(db, 'academic_points'), where('userId', '==', userId))
+      : collection(db, 'academic_points');
+
     const unsubAcademic = onSnapshot(
-      collection(db, 'academic_points'),
+      academicTarget,
       (snap) => {
         if (snap.empty) return;
         const items: AcademicKeyPoint[] = [];
         snap.forEach((d) => {
           const data = d.data();
+          const rawId = data.rawId || (userId && d.id.startsWith(`${userId}_`) ? d.id.slice(userId.length + 1) : d.id);
           items.push({
-            id: d.id,
+            id: rawId,
             conceptTitle: data.conceptTitle || '',
             discipline: data.discipline || '',
             sourceSummary: data.sourceSummary || '',

@@ -99,6 +99,8 @@ export interface WorkoutsHubProps {
   onDeleteAcademicPoint?: (id: string) => void;
   onResetAcademicPoints?: () => void;
   onOpenSummary?: (techniqueId: string) => void;
+  currentUser?: any;
+  onLogin?: () => void;
 }
 
 type WorkoutCategory = 'major' | 'pao' | 'names' | 'pegs' | 'academic';
@@ -113,6 +115,8 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
   bodyPegs,
   peopleCards,
   academicPoints,
+  currentUser,
+  onLogin,
   connectingLetters,
   onNavigateToLogicTab,
   onEarnPoints,
@@ -355,6 +359,8 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
           onOpenSummary={onOpenSummary}
           onNavigateToLogicTab={onNavigateToLogicTab}
           onSyncMajorAndPAOObjects={onSyncMajorAndPAOObjects}
+          currentUser={currentUser}
+          onLogin={onLogin}
         />
       )}
 

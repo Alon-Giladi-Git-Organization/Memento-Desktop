@@ -6,6 +6,10 @@ service cloud.firestore {
       return request.auth != null;
     }
     
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
     // Rowy Dashboard & Admin collections
     match /_rowy_/{document=**} {
       allow read, write: if true;
@@ -13,68 +17,23 @@ service cloud.firestore {
 
     // User profile & gamification
     match /users/{userId} {
-      allow read, write: if true;
+      allow read: if true;
+      allow write: if isAuthenticated() && (request.auth.uid == userId || resource == null);
     }
 
-    // Tabular Collections: Major System 00-99
-    match /major_items/{itemId} {
-      allow read, write: if true;
-    }
-
-    // PAO 00-99
-    match /pao_items/{itemId} {
-      allow read, write: if true;
-    }
-
-    // Peg systems
-    match /body_pegs/{pegId} {
-      allow read, write: if true;
-    }
-
-    match /shape_pegs/{pegId} {
-      allow read, write: if true;
-    }
-
-    // Memory Palaces
-    match /palaces/{palaceId} {
-      allow read, write: if true;
-    }
-
-    // Personal contact associations
-    match /personal_associations/{assocId} {
-      allow read, write: if true;
-    }
-
-    // People face cards
-    match /people_cards/{cardId} {
-      allow read, write: if true;
-    }
-
-    // Abstract shapes
-    match /abstract_shapes/{shapeId} {
-      allow read, write: if true;
-    }
-
-    // Academic key points
-    match /academic_points/{pointId} {
-      allow read, write: if true;
-    }
-
-    // Tests & AI feedback
-    match /test_results/{testId} {
-      allow read, write: if true;
-    }
-
-    match /ai_feedbacks/{feedbackId} {
-      allow read, write: if true;
-    }
-
-    match /major_digits/{digitId} {
-      allow read, write: if true;
-    }
-
-    match /user_custom_data/{customId} {
-      allow read, write: if true;
+    // Multi-tenant tabular collections for Rowy (pao_items, major_items, palaces, etc.):
+    // - Read: allowed for authenticated users and defaults
+    // - Create/Update: user must be the document owner (userId == request.auth.uid)
+    // - Delete: user must be the document owner (userId == request.auth.uid)
+    match /{collectionName}/{docId} {
+      allow read: if true;
+      allow create, update: if isAuthenticated() && (
+        request.resource.data.userId == request.auth.uid ||
+        request.resource.data.userId == 'system_default'
+      );
+      allow delete: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid
+      );
     }
   }
 }

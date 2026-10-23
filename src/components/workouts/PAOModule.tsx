@@ -49,6 +49,7 @@ import {
 import { QuizDeckProgressBar } from '../QuizDeckProgressBar';
 import { compressImageFile } from '../../lib/imageCompression';
 import { ImageDropzone } from '../ImageDropzone';
+import { PAOImageGeneratorTab } from '../PAOImageGeneratorTab';
 
 export type PAOColumnKey = 'number' | 'image' | 'person' | 'action' | 'object' | 'scene' | 'ready' | 'actions';
 
@@ -75,6 +76,8 @@ interface PAOModuleProps {
   paoItems: PAOItem[];
   majorDigits?: MajorItem[];
   connectingLetters?: string[];
+  currentUser?: any;
+  onLogin?: () => void;
   onEarnPoints: (amount: number, reason?: string) => void;
   onUnlockBadge: (badge: string) => void;
   onAddPAOItem?: (item: PAOItem) => void;
@@ -95,6 +98,8 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
   paoItems,
   majorDigits,
   connectingLetters = DEFAULT_CONNECTING_LETTERS,
+  currentUser,
+  onLogin,
   onEarnPoints,
   onUnlockBadge,
   onAddPAOItem,
@@ -108,6 +113,9 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
 }) => {
   const [subView, setSubView] = useState<'registry' | 'quiz'>('registry');
   const [search, setSearch] = useState('');
+  const [modalImageMode, setModalImageMode] = useState<'upload' | 'ai'>('ai');
+  const [quickUploadMode, setQuickUploadMode] = useState<'upload' | 'ai'>('ai');
+  const [cardImageMode, setCardImageMode] = useState<'upload' | 'ai'>('ai');
   const [onlyReadyFilter, setOnlyReadyFilter] = useState(false);
 
   // Ready for practice whitelist calculation
@@ -1462,6 +1470,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                               onClick={() => {
                                 setQuickUploadItem(item);
                                 setQuickUploadUrl('');
+                                setQuickUploadMode('ai');
                               }}
                               className="p-1 rounded-lg text-slate-500 hover:text-indigo-300 hover:bg-slate-900 border border-transparent hover:border-slate-800 transition-all cursor-pointer"
                               title="צרף תמונה לשלשה זו"
@@ -1618,91 +1627,147 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                                 <ImageIcon className="w-3.5 h-3.5 text-indigo-400" />
                                 <span>תמונה ויזואלית לסצנה:</span>
                               </label>
+
+                              {/* Mode Switcher */}
+                              <div className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800">
+                                <button
+                                  type="button"
+                                  onClick={() => setCardImageMode('ai')}
+                                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium flex items-center gap-1 transition-all ${
+                                    cardImageMode === 'ai'
+                                      ? 'bg-gradient-to-r from-amber-500 to-indigo-600 text-white shadow-sm'
+                                      : 'text-amber-400/80 hover:text-amber-300'
+                                  }`}
+                                >
+                                  <Sparkles className="w-3 h-3" />
+                                  <span>Gemini AI</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setCardImageMode('upload')}
+                                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
+                                    cardImageMode === 'upload'
+                                      ? 'bg-indigo-600 text-white shadow-sm'
+                                      : 'text-slate-400 hover:text-slate-200'
+                                  }`}
+                                >
+                                  העלאת קובץ
+                                </button>
+                              </div>
+
                               {editImageUrl && (
                                 <button
                                   type="button"
                                   onClick={() => setEditImageUrl('')}
-                                  className="text-[11px] text-rose-400 hover:text-rose-300 flex items-center gap-1 cursor-pointer transition-colors"
+                                  className="text-[11px] text-rose-400 hover:text-rose-300 flex items-center gap-1 cursor-pointer transition-colors mr-2"
                                 >
                                   <Trash2 className="w-3 h-3" />
-                                  <span>הסר תמונה</span>
+                                  <span>הסר</span>
                                 </button>
                               )}
                             </div>
 
-                            {editImageUrl ? (
-                              <div className="space-y-3">
-                                <div className="flex items-center justify-between bg-slate-950 p-2.5 rounded-2xl border border-slate-800">
-                                  <div className="flex items-center gap-3 min-w-0">
-                                    <img
-                                      src={editImageUrl}
-                                      alt="סצנה"
-                                      className="w-14 h-14 object-cover rounded-xl border border-indigo-500/40 shrink-0"
-                                    />
-                                    <div className="min-w-0">
-                                      <span className="text-xs font-bold text-slate-200 block truncate">תמונה קיימת</span>
-                                      <span className="text-[10px] text-slate-400 block">גרור קובץ או לחץ להחלפה למטה</span>
-                                    </div>
-                                  </div>
-                                  <button
-                                    type="button"
-                                    onClick={() => setEditImageUrl('')}
-                                    className="px-2.5 py-1 text-xs text-rose-300 hover:text-white bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 rounded-xl flex items-center gap-1 cursor-pointer transition-all shrink-0"
-                                    title="הסר תמונה"
-                                  >
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                    <span>מחק תמונה</span>
-                                  </button>
-                                </div>
-
-                                <ImageDropzone
-                                  isProcessing={isCompressing}
-                                  title="בחר קובץ או גרור לכאן להחלפת התמונה"
-                                  subtitle="Choose a file or drag it here • JPG, PNG, WebP"
-                                  className="py-6 px-3"
-                                  onImageSelected={async (file) => {
-                                    try {
-                                      setIsCompressing(true);
-                                      const comp = await compressImageFile(file);
-                                      setEditImageUrl(comp);
-                                    } catch (err) {
-                                      console.error(err);
-                                    } finally {
-                                      setIsCompressing(false);
-                                    }
-                                  }}
-                                />
-                              </div>
-                            ) : (
-                              <ImageDropzone
-                                isProcessing={isCompressing}
-                                title="בחר קובץ או גרור לכאן"
-                                subtitle="Choose a file or drag it here • JPG, PNG, WebP"
-                                className="py-6 px-3"
-                                onImageSelected={async (file) => {
-                                  try {
-                                    setIsCompressing(true);
-                                    const comp = await compressImageFile(file);
-                                    setEditImageUrl(comp);
-                                  } catch (err) {
-                                    console.error(err);
-                                  } finally {
-                                    setIsCompressing(false);
-                                  }
+                            {cardImageMode === 'ai' ? (
+                              <PAOImageGeneratorTab
+                                numberStr={item.numberStr}
+                                numberVal={item.number}
+                                person={editPerson}
+                                action={editAction}
+                                object={editObject}
+                                scene={editScene}
+                                currentUser={currentUser}
+                                saveButtonLabel="שמור תמונה לשלשה זו"
+                                onLogin={onLogin}
+                                onImageGenerated={(dataUrl) => {
+                                  setEditImageUrl(dataUrl);
+                                  onUpdatePAOItem(item.number, {
+                                    person: editPerson,
+                                    action: editAction,
+                                    object: editObject,
+                                    scene: editScene,
+                                    imageUrl: dataUrl,
+                                  });
+                                  setEditingNum(null);
+                                  onEarnPoints(15, 'יצירת תמונה מנמונית עם Gemini');
                                 }}
                               />
-                            )}
+                            ) : (
+                              <>
+                                {editImageUrl ? (
+                                  <div className="space-y-3">
+                                    <div className="flex items-center justify-between bg-slate-950 p-2.5 rounded-2xl border border-slate-800">
+                                      <div className="flex items-center gap-3 min-w-0">
+                                        <img
+                                          src={editImageUrl}
+                                          alt="סצנה"
+                                          className="w-14 h-14 object-cover rounded-xl border border-indigo-500/40 shrink-0"
+                                        />
+                                        <div className="min-w-0">
+                                          <span className="text-xs font-bold text-slate-200 block truncate">תמונה קיימת</span>
+                                          <span className="text-[10px] text-slate-400 block">גרור קובץ או לחץ להחלפה למטה</span>
+                                        </div>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => setEditImageUrl('')}
+                                        className="px-2.5 py-1 text-xs text-rose-300 hover:text-white bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 rounded-xl flex items-center gap-1 cursor-pointer transition-all shrink-0"
+                                        title="הסר תמונה"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                        <span>מחק תמונה</span>
+                                      </button>
+                                    </div>
 
-                            <div className="flex items-center gap-2 pt-1">
-                              <span className="text-[11px] text-slate-400 shrink-0">או קישור:</span>
-                              <input
-                                type="url"
-                                value={editImageUrl.startsWith('data:') ? '' : editImageUrl}
-                                onChange={(e) => setEditImageUrl(e.target.value)}
-                                placeholder="https://example.com/image.jpg"
-                                className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-indigo-500"
-                              />
-                            </div>
+                                    <ImageDropzone
+                                      isProcessing={isCompressing}
+                                      title="בחר קובץ או גרור לכאן להחלפת התמונה"
+                                      subtitle="Choose a file or drag it here • JPG, PNG, WebP"
+                                      className="py-6 px-3"
+                                      onImageSelected={async (file) => {
+                                        try {
+                                          setIsCompressing(true);
+                                          const comp = await compressImageFile(file);
+                                          setEditImageUrl(comp);
+                                        } catch (err) {
+                                          console.error(err);
+                                        } finally {
+                                          setIsCompressing(false);
+                                        }
+                                      }}
+                                    />
+                                  </div>
+                                ) : (
+                                  <ImageDropzone
+                                    isProcessing={isCompressing}
+                                    title="בחר קובץ או גרור לכאן"
+                                    subtitle="Choose a file or drag it here • JPG, PNG, WebP"
+                                    className="py-6 px-3"
+                                    onImageSelected={async (file) => {
+                                      try {
+                                        setIsCompressing(true);
+                                        const comp = await compressImageFile(file);
+                                        setEditImageUrl(comp);
+                                      } catch (err) {
+                                        console.error(err);
+                                      } finally {
+                                        setIsCompressing(false);
+                                      }
+                                    }}
+                                  />
+                                )}
+
+                                <div className="flex items-center gap-2 pt-1">
+                                  <span className="text-[11px] text-slate-400 shrink-0">או קישור:</span>
+                                  <input
+                                    type="url"
+                                    value={editImageUrl.startsWith('data:') ? '' : editImageUrl}
+                                    onChange={(e) => setEditImageUrl(e.target.value)}
+                                    placeholder="https://example.com/image.jpg"
+                                    className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-indigo-500"
+                                  />
+                                </div>
+                              </>
+                            )}
                           </div>
 
                           <div className="flex items-center justify-between gap-1 pt-1">
@@ -1932,6 +1997,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                                 onClick={() => {
                                   setQuickUploadItem(item);
                                   setQuickUploadUrl('');
+                                  setQuickUploadMode('ai');
                                 }}
                                 className="p-1 rounded text-slate-500 hover:text-indigo-400 hover:bg-slate-900 transition-colors cursor-pointer"
                                 title="צרף תמונה לשלשה זו"
@@ -2813,7 +2879,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
               התמונה הממוזערת מהכרטיס מורחבת רציף למודל תצוגה מפורטת במסך מלא.
               האלמנט מתרחב ומשנה רדיוס פינות מ-2.25rem ל-1.5rem עם עקומת תאוטה מודגשת. */}
           <div
-            className="relative max-w-4xl w-full bg-slate-900 border border-slate-700 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[92vh] m3-container-transform"
+            className="relative w-full max-w-6xl xl:max-w-7xl bg-slate-900 border border-slate-700 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[92vh] m3-container-transform"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
@@ -2909,86 +2975,144 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
             {/* In-Modal Image Replace Drawer */}
             {modalIsEditing && typeof selectedPreviewImage.number === 'number' && (
               <div className="bg-slate-950/95 border-b border-indigo-500/30 p-4 sm:p-6 space-y-4 animate-fadeIn">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <span className="text-sm font-bold text-indigo-300 flex items-center gap-2">
                     <Edit3 className="w-4 h-4 text-indigo-400" />
                     <span>החלפת תמונה לשלשת PAO #{selectedPreviewImage.numberStr}:</span>
                   </span>
-                  <span className="text-xs text-slate-400">
-                    העלה קובץ חדש או הדבק קישור לתמונה
-                  </span>
+
+                  {/* Mode switcher: AI Generation vs Upload File */}
+                  <div className="flex items-center gap-1.5 bg-slate-900 p-1 rounded-2xl border border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => setModalImageMode('ai')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                        modalImageMode === 'ai'
+                          ? 'bg-gradient-to-r from-indigo-600 to-pink-600 text-white shadow-sm'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                      <span>יצירה עם Gemini</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setModalImageMode('upload')}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        modalImageMode === 'upload'
+                          ? 'bg-indigo-600 text-white shadow-sm'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      📁 העלאת קובץ
+                    </button>
+                  </div>
                 </div>
 
-                {/* Big Drag and Drop Container Matching Reference Image */}
-                <ImageDropzone
-                  isProcessing={modalIsCompressing}
-                  title="בחר קובץ או גרור לכאן להחלפת התמונה"
-                  subtitle="Choose a file or drag it here • JPG, PNG, WebP"
-                  onImageSelected={async (file) => {
-                    try {
-                      setModalIsCompressing(true);
-                      const comp = await compressImageFile(file);
-                      if (typeof selectedPreviewImage.number === 'number') {
-                        onUpdatePAOItem(selectedPreviewImage.number, {
-                          imageUrl: comp,
-                        });
-                        setSelectedPreviewImage((prev) => (prev ? { ...prev, url: comp } : null));
-                        setModalIsEditing(false);
-                        onEarnPoints(10, 'עדכון תמונה ויזואלית לסצנה');
-                      }
-                    } catch (err) {
-                      console.error(err);
-                    } finally {
-                      setModalIsCompressing(false);
-                    }
-                  }}
-                />
-
-                <div className="flex flex-col sm:flex-row items-center gap-2 pt-1">
-                  <span className="text-xs text-slate-400 shrink-0">או הדבק קישור (URL) לתמונה:</span>
-                  <input
-                    type="url"
-                    value={modalNewImageUrl.startsWith('data:') ? '' : modalNewImageUrl}
-                    onChange={(e) => setModalNewImageUrl(e.target.value)}
-                    placeholder="https://example.com/image.jpg"
-                    className="flex-1 w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && modalNewImageUrl.trim()) {
-                        e.preventDefault();
-                        if (typeof selectedPreviewImage.number === 'number') {
-                          onUpdatePAOItem(selectedPreviewImage.number, {
-                            imageUrl: modalNewImageUrl.trim(),
-                          });
-                          setSelectedPreviewImage((prev) =>
-                            prev ? { ...prev, url: modalNewImageUrl.trim() } : null
-                          );
-                          setModalIsEditing(false);
-                          onEarnPoints(10, 'עדכון תמונה ויזואלית לסצנה');
+                {modalImageMode === 'upload' ? (
+                  <>
+                    {/* Big Drag and Drop Container Matching Reference Image */}
+                    <ImageDropzone
+                      isProcessing={modalIsCompressing}
+                      title="בחר קובץ או גרור לכאן להחלפת התמונה"
+                      subtitle="Choose a file or drag it here • JPG, PNG, WebP"
+                      onImageSelected={async (file) => {
+                        try {
+                          setModalIsCompressing(true);
+                          const comp = await compressImageFile(file);
+                          if (typeof selectedPreviewImage.number === 'number') {
+                            onUpdatePAOItem(selectedPreviewImage.number, {
+                              imageUrl: comp,
+                            });
+                            setSelectedPreviewImage((prev) => (prev ? { ...prev, url: comp } : null));
+                            setModalIsEditing(false);
+                            onEarnPoints(10, 'עדכון תמונה ויזואלית לסצנה');
+                          }
+                        } catch (err) {
+                          console.error(err);
+                        } finally {
+                          setModalIsCompressing(false);
                         }
-                      }
-                    }}
-                  />
-                  <button
-                    type="button"
-                    disabled={!modalNewImageUrl || modalNewImageUrl === selectedPreviewImage.url}
-                    onClick={() => {
-                      if (typeof selectedPreviewImage.number === 'number' && modalNewImageUrl) {
-                        onUpdatePAOItem(selectedPreviewImage.number, {
-                          imageUrl: modalNewImageUrl.trim(),
-                        });
-                        setSelectedPreviewImage((prev) =>
-                          prev ? { ...prev, url: modalNewImageUrl.trim() } : null
-                        );
-                        setModalIsEditing(false);
-                        onEarnPoints(10, 'עדכון תמונה ויזואלית לסצנה');
-                      }
-                    }}
-                    className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-md transition-all shrink-0"
-                  >
-                    <Save className="w-3.5 h-3.5" />
-                    <span>שמור קישור</span>
-                  </button>
-                </div>
+                      }}
+                    />
+
+                    <div className="flex flex-col sm:flex-row items-center gap-2 pt-1">
+                      <span className="text-xs text-slate-400 shrink-0">או הדבק קישור (URL) לתמונה:</span>
+                      <input
+                        type="url"
+                        value={modalNewImageUrl.startsWith('data:') ? '' : modalNewImageUrl}
+                        onChange={(e) => setModalNewImageUrl(e.target.value)}
+                        placeholder="https://example.com/image.jpg"
+                        className="flex-1 w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && modalNewImageUrl.trim()) {
+                            e.preventDefault();
+                            if (typeof selectedPreviewImage.number === 'number') {
+                              onUpdatePAOItem(selectedPreviewImage.number, {
+                                imageUrl: modalNewImageUrl.trim(),
+                              });
+                              setSelectedPreviewImage((prev) =>
+                                prev ? { ...prev, url: modalNewImageUrl.trim() } : null
+                              );
+                              setModalIsEditing(false);
+                              onEarnPoints(10, 'עדכון תמונה ויזואלית לסצנה');
+                            }
+                          }
+                        }}
+                      />
+                      <button
+                        type="button"
+                        disabled={!modalNewImageUrl || modalNewImageUrl === selectedPreviewImage.url}
+                        onClick={() => {
+                          if (typeof selectedPreviewImage.number === 'number' && modalNewImageUrl) {
+                            onUpdatePAOItem(selectedPreviewImage.number, {
+                              imageUrl: modalNewImageUrl.trim(),
+                            });
+                            setSelectedPreviewImage((prev) =>
+                              prev ? { ...prev, url: modalNewImageUrl.trim() } : null
+                            );
+                            setModalIsEditing(false);
+                            onEarnPoints(10, 'עדכון תמונה ויזואלית לסצנה');
+                          }
+                        }}
+                        className="w-full sm:w-auto px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-1.5 cursor-pointer shadow-md transition-all shrink-0"
+                      >
+                        <Save className="w-3.5 h-3.5" />
+                        <span>שמור קישור</span>
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  (() => {
+                    const currentPaoItem = typeof selectedPreviewImage.number === 'number'
+                      ? paoItems.find((p) => p.number === selectedPreviewImage.number)
+                      : null;
+
+                    return (
+                      <PAOImageGeneratorTab
+                        numberStr={selectedPreviewImage.numberStr || String(selectedPreviewImage.number || '')}
+                        person={currentPaoItem?.person || ''}
+                        action={currentPaoItem?.action || ''}
+                        object={currentPaoItem?.object || ''}
+                        scene={currentPaoItem?.scene || ''}
+                        currentUser={currentUser}
+                        onLogin={onLogin}
+                        onImageGenerated={(generatedUrl) => {
+                          if (typeof selectedPreviewImage.number === 'number') {
+                            onUpdatePAOItem(selectedPreviewImage.number, {
+                              imageUrl: generatedUrl,
+                            });
+                            setSelectedPreviewImage((prev) =>
+                              prev ? { ...prev, url: generatedUrl } : null
+                            );
+                            setModalIsEditing(false);
+                            onEarnPoints(15, 'יצירת תמונה מנמונית עם Gemini');
+                          }
+                        }}
+                      />
+                    );
+                  })()
+                )}
               </div>
             )}
 
@@ -3057,126 +3181,190 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
       {/* Quick Image Upload Modal */}
       {quickUploadItem && (
         <div
-          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn"
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 md:p-8 animate-fadeIn overflow-y-auto"
           onClick={() => setQuickUploadItem(null)}
         >
           {/* דפוס M3 מספר 1: Container Transform (טרנספורמציית קונטיינר)
-              מורפינג רציף של כפתור ההעלאה מהכרטיס/השורה לקונטיינר גרירה והעלאה ייעודי. */}
+              מורפינג רציף של כפתור ההעלאה מהכרטיס/השורה לקונטיינר גרירה והעלאה ייעודי רחב הממלא את רוחב המסך. */}
           <div
-            className="max-w-md w-full bg-slate-900 border border-pink-500/40 rounded-3xl p-6 text-right space-y-4 shadow-2xl m3-container-transform"
+            className="w-full max-w-6xl xl:max-w-7xl max-h-[92vh] overflow-y-auto bg-slate-900 border-2 border-pink-500/40 rounded-3xl p-5 sm:p-7 text-right space-y-5 shadow-2xl m3-container-transform my-auto"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <ImageIcon className="w-5 h-5 text-pink-400" />
-                <h3 className="font-bold text-white text-base">
-                  תמונה לסצנת שלשת PAO #{quickUploadItem.numberStr}
-                </h3>
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-pink-500/20 text-pink-400">
+                  <ImageIcon className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white text-base sm:text-lg flex items-center gap-2">
+                    <span>תמונה ויזואלית לסצנת שלשת PAO</span>
+                    <span className="font-mono text-sm px-2.5 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 font-black">
+                      #{quickUploadItem.numberStr}
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    הצמד דימוי מנמוני חי או צור תמונה ייחודית בעזרת Gemini
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => setQuickUploadItem(null)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
-                title="סגור"
+                className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer transition-colors"
+                title="סגור חלון"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="text-xs text-slate-300 space-y-1 bg-slate-950/60 p-3 rounded-xl border border-slate-800">
-              <div><strong className="text-amber-400">👤 אדם:</strong> {quickUploadItem.person}</div>
-              <div><strong className="text-purple-400">⚡ פעולה:</strong> {quickUploadItem.action}</div>
-              <div><strong className="text-teal-400">📦 חפץ:</strong> {quickUploadItem.object}</div>
+            <div className="text-xs text-slate-300 bg-slate-950/70 p-3.5 rounded-2xl border border-slate-800 space-y-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <div><strong className="text-amber-400">👤 אדם:</strong> {quickUploadItem.person || '(ריק)'}</div>
+                <div><strong className="text-purple-400">⚡ פעולה:</strong> {quickUploadItem.action || '(ריק)'}</div>
+                <div><strong className="text-teal-400">📦 חפץ:</strong> {quickUploadItem.object || '(ריק)'}</div>
+              </div>
+              {quickUploadItem.scene && (
+                <div className="pt-2 border-t border-slate-800/80 leading-relaxed">
+                  <strong className="text-amber-300">🎬 סצנה שלמה:</strong> {quickUploadItem.scene}
+                </div>
+              )}
             </div>
 
-            {/* Image Preview & Upload Input */}
-            <div className="space-y-4">
-              {(quickUploadUrl || quickUploadItem.imageUrl) && quickUploadUrl !== 'REMOVE' && (
-                <div className="flex flex-col items-center justify-center gap-2">
-                  <div className="relative group">
-                    <img
-                      src={quickUploadUrl || quickUploadItem.imageUrl}
-                      alt="סצנה"
-                      className="w-40 h-40 object-cover rounded-2xl border-2 border-indigo-500/50 shadow-md"
-                    />
+            {/* Mode Switcher: AI Generation vs Upload File */}
+            <div className="flex items-center gap-1.5 bg-slate-950 p-1.5 rounded-2xl border border-slate-800">
+              <button
+                type="button"
+                onClick={() => setQuickUploadMode('ai')}
+                className={`flex-1 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  quickUploadMode === 'ai' ? 'bg-gradient-to-r from-indigo-600 to-pink-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                <Sparkles className="w-4 h-4 text-amber-300" />
+                <span>יצירת תמונה עם Gemini</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuickUploadMode('upload')}
+                className={`flex-1 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+                  quickUploadMode === 'upload' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                📁 העלאת קובץ מהמכשיר
+              </button>
+            </div>
+
+            {quickUploadMode === 'upload' ? (
+              /* Image Preview & Upload Input */
+              <div className="space-y-4">
+                {(quickUploadUrl || quickUploadItem.imageUrl) && quickUploadUrl !== 'REMOVE' && (
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <div className="relative group">
+                      <img
+                        src={quickUploadUrl || quickUploadItem.imageUrl}
+                        alt="סצנה"
+                        className="w-44 h-44 object-cover rounded-2xl border-2 border-indigo-500/50 shadow-md"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setQuickUploadUrl('REMOVE')}
+                        className="absolute -top-2 -right-2 bg-rose-600 hover:bg-rose-500 text-white rounded-full p-1.5 cursor-pointer shadow hover:scale-110 transition-transform"
+                        title="הסר תמונה"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                     <button
                       type="button"
                       onClick={() => setQuickUploadUrl('REMOVE')}
-                      className="absolute -top-2 -right-2 bg-rose-600 hover:bg-rose-500 text-white rounded-full p-1.5 cursor-pointer shadow hover:scale-110 transition-transform"
-                      title="הסר תמונה"
+                      className="px-3 py-1 bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
                     >
-                      <X className="w-3.5 h-3.5" />
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>מחק תמונה</span>
                     </button>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setQuickUploadUrl('REMOVE')}
-                    className="px-3 py-1 bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-bold rounded-xl flex items-center gap-1.5 cursor-pointer transition-all active:scale-95"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>מחק תמונה</span>
-                  </button>
-                </div>
-              )}
+                )}
 
-              {/* Big tactile drag-and-drop container matching user's reference */}
-              <ImageDropzone
-                isProcessing={isCompressing}
-                title={
-                  (quickUploadUrl || quickUploadItem.imageUrl) && quickUploadUrl !== 'REMOVE'
-                    ? "בחר קובץ או גרור לכאן להחלפת התמונה"
-                    : "בחר קובץ או גרור לכאן"
-                }
-                subtitle="Choose a file or drag it here • JPG, PNG, WebP"
-                onImageSelected={async (file) => {
-                  try {
-                    setIsCompressing(true);
-                    const compressed = await compressImageFile(file);
-                    setQuickUploadUrl(compressed);
-                  } catch (err) {
-                    console.error(err);
-                  } finally {
-                    setIsCompressing(false);
+                {/* Big tactile drag-and-drop container matching user's reference */}
+                <ImageDropzone
+                  isProcessing={isCompressing}
+                  title={
+                    (quickUploadUrl || quickUploadItem.imageUrl) && quickUploadUrl !== 'REMOVE'
+                      ? "בחר קובץ או גרור לכאן להחלפת התמונה"
+                      : "בחר קובץ או גרור לכאן"
                   }
+                  subtitle="Choose a file or drag it here • JPG, PNG, WebP"
+                  onImageSelected={async (file) => {
+                    try {
+                      setIsCompressing(true);
+                      const compressed = await compressImageFile(file);
+                      setQuickUploadUrl(compressed);
+                    } catch (err) {
+                      console.error(err);
+                    } finally {
+                      setIsCompressing(false);
+                    }
+                  }}
+                />
+
+                <div className="space-y-1">
+                  <label className="block text-xs text-slate-400">
+                    או הדבק קישור (URL) לתמונה באינטרנט:
+                  </label>
+                  <input
+                    type="url"
+                    value={quickUploadUrl === 'REMOVE' ? '' : quickUploadUrl.startsWith('data:') ? '' : quickUploadUrl}
+                    onChange={(e) => setQuickUploadUrl(e.target.value)}
+                    placeholder="https://example.com/image.jpg"
+                    className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+            ) : (
+              <PAOImageGeneratorTab
+                numberStr={quickUploadItem.numberStr}
+                person={quickUploadItem.person}
+                action={quickUploadItem.action}
+                object={quickUploadItem.object}
+                scene={quickUploadItem.scene}
+                currentUser={currentUser}
+                onLogin={onLogin}
+                onImageGenerated={(generatedUrl) => {
+                  setQuickUploadUrl(generatedUrl);
+                  onUpdatePAOItem(quickUploadItem.number, {
+                    imageUrl: generatedUrl,
+                  });
+                  setQuickUploadItem(null);
+                  onEarnPoints(15, 'יצירת תמונה מנמונית עם Gemini');
                 }}
               />
+            )}
 
-              <div className="space-y-1">
-                <label className="block text-xs text-slate-400">
-                  או הדבק קישור (URL) לתמונה באינטרנט:
-                </label>
-                <input
-                  type="url"
-                  value={quickUploadUrl === 'REMOVE' ? '' : quickUploadUrl.startsWith('data:') ? '' : quickUploadUrl}
-                  onChange={(e) => setQuickUploadUrl(e.target.value)}
-                  placeholder="https://example.com/image.jpg"
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+            {/* Modal Bottom Action Bar */}
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
               <button
                 type="button"
                 onClick={() => setQuickUploadItem(null)}
-                className="px-3 py-1.5 text-xs text-slate-400 hover:text-white cursor-pointer"
+                className="px-4 py-2 text-xs text-slate-400 hover:text-white cursor-pointer transition-colors"
               >
-                ביטול
+                {quickUploadMode === 'ai' ? 'סגור חלון' : 'ביטול'}
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  const finalUrl = quickUploadUrl === 'REMOVE' ? '' : quickUploadUrl || quickUploadItem.imageUrl || '';
-                  onUpdatePAOItem(quickUploadItem.number, {
-                    imageUrl: finalUrl,
-                  });
-                  setQuickUploadItem(null);
-                  setQuickUploadUrl('');
-                }}
-                className="px-4 py-1.5 text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl cursor-pointer shadow-md transition-all"
-              >
-                שמור תמונה
-              </button>
+              {/* Only show the manual save button in upload mode. In AI mode, the single save button is inside the generated image card */}
+              {quickUploadMode === 'upload' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const finalUrl = quickUploadUrl === 'REMOVE' ? '' : quickUploadUrl || quickUploadItem.imageUrl || '';
+                    onUpdatePAOItem(quickUploadItem.number, {
+                      imageUrl: finalUrl,
+                    });
+                    setQuickUploadItem(null);
+                    setQuickUploadUrl('');
+                  }}
+                  className="px-5 py-2 text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl cursor-pointer shadow-md transition-all active:scale-95"
+                >
+                  שמור תמונה
+                </button>
+              )}
             </div>
           </div>
         </div>

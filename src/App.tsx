@@ -186,6 +186,8 @@ export default function App() {
           <WorkoutsHub
             selectedSubModule={selectedWorkoutSubModule}
             onSubModuleChange={setSelectedWorkoutSubModule}
+            currentUser={currentUser}
+            onLogin={loginWithGoogle}
             majorDigits={majorDigits}
             connectingLetters={connectingLetters}
             majorItems={majorItems}
