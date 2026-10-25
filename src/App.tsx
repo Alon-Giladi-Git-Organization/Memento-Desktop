@@ -63,6 +63,7 @@ export default function App() {
     syncStatusMessage,
     seedCloudTables,
     syncAllToFirestore,
+    restoreOriginalPAO,
     currentUser,
     profile,
     leaderboard,
@@ -216,6 +217,7 @@ export default function App() {
             onTogglePAOReady={togglePAOReady}
             onSetAllPAOReady={setAllPAOReady}
             onSyncMajorAndPAOObjects={syncMajorAndPAOObjects}
+            onRestoreOriginalPAO={restoreOriginalPAO}
             onAddShapePeg={addShapePeg}
             onUpdateShapePeg={updateShapePeg}
             onDeleteShapePeg={deleteShapePeg}

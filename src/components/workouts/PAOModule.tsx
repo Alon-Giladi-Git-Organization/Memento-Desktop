@@ -28,6 +28,9 @@ import {
   X,
   ExternalLink,
   RefreshCw,
+  Headphones,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { PAOItem, MajorItem } from '../../types/memory';
@@ -36,6 +39,7 @@ import { isHebrewFuzzyMatch, isHebrewSearchMatch, isHebrewMultiFieldSearchMatch 
 import { AIFieldGeneratorButton } from '../AIFieldGeneratorButton';
 import {
   validateHebrewLogic,
+  validatePAOPerson,
   checkPAODuplicates,
   DEFAULT_CONNECTING_LETTERS,
 } from '../../lib/hebrewLogicValidator';
@@ -50,6 +54,8 @@ import { QuizDeckProgressBar } from '../QuizDeckProgressBar';
 import { compressImageFile } from '../../lib/imageCompression';
 import { ImageDropzone } from '../ImageDropzone';
 import { PAOImageGeneratorTab } from '../PAOImageGeneratorTab';
+import { PAOGalleryCarousel } from './PAOGalleryCarousel';
+import { PAOHandsFreeVoiceQuiz } from './PAOHandsFreeVoiceQuiz';
 
 export type PAOColumnKey = 'number' | 'image' | 'person' | 'action' | 'object' | 'scene' | 'ready' | 'actions';
 
@@ -92,6 +98,7 @@ interface PAOModuleProps {
   onSetAllPAOReady?: (ready: boolean, numbers?: number[]) => void;
   onNavigateToLogicTab?: () => void;
   onSyncMajorAndPAOObjects?: (direction: 'majorToPao' | 'paoToMajor') => void;
+  onRestoreOriginalPAO?: () => Promise<any>;
 }
 
 export const PAOModule: React.FC<PAOModuleProps> = ({
@@ -110,8 +117,9 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
   onTogglePAOReady,
   onSetAllPAOReady,
   onSyncMajorAndPAOObjects,
+  onRestoreOriginalPAO,
 }) => {
-  const [subView, setSubView] = useState<'registry' | 'quiz'>('registry');
+  const [subView, setSubView] = useState<'registry' | 'quiz' | 'voice'>('registry');
   const [search, setSearch] = useState('');
   const [modalImageMode, setModalImageMode] = useState<'upload' | 'ai'>('ai');
   const [quickUploadMode, setQuickUploadMode] = useState<'upload' | 'ai'>('ai');
@@ -125,8 +133,8 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
   const [pao6Digits, setPao6Digits] = useState('213988');
   const [sceneRevealed, setSceneRevealed] = useState(false);
 
-  // View mode: 'grid' (כוורת) or 'list' (רשימה)
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  // View mode: 'grid' (כוורת) or 'list' (רשימה) or 'gallery' (קרוסלה)
+  const [viewMode, setViewMode] = useState<'grid' | 'list' | 'gallery'>('grid');
 
   // Excel-style customizable column order & widths for List View
   const [columnOrder, setColumnOrder] = useState<PAOColumnKey[]>(() => {
@@ -309,7 +317,35 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
     onConfirmBypass?: () => void;
   } | null>(null);
 
-  // Escape key light-dismiss handler
+  // Gallery of all PAO items with images for seamless left/right browsing
+  const itemsWithImages = paoItems.filter((it) => Boolean(it.imageUrl && it.imageUrl.trim()));
+
+  const navigateGallery = (direction: 'prev' | 'next') => {
+    if (itemsWithImages.length <= 1 || !selectedPreviewImage) return;
+    const currentIndex = itemsWithImages.findIndex(
+      (it) => it.number === selectedPreviewImage.number
+    );
+    if (currentIndex === -1) return;
+    const nextIdx =
+      direction === 'next'
+        ? (currentIndex + 1) % itemsWithImages.length
+        : (currentIndex - 1 + itemsWithImages.length) % itemsWithImages.length;
+    const nextItem = itemsWithImages[nextIdx];
+    if (nextItem) {
+      setSelectedPreviewImage({
+        url: nextItem.imageUrl || '',
+        title: `שלשת PAO #${nextItem.numberStr}${nextItem.person ? ` - ${nextItem.person}` : ''}`,
+        subtitle: `${nextItem.person || ''} • ${nextItem.action || ''} • ${nextItem.object || ''}`,
+        scene: nextItem.scene || '',
+        numberStr: nextItem.numberStr,
+        number: nextItem.number,
+      });
+      setModalIsEditing(false);
+      setModalNewImageUrl('');
+    }
+  };
+
+  // Escape key & Gallery Arrow keys handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -320,11 +356,20 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
         }
         if (quickUploadItem) setQuickUploadItem(null);
         if (validationModal) setValidationModal(null);
+      } else if (selectedPreviewImage) {
+        const activeTag = (document.activeElement?.tagName || '').toLowerCase();
+        if (activeTag !== 'input' && activeTag !== 'textarea') {
+          if (e.key === 'ArrowRight') {
+            navigateGallery('next');
+          } else if (e.key === 'ArrowLeft') {
+            navigateGallery('prev');
+          }
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedPreviewImage, quickUploadItem, validationModal]);
+  }, [selectedPreviewImage, quickUploadItem, validationModal, itemsWithImages]);
 
   // Edit PAO Item (Draft State)
   const [editingNum, setEditingNum] = useState<number | null>(null);
@@ -417,15 +462,15 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
         }
       }
 
-      // 2. Check logic conformity for person ONLY if changed
+      // 2. Check logic conformity for person ONLY if changed (validates only initials)
       if (personChanged && pTrim && majorDigits) {
-        const pLogic = validateHebrewLogic(pTrim, itemNum, majorDigits, connectingLetters, 'pao');
+        const pLogic = validatePAOPerson(pTrim, itemNum, majorDigits, connectingLetters);
         if (!pLogic.isValid) {
           setValidationModal({
             isOpen: true,
-            title: 'הודעת ולידציה: אי-התאמה לחוקי הלוגיקה',
+            title: 'הודעת ולידציה: אי-התאמה לראשי תיבות של הדמות',
             message: pLogic.message,
-            details: `הדמות "${pTrim}" אינה עונה לכללי הלוגיקה של מספר ${itemNum}. ${pLogic.details || ''}`,
+            details: `הדמות "${pTrim}" אינה עונה לכללי ראשי התיבות של מספר ${itemNum < 10 ? '0' + itemNum : itemNum}. ${pLogic.details || ''}`,
             onConfirmBypass: () => handleSaveItem(itemNum, true),
           });
           return;
@@ -553,13 +598,13 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
       }
 
       if (pTrim && majorDigits) {
-        const pLogic = validateHebrewLogic(pTrim, num, majorDigits, connectingLetters, 'pao');
+        const pLogic = validatePAOPerson(pTrim, num, majorDigits, connectingLetters);
         if (!pLogic.isValid) {
           setValidationModal({
             isOpen: true,
-            title: 'הודעת ולידציה: אי-התאמה לחוקי הלוגיקה',
+            title: 'הודעת ולידציה: אי-התאמה לראשי תיבות של הדמות',
             message: pLogic.message,
-            details: `הדמות "${pTrim}" אינה עונה לכללי הלוגיקה של מספר ${num}. ${pLogic.details || ''}`,
+            details: `הדמות "${pTrim}" אינה עונה לכללי ראשי התיבות של מספר ${num < 10 ? '0' + num : num}. ${pLogic.details || ''}`,
             onConfirmBypass: () => handleAddNewItem(undefined, true),
           });
           return;
@@ -710,11 +755,11 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
       }
 
       if (personChanged && pTrim && majorDigits) {
-        const pLogic = validateHebrewLogic(pTrim, currentQuizItem.number, majorDigits, connectingLetters, 'pao');
+        const pLogic = validatePAOPerson(pTrim, currentQuizItem.number, majorDigits, connectingLetters);
         if (!pLogic.isValid) {
           setValidationModal({
             isOpen: true,
-            title: 'הודעת ולידציה: אי-התאמה לחוקי הלוגיקה',
+            title: 'הודעת ולידציה: אי-התאמה לראשי תיבות של הדמות',
             message: pLogic.message,
             details: pLogic.details,
             onConfirmBypass: () => handleSaveQuizEdit(true),
@@ -1055,6 +1100,17 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
               </span>
             )}
           </button>
+          <button
+            onClick={() => setSubView('voice')}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+              subView === 'voice'
+                ? 'bg-gradient-to-r from-purple-600 via-indigo-600 to-pink-600 text-white border-b-2 border-purple-700 shadow-md shadow-purple-600/30'
+                : 'text-purple-600 hover:text-purple-800 hover:bg-purple-50'
+            }`}
+          >
+            <Headphones className="w-3.5 h-3.5" />
+            <span>🎙️ שליפה קולית (נהיגה)</span>
+          </button>
         </div>
       </div>
 
@@ -1091,7 +1147,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                 <span>מוכנים בלבד ({readyPaoItems.length})</span>
               </button>
 
-              {/* View Mode Toggle (כוורת vs. רשימה) */}
+              {/* View Mode Toggle (כוורת vs. רשימה vs. גלריה) */}
               <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800">
                 <button
                   type="button"
@@ -1118,6 +1174,19 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                 >
                   <span>☰</span>
                   <span>רשימה</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('gallery')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    viewMode === 'gallery'
+                      ? 'bg-gradient-to-r from-pink-600 to-indigo-600 text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="תצוגת גלריה (קרוסלה להצגת כל השלשות)"
+                >
+                  <span>🖼️</span>
+                  <span>גלריה</span>
                 </button>
               </div>
             </div>
@@ -1360,7 +1429,41 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
               החלפה בין תצוגת כרטיסים לתצוגת שורות טבלה מבוצעת ב-Fade Through,
               למניעת קפיצות גלילה וליצירת מעבר חלק וזורם לעין. */}
           <div key={viewMode} className="flex gap-3 items-start m3-fade-through">
-            {viewMode === 'grid' ? (
+            {viewMode === 'gallery' ? (
+              <PAOGalleryCarousel
+                items={filteredItems}
+                onClose={() => setViewMode('grid')}
+                onOpenImagePreview={(item) => {
+                  setSelectedPreviewImage({
+                    url: item.imageUrl || '',
+                    title: item.person || `שלשה #${item.numberStr}`,
+                    subtitle: `${item.action || ''} • ${item.object || ''}`,
+                    numberStr: item.numberStr,
+                    number: item.number,
+                    scene: item.scene || '',
+                  });
+                }}
+                onOpenImageGenerator={(item) => {
+                  setQuickUploadItem(item);
+                  setQuickUploadMode('ai');
+                  setQuickUploadUrl('');
+                }}
+                onEditItem={(num) => {
+                  const it = paoItems.find((p) => p.number === num);
+                  if (it) {
+                    setEditingNum(it.number);
+                    setEditPerson(it.person || '');
+                    setEditAction(it.action || '');
+                    setEditObject(it.object || '');
+                    setEditScene(it.scene || '');
+                    setEditImageUrl(it.imageUrl || '');
+                    setViewMode('grid');
+                    scrollToNumber(it.number);
+                  }
+                }}
+                onToggleReady={(num, curr) => handleTogglePaoReady(num, curr)}
+              />
+            ) : viewMode === 'grid' ? (
               /* Main Cards Grid - Responsive Full-Width */
               <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-3.5 max-h-[680px] overflow-y-auto pr-1 scroll-smooth w-full">
                 {filteredItems.map((item) => {
@@ -1493,20 +1596,23 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                             </button>
                           )}
                           <button
-                            onClick={() => {
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
                               if (isEditing) {
                                 setEditingNum(null);
                               } else {
                                 setEditingNum(item.number);
-                                setEditPerson(p);
-                                setEditAction(a);
-                                setEditObject(o);
-                                setEditScene(s);
+                                setEditPerson(item.person || '');
+                                setEditAction(item.action || '');
+                                setEditObject(item.object || '');
+                                setEditScene(item.scene || '');
                                 setEditImageUrl(item.imageUrl || '');
                               }
                             }}
-                            className="p-1 text-slate-400 hover:text-indigo-400 cursor-pointer"
-                            title="ערוך שלשה"
+                            className="p-1 text-slate-400 hover:text-indigo-400 cursor-pointer transition-colors"
+                            title={isEditing ? 'סגור עריכה' : 'ערוך שלשה'}
                           >
                             <Edit3 className="w-4 h-4" />
                           </button>
@@ -1774,6 +1880,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                             <span className="text-[10px] text-slate-500 font-mono">↵ שמירה</span>
                             <div className="flex gap-1.5">
                               <button
+                                type="button"
                                 onClick={() => {
                                   setEditingNum(null);
                                   setEditImageUrl('');
@@ -1783,8 +1890,14 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                                 ביטול
                               </button>
                               <button
-                                onClick={() => handleSaveItem(item.number)}
-                                className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3 py-1 rounded-lg cursor-pointer"
+                                type="button"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleSaveItem(item.number);
+                                }}
+                                className="text-xs bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold px-3 py-1 rounded-lg cursor-pointer shadow-md transition-all"
                               >
                                 שמור
                               </button>
@@ -2097,17 +2210,24 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                               {isEditing ? (
                                 <>
                                   <button
-                                    onClick={() => handleSaveItem(item.number)}
-                                    className="px-2 py-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded cursor-pointer"
+                                    type="button"
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      handleSaveItem(item.number);
+                                    }}
+                                    className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold text-xs rounded cursor-pointer shadow-sm transition-all"
                                   >
                                     שמור
                                   </button>
                                   <button
+                                    type="button"
                                     onClick={() => {
                                       setEditingNum(null);
                                       setEditImageUrl('');
                                     }}
-                                    className="px-1.5 py-1 text-xs text-slate-400 hover:text-white cursor-pointer"
+                                    className="px-2 py-1 text-xs text-slate-400 hover:text-white cursor-pointer"
                                   >
                                     ביטול
                                   </button>
@@ -2115,15 +2235,18 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                               ) : (
                                 <>
                                   <button
-                                    onClick={() => {
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
                                       setEditingNum(item.number);
-                                      setEditPerson(p);
-                                      setEditAction(a);
-                                      setEditObject(o);
-                                      setEditScene(s);
+                                      setEditPerson(item.person || '');
+                                      setEditAction(item.action || '');
+                                      setEditObject(item.object || '');
+                                      setEditScene(item.scene || '');
                                       setEditImageUrl(item.imageUrl || '');
                                     }}
-                                    className="p-1 text-slate-400 hover:text-indigo-400 cursor-pointer"
+                                    className="p-1 text-slate-400 hover:text-indigo-400 cursor-pointer transition-colors"
                                     title="ערוך שורה"
                                   >
                                     <Edit3 className="w-3.5 h-3.5" />
@@ -2150,23 +2273,25 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
             )}
 
             {/* Vertical Sticky Side Index for PAO (00-99) */}
-            <div className="hidden lg:flex flex-col gap-1 bg-slate-950 p-2 rounded-2xl border border-slate-800 max-h-[580px] overflow-y-auto no-scrollbar shrink-0 w-16 text-center shadow-inner">
-              <span className="text-[9px] font-bold text-slate-400 pb-1 border-b border-slate-800">שלשה</span>
-              {paoItems.map((item) => (
-                <button
-                  key={item.number}
-                  onClick={() => scrollToNumber(item.number)}
-                  title={`#${item.numberStr} - ${item.person}`}
-                  className={`text-[10px] font-mono py-1 rounded-lg transition-colors cursor-pointer ${
-                    highlightedNum === item.number
-                      ? 'bg-indigo-600 text-white font-black'
-                      : 'text-slate-400 hover:text-indigo-300 hover:bg-slate-900'
-                  }`}
-                >
-                  {item.numberStr}
-                </button>
-              ))}
-            </div>
+            {viewMode !== 'gallery' && (
+              <div className="hidden lg:flex flex-col gap-1 bg-slate-950 p-2 rounded-2xl border border-slate-800 max-h-[580px] overflow-y-auto no-scrollbar shrink-0 w-16 text-center shadow-inner">
+                <span className="text-[9px] font-bold text-slate-400 pb-1 border-b border-slate-800">שלשה</span>
+                {paoItems.map((item) => (
+                  <button
+                    key={item.number}
+                    onClick={() => scrollToNumber(item.number)}
+                    title={`#${item.numberStr} - ${item.person}`}
+                    className={`text-[10px] font-mono py-1 rounded-lg transition-colors cursor-pointer ${
+                      highlightedNum === item.number
+                        ? 'bg-indigo-600 text-white font-black'
+                        : 'text-slate-400 hover:text-indigo-300 hover:bg-slate-900'
+                    }`}
+                  >
+                    {item.numberStr}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -2243,11 +2368,19 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                   ))}
                 </div>
 
-                <div className="flex items-center gap-2 justify-between sm:justify-end">
+                <div className="flex items-center gap-2 justify-between sm:justify-end flex-wrap">
                   <span className="text-[11px] bg-emerald-500/15 text-emerald-300 font-bold px-2.5 py-1 rounded-xl border border-emerald-500/30 flex items-center gap-1">
                     <CheckCircle2 className="w-3 h-3 text-emerald-400" />
                     <span>{readyPaoItems.length} מוכנים לתרגול</span>
                   </span>
+                  <button
+                    onClick={() => setSubView('voice')}
+                    className="flex items-center gap-1.5 text-xs text-white bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 font-bold px-3 py-1 rounded-xl cursor-pointer shadow-sm transition-transform active:scale-95"
+                    title="מבחן שליפה קולי Hands-Free (מתאים לנהיגה/ריצה)"
+                  >
+                    <Headphones className="w-3 h-3" />
+                    <span>מצב קולי (נהיגה)</span>
+                  </button>
                   <button
                     onClick={() => handleNextQuizQuestion()}
                     className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 bg-slate-800 px-3 py-1 rounded-xl cursor-pointer"
@@ -2869,6 +3002,16 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
         </div>
       )}
 
+      {/* SUB-VIEW 4: HANDS-FREE VOICE QUIZ */}
+      {subView === 'voice' && (
+        <PAOHandsFreeVoiceQuiz
+          readyItems={readyPaoItems}
+          allPaoItems={paoItems}
+          onEarnPoints={onEarnPoints}
+          onClose={() => setSubView('registry')}
+        />
+      )}
+
       {/* Light-Dismiss Full-Screen Image Modal */}
       {selectedPreviewImage && (
         <div
@@ -2891,9 +3034,16 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                   </span>
                 )}
                 <div>
-                  <h3 className="font-bold text-white text-sm sm:text-base">
-                    {selectedPreviewImage.title}
-                  </h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-white text-sm sm:text-base">
+                      {selectedPreviewImage.title}
+                    </h3>
+                    {itemsWithImages.length > 1 && (
+                      <span className="text-[11px] font-mono font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded-lg">
+                        {itemsWithImages.findIndex((it) => it.number === selectedPreviewImage.number) + 1} מתוך {itemsWithImages.length}
+                      </span>
+                    )}
+                  </div>
                   {selectedPreviewImage.subtitle && (
                     <p className="text-xs text-slate-400">
                       {selectedPreviewImage.subtitle}
@@ -3155,12 +3305,78 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                   <span className="text-xs text-indigo-200 mt-1">שלשת PAO #{selectedPreviewImage.numberStr}</span>
                 </div>
               )}
+              {/* Prev / Next Gallery Navigation Buttons */}
+              {itemsWithImages.length > 1 && (
+                <>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigateGallery('prev');
+                    }}
+                    title="תמונה קודמת (מקש חץ שמאלה)"
+                    className="absolute left-3 sm:left-5 top-1/2 -translate-y-1/2 z-30 p-2.5 sm:p-3 rounded-full bg-slate-950/80 hover:bg-indigo-600 text-white border border-slate-700/80 shadow-2xl backdrop-blur-sm cursor-pointer hover:scale-110 active:scale-95 transition-all"
+                  >
+                    <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigateGallery('next');
+                    }}
+                    title="תמונה הבאה (מקש חץ ימינה)"
+                    className="absolute right-3 sm:right-5 top-1/2 -translate-y-1/2 z-30 p-2.5 sm:p-3 rounded-full bg-slate-950/80 hover:bg-indigo-600 text-white border border-slate-700/80 shadow-2xl backdrop-blur-sm cursor-pointer hover:scale-110 active:scale-95 transition-all"
+                  >
+                    <ChevronRight className="w-5 h-5 sm:w-6 sm:h-6" />
+                  </button>
+                </>
+              )}
+
               <img
                 src={selectedPreviewImage.url}
                 alt={selectedPreviewImage.title}
                 className="max-h-[65vh] w-auto max-w-full object-contain rounded-xl shadow-2xl border border-slate-800"
               />
             </div>
+
+            {/* Gallery Thumbnail Filmstrip */}
+            {itemsWithImages.length > 1 && (
+              <div className="p-2.5 border-t border-slate-800 bg-slate-950/90 flex items-center gap-2 overflow-x-auto no-scrollbar">
+                <span className="text-[10px] text-slate-400 font-bold shrink-0 ml-1">גלריה ({itemsWithImages.length}):</span>
+                {itemsWithImages.map((gItem) => {
+                  const isCurrent = gItem.number === selectedPreviewImage.number;
+                  return (
+                    <button
+                      key={gItem.number}
+                      type="button"
+                      onClick={() => {
+                        setSelectedPreviewImage({
+                          url: gItem.imageUrl || '',
+                          title: `שלשת PAO #${gItem.numberStr}${gItem.person ? ` - ${gItem.person}` : ''}`,
+                          subtitle: `${gItem.person || ''} • ${gItem.action || ''} • ${gItem.object || ''}`,
+                          scene: gItem.scene || '',
+                          numberStr: gItem.numberStr,
+                          number: gItem.number,
+                        });
+                        setModalIsEditing(false);
+                      }}
+                      className={`relative shrink-0 rounded-lg overflow-hidden border-2 transition-all cursor-pointer ${
+                        isCurrent
+                          ? 'border-indigo-400 ring-2 ring-indigo-400/50 scale-105'
+                          : 'border-slate-800 hover:border-slate-600 opacity-60 hover:opacity-100'
+                      }`}
+                      title={`#${gItem.numberStr} ${gItem.person || ''}`}
+                    >
+                      <img src={gItem.imageUrl} alt="" className="w-9 h-9 object-cover" />
+                      <span className="absolute bottom-0 right-0 bg-black/85 text-[8px] font-mono font-bold text-white px-1">
+                        {gItem.numberStr}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             {/* Modal Footer with Scene Details */}
             {selectedPreviewImage.scene && (

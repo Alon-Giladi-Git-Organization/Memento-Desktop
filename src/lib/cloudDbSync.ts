@@ -84,6 +84,7 @@ export async function seedAllDefaultsToFirestore(): Promise<{ success: boolean; 
       const docRef = doc(db, 'major_items', docId);
       majorBatch.set(docRef, {
         id: docId,
+        rawId: docId,
         number: item.number,
         numberStr: item.numberStr,
         consonants: item.consonants,
@@ -91,6 +92,8 @@ export async function seedAllDefaultsToFirestore(): Promise<{ success: boolean; 
         imageHint: item.imageHint,
         customNotes: item.customNotes || null,
         is_ready_for_practice: item.is_ready_for_practice ?? false,
+        userId: 'system_default',
+        isDefault: true,
         updatedAt: now,
       }, { merge: true });
       totalCount++;
@@ -104,6 +107,7 @@ export async function seedAllDefaultsToFirestore(): Promise<{ success: boolean; 
       const docRef = doc(db, 'pao_items', docId);
       paoBatch.set(docRef, {
         id: docId,
+        rawId: docId,
         number: item.number,
         numberStr: item.numberStr,
         person: item.person,
@@ -112,6 +116,8 @@ export async function seedAllDefaultsToFirestore(): Promise<{ success: boolean; 
         scene: item.scene || null,
         imageUrl: item.imageUrl || null,
         is_ready_for_practice: item.is_ready_for_practice ?? false,
+        userId: 'system_default',
+        isDefault: true,
         updatedAt: now,
       }, { merge: true });
       totalCount++;
@@ -127,11 +133,14 @@ export async function seedAllDefaultsToFirestore(): Promise<{ success: boolean; 
       const docRef = doc(db, 'body_pegs', docId);
       itemsBatch.set(docRef, {
         id: docId,
+        rawId: docId,
         index: b.index,
         bodyPartHebrew: b.bodyPartHebrew,
         defaultObject: b.defaultObject,
         kineticTip: b.kineticTip,
         is_ready_for_practice: b.is_ready_for_practice ?? false,
+        userId: 'system_default',
+        isDefault: true,
         updatedAt: now,
       }, { merge: true });
       totalCount++;
@@ -143,12 +152,15 @@ export async function seedAllDefaultsToFirestore(): Promise<{ success: boolean; 
       const docRef = doc(db, 'shape_pegs', docId);
       itemsBatch.set(docRef, {
         id: docId,
+        rawId: docId,
         number: s.number,
         shapeName: s.shapeName,
         visualMetaphor: s.visualMetaphor,
         defaultObject: s.defaultObject,
         kineticTip: s.kineticTip,
         is_ready_for_practice: s.is_ready_for_practice ?? false,
+        userId: 'system_default',
+        isDefault: true,
         updatedAt: now,
       }, { merge: true });
       totalCount++;
@@ -159,6 +171,10 @@ export async function seedAllDefaultsToFirestore(): Promise<{ success: boolean; 
       const docRef = doc(db, 'palaces', p.id);
       itemsBatch.set(docRef, {
         ...p,
+        id: p.id,
+        rawId: p.id,
+        userId: 'system_default',
+        isDefault: true,
         updatedAt: now,
       }, { merge: true });
       totalCount++;
@@ -169,6 +185,10 @@ export async function seedAllDefaultsToFirestore(): Promise<{ success: boolean; 
       const docRef = doc(db, 'people_cards', c.id);
       itemsBatch.set(docRef, {
         ...c,
+        id: c.id,
+        rawId: c.id,
+        userId: 'system_default',
+        isDefault: true,
         updatedAt: now,
       }, { merge: true });
       totalCount++;
@@ -179,6 +199,10 @@ export async function seedAllDefaultsToFirestore(): Promise<{ success: boolean; 
       const docRef = doc(db, 'abstract_shapes', a.id);
       itemsBatch.set(docRef, {
         ...a,
+        id: a.id,
+        rawId: a.id,
+        userId: 'system_default',
+        isDefault: true,
         updatedAt: now,
       }, { merge: true });
       totalCount++;
@@ -189,6 +213,10 @@ export async function seedAllDefaultsToFirestore(): Promise<{ success: boolean; 
       const docRef = doc(db, 'academic_points', ap.id);
       itemsBatch.set(docRef, {
         ...ap,
+        id: ap.id,
+        rawId: ap.id,
+        userId: 'system_default',
+        isDefault: true,
         updatedAt: now,
       }, { merge: true });
       totalCount++;
@@ -199,6 +227,10 @@ export async function seedAllDefaultsToFirestore(): Promise<{ success: boolean; 
       const docRef = doc(db, 'personal_associations', pa.id);
       itemsBatch.set(docRef, {
         ...pa,
+        id: pa.id,
+        rawId: pa.id,
+        userId: 'system_default',
+        isDefault: true,
         updatedAt: now,
       }, { merge: true });
       totalCount++;
@@ -458,9 +490,10 @@ export async function ensureUserBranchExists(
   }
 ): Promise<{ seeded: boolean; message: string }> {
   try {
-    const q = query(collection(db, 'pao_items'), where('userId', '==', userId), limit(1));
-    const snap = await getDocs(q);
-    if (!snap.empty) {
+    const qPao = query(collection(db, 'pao_items'), where('userId', '==', userId), limit(1));
+    const qMajor = query(collection(db, 'major_items'), where('userId', '==', userId), limit(1));
+    const [snapPao, snapMajor] = await Promise.all([getDocs(qPao), getDocs(qMajor)]);
+    if (!snapPao.empty && !snapMajor.empty) {
       return { seeded: false, message: 'הענף האישי קיים ומוכן' };
     }
 
@@ -612,6 +645,10 @@ async function syncCollectionBidirectional<T extends { id?: string | number; num
         return;
       }
       const data = d.data();
+      // If unauthenticated (no userId), NEVER read or overwrite with another user's isolated documents
+      if (!userId && (d.id.includes('_') || (data.userId && data.userId !== 'system_default'))) {
+        return;
+      }
       const rawId = data.rawId || (userId && d.id.startsWith(`${userId}_`) ? d.id.slice(userId.length + 1) : d.id);
       remoteMap.set(rawId, { ...data, id: rawId });
     });
@@ -723,9 +760,16 @@ async function syncCollectionBidirectional<T extends { id?: string | number; num
     }
 
     // Check if any local items were created locally and don't exist remotely
+    // CRITICAL: If remoteMap has documents (remoteMap.size > 0), a missing rawId means it was
+    // DELETED on the remote (e.g., deleted in Rowy or Firebase Console)!
+    // Respect remote deletions: NEVER re-upload items that were deleted remotely!
     for (const [rawId, localItem] of localMap.entries()) {
       if (!rawId || rawId === 'NaN' || rawId === 'nan' || rawId === 'undefined' || rawId === 'null') continue;
       if (!remoteMap.has(rawId)) {
+        if (remoteMap.size > 0) {
+          // Document was deleted remotely - DO NOT re-upload it back to Firestore!
+          continue;
+        }
         const docId = getDocId(rawId);
         const docRef = doc(db, collectionName, docId);
         uploadBatch.set(
@@ -1018,6 +1062,9 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks, userId?
             return;
           }
           const data = d.data();
+          if (!userId && (d.id.includes('_') || (data.userId && data.userId !== 'system_default'))) {
+            return;
+          }
           const rawId = data.rawId || (userId && d.id.startsWith(`${userId}_`) ? d.id.slice(userId.length + 1) : d.id);
           const parsedNum = typeof data.number === 'number' ? data.number : parseInt(String(data.numberStr || rawId), 10);
           if (isNaN(parsedNum) || parsedNum < 0 || parsedNum > 99) {
@@ -1071,6 +1118,9 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks, userId?
             return;
           }
           const data = d.data();
+          if (!userId && (d.id.includes('_') || (data.userId && data.userId !== 'system_default'))) {
+            return;
+          }
           const rawId = data.rawId || (userId && d.id.startsWith(`${userId}_`) ? d.id.slice(userId.length + 1) : d.id);
           const parsedNum = typeof data.number === 'number' ? data.number : parseInt(String(data.numberStr || rawId), 10);
           if (isNaN(parsedNum) || parsedNum < 0 || parsedNum > 99) {
@@ -1378,4 +1428,169 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks, userId?
       try { unsub(); } catch {}
     });
   };
+}
+
+/**
+ * Restores original PAO custom items (without initials like ס.ס.) from the original user branch
+ * (ZzIhtNprc8VPUDSWQ0D42BLSijZ1_*) or default documents, and cleans up the duplicate items
+ * (wuGN7btEqMgRhVDhdUkj4k5BxhJ2_*) from Firestore.
+ */
+export async function restoreOriginalPAOAndCleanDuplicates(
+  currentUserId?: string | null
+): Promise<{
+  success: boolean;
+  message: string;
+  restoredCount: number;
+  deletedCount: number;
+  restoredItems?: PAOItem[];
+}> {
+  try {
+    let restoredCount = 0;
+    let deletedCount = 0;
+
+    // 1. Fetch all docs from pao_items
+    const snap = await getDocs(collection(db, 'pao_items'));
+    const cleanItems: PAOItem[] = [];
+    const docsToDelete: string[] = [];
+
+    snap.forEach((d) => {
+      const id = d.id;
+      const data = d.data();
+      // Find unwanted duplicate branch or NaN docs
+      if (
+        id.startsWith('wuGN7btEqMgRhVDhdUkj4k5BxhJ2_') ||
+        id === 'NaN' ||
+        id.includes('NaN') ||
+        data.id === 'NaN' ||
+        isNaN(data.number)
+      ) {
+        docsToDelete.push(id);
+        return;
+      }
+
+      // Collect best original data: prefer ZzIhtNprc8VPUDSWQ0D42BLSijZ1_* or root 00..99
+      if (
+        id.startsWith('ZzIhtNprc8VPUDSWQ0D42BLSiJz1_') ||
+        id.startsWith('ZzIhtNprc8VPUDSWQ0D42BLSijZ1_') ||
+        (!id.includes('_') && id.length <= 3)
+      ) {
+        const num = typeof data.number === 'number' ? data.number : parseInt(data.numberStr || id, 10);
+        if (!isNaN(num) && num >= 0 && num <= 99) {
+          const numStr = (num < 10 ? `0${num}` : `${num}`).padStart(2, '0');
+          cleanItems.push({
+            id: numStr,
+            number: num,
+            numberStr: numStr,
+            person: (data.person || '').replace(/\s*\([^\)]*\)\s*$/, '').trim(),
+            action: (data.action || '').trim(),
+            object: (data.object || '').trim(),
+            scene: (data.scene || '').trim(),
+            imageUrl: data.imageUrl || undefined,
+            is_ready_for_practice: Boolean(data.is_ready_for_practice ?? true),
+            updatedAt: Date.now(),
+          });
+        }
+      }
+    });
+
+    // Start with the authoritative DEFAULT_PAO_ITEMS (exact 100 items from user CSV)
+    const uniqueCleanMap = new Map<number, PAOItem>();
+    for (const def of DEFAULT_PAO_ITEMS) {
+      uniqueCleanMap.set(def.number, {
+        id: def.numberStr,
+        number: def.number,
+        numberStr: def.numberStr,
+        person: def.person,
+        action: def.action,
+        object: def.object,
+        scene: def.scene || '',
+        imageUrl: def.imageUrl,
+        is_ready_for_practice: def.is_ready_for_practice ?? true,
+        updatedAt: Date.now(),
+      });
+    }
+
+    // Preserve any existing generated imageUrl from Firestore documents
+    for (const it of cleanItems) {
+      if (it.imageUrl && uniqueCleanMap.has(it.number)) {
+        const cur = uniqueCleanMap.get(it.number)!;
+        uniqueCleanMap.set(it.number, { ...cur, imageUrl: it.imageUrl });
+      }
+    }
+
+    const finalCleanList = Array.from(uniqueCleanMap.values()).sort((a, b) => a.number - b.number);
+    restoredCount = finalCleanList.length;
+
+    // 2. Delete unwanted duplicate and NaN documents from Firestore
+    for (const docId of docsToDelete) {
+      try {
+        await deleteDoc(doc(db, 'pao_items', docId));
+        deletedCount++;
+      } catch (e) {
+        console.warn('Failed to delete duplicate doc:', docId, e);
+      }
+    }
+
+    // 3. Update root default documents 00..99 with clean data (Rowy shows these!)
+    const rootBatch = writeBatch(db);
+    for (const it of finalCleanList) {
+      rootBatch.set(
+        doc(db, 'pao_items', it.numberStr),
+        cleanForFirestore({
+          id: it.numberStr,
+          rawId: it.numberStr,
+          number: it.number,
+          numberStr: it.numberStr,
+          person: it.person,
+          action: it.action,
+          object: it.object,
+          scene: it.scene || null,
+          imageUrl: it.imageUrl || null,
+          is_ready_for_practice: Boolean(it.is_ready_for_practice),
+          userId: 'system_default',
+          isDefault: true,
+          updatedAt: Date.now(),
+        }),
+        { merge: true }
+      );
+    }
+    await rootBatch.commit();
+
+    // 4. If currentUserId is logged in, also update their branch
+    if (currentUserId && finalCleanList.length > 0) {
+      const userBatch = writeBatch(db);
+      for (const it of finalCleanList) {
+        const docId = `${currentUserId}_${it.numberStr}`;
+        userBatch.set(
+          doc(db, 'pao_items', docId),
+          cleanForFirestore({
+            ...it,
+            id: docId,
+            rawId: it.numberStr,
+            userId: currentUserId,
+            isDefault: false,
+            updatedAt: Date.now(),
+          }),
+          { merge: true }
+        );
+      }
+      await userBatch.commit();
+    }
+
+    return {
+      success: true,
+      message: `שוחזרו בהצלחה ${restoredCount} שלשות PAO מקוריות, ונמחקו ${deletedCount} רשומות כפולות מ-Firestore!`,
+      restoredCount,
+      deletedCount,
+      restoredItems: finalCleanList,
+    };
+  } catch (err: any) {
+    console.error('Error restoring PAO items:', err);
+    return {
+      success: false,
+      message: `שגיאה בשחזור: ${err?.message || err}`,
+      restoredCount: 0,
+      deletedCount: 0,
+    };
+  }
 }

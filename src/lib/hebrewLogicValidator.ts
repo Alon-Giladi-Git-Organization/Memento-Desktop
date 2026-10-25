@@ -124,31 +124,36 @@ export function validateHebrewLogic(
   const normalizedConnecting = new Set(connectingLetters.map(normalizeHebrewChar));
 
   // Determine target digits:
-  // For 0..9 in Major, it's a single digit [targetNumber] unless explicitly padded '00'..'09'
-  const isSingleDigit = targetNumber >= 0 && targetNumber <= 9;
+  // For PAO, every number 0-99 is a 2-digit sequence [tens, units] (e.g. 0 is 00 [0, 0], 9 is 09 [0, 9])
+  // For Major, 0-9 is a single digit [targetNumber] unless mode === 'pao'
+  const isSingleDigit = mode !== 'pao' && targetNumber >= 0 && targetNumber <= 9;
   const expectedDigits = isSingleDigit
     ? [targetNumber]
     : [Math.floor(targetNumber / 10), targetNumber % 10];
 
-  // Helper: check initials for multi-word phrase (e.g. in PAO "לאונרדו דה וינצ'י" -> ל, ד)
-  if (mode === 'pao' && !isSingleDigit) {
-    const words = trimmed.split(/[\s\-–—\.]+/).filter((w) => w.length > 0);
+  // Helper: check initials for multi-word phrase (e.g. in PAO "לארה קרופט" -> ל, ק)
+  if (mode === 'pao') {
+    const clean = trimmed.replace(/\([^)]*\)/g, ' ').replace(/["'״׳]/g, '').trim();
+    const words = clean.split(/[\s\-–—\.]+/).filter((w) => w.length > 0);
     if (words.length >= 2) {
-      const initialLetters = words
-        .map((w) => extractHebrewLettersOnly(w)[0])
-        .filter(Boolean);
-
-      if (initialLetters.length >= 2) {
-        const firstLetterDigit = letterMap.get(initialLetters[0]);
-        const secondLetterDigit = letterMap.get(initialLetters[1]);
-
-        if (firstLetterDigit === expectedDigits[0] && secondLetterDigit === expectedDigits[1]) {
-          return {
-            isValid: true,
-            message: '',
-            expectedDigits,
-            detectedDigits: [firstLetterDigit, secondLetterDigit],
-          };
+      const w0Letters = extractHebrewLettersOnly(words[0]);
+      const w0 = w0Letters.length > 0 ? w0Letters[0] : null;
+      if (w0) {
+        const d1 = letterMap.get(w0);
+        for (let i = 1; i < words.length; i++) {
+          const wiLetters = extractHebrewLettersOnly(words[i]);
+          const wi = wiLetters.length > 0 ? wiLetters[0] : null;
+          if (wi) {
+            const d2 = letterMap.get(wi);
+            if (d1 === expectedDigits[0] && d2 === expectedDigits[1]) {
+              return {
+                isValid: true,
+                message: '',
+                expectedDigits,
+                detectedDigits: [d1, d2],
+              };
+            }
+          }
         }
       }
     }
@@ -337,3 +342,125 @@ export function checkMajorDuplicates(
 
   return { hasDuplicate: false, field: null, message: '' };
 }
+
+/**
+ * Validates the "Person" (אדם) field in the PAO system.
+ * According to strict PAO logic requested by user:
+ * Validation of letters MUST ONLY check the first letter of the first name and the first letter of the last name (initials / ראשי תיבות).
+ * First name initial corresponds to tens digit (or 0 for single digit 0-9).
+ * Last name initial corresponds to units digit.
+ * Inner letters and other consonants in the words are NOT checked and do NOT disqualify the entry.
+ * Example: For #13 "לארה קרופט":
+ * First name "לארה" starts with 'ל' (1).
+ * Last name "קרופט" starts with 'ק' (3).
+ * Valid! The letters ר, פ, ט are ignored.
+ * Example: For #0 "סילבסטר סטאלון" (00):
+ * First name starts with 'ס' (0), last name starts with 'ס' (0).
+ * Valid!
+ */
+export function validatePAOPerson(
+  text: string,
+  targetNumber: number,
+  majorDigits: MajorItem[],
+  connectingLetters: string[] = DEFAULT_CONNECTING_LETTERS
+): LogicValidationResult {
+  const trimmed = (text || '').trim();
+  if (!trimmed) {
+    return { isValid: true, message: '' };
+  }
+
+  if (typeof targetNumber !== 'number' || isNaN(targetNumber) || targetNumber < 0 || targetNumber > 99) {
+    return { isValid: true, message: '' };
+  }
+
+  const tens = Math.floor(targetNumber / 10);
+  const units = targetNumber % 10;
+  const expectedDigits = [tens, units];
+
+  const letterMap = buildLetterToDigitMap(majorDigits);
+
+  // Clean text: strip parenthesis annotations like "(ל.ק.)" or "(ס.ס.)"
+  const clean = trimmed.replace(/\([^)]*\)/g, ' ').replace(/["'״׳]/g, '').trim();
+
+  // Split into words
+  const words = clean.split(/[\s\-–—\.]+/).filter((w) => w.length > 0);
+
+  const getFirstHebrewLetter = (w: string): string | null => {
+    const letters = extractHebrewLettersOnly(w);
+    return letters.length > 0 ? letters[0] : null;
+  };
+
+  let initial1: string | null = null;
+  let initial2: string | null = null;
+
+  if (words.length >= 2) {
+    // First name initial
+    initial1 = getFirstHebrewLetter(words[0]);
+
+    // Test candidate last name initials across remaining words
+    for (let i = 1; i < words.length; i++) {
+      const cand = getFirstHebrewLetter(words[i]);
+      if (!cand) continue;
+      const d1 = initial1 ? letterMap.get(initial1) : undefined;
+      const d2 = letterMap.get(cand);
+      if (d1 === tens && d2 === units) {
+        return {
+          isValid: true,
+          message: '',
+          expectedDigits,
+          detectedDigits: [d1, d2],
+        };
+      }
+      if (!initial2) initial2 = cand;
+    }
+
+    // Also check last word specifically if multi-word:
+    const lastWordInitial = getFirstHebrewLetter(words[words.length - 1]);
+    if (lastWordInitial) {
+      const d1 = initial1 ? letterMap.get(initial1) : undefined;
+      const d2 = letterMap.get(lastWordInitial);
+      if (d1 === tens && d2 === units) {
+        return {
+          isValid: true,
+          message: '',
+          expectedDigits,
+          detectedDigits: [d1, d2],
+        };
+      }
+    }
+  } else if (words.length === 1) {
+    // Single word: acronym or compound
+    const letters = extractHebrewLettersOnly(words[0]);
+    if (letters.length >= 2) {
+      initial1 = letters[0];
+      initial2 = letters[1];
+      const d1 = letterMap.get(initial1);
+      const d2 = letterMap.get(initial2);
+      if (d1 === tens && d2 === units) {
+        return {
+          isValid: true,
+          message: '',
+          expectedDigits,
+          detectedDigits: [d1, d2],
+        };
+      }
+    }
+  }
+
+  const d1 = initial1 ? letterMap.get(initial1) : undefined;
+  const d2 = initial2 ? letterMap.get(initial2) : undefined;
+
+  const tensItem = majorDigits.find((m) => m.number === tens);
+  const unitsItem = majorDigits.find((m) => m.number === units);
+  const tensCons = tensItem?.consonants || `ספרה ${tens}`;
+  const unitsCons = unitsItem?.consonants || `ספרה ${units}`;
+
+  return {
+    isValid: false,
+    message: 'אי-התאמה בראשי התיבות של הדמות',
+    expectedDigits,
+    detectedDigits: [d1 ?? -1, d2 ?? -1].filter((d) => d >= 0),
+    details: `לפי חוקי PAO, האות הראשונה של השם הפרטי חייבת להתאים לספרת העשרות ${tens} (${tensCons}) והאות הראשונה של שם המשפחה חייבת להתאים לספרת האחדות ${units} (${unitsCons}). האותיות שזוהו: "${initial1 || '?'}" (${d1 !== undefined ? d1 : 'ללא מיפוי'}) ו-"${initial2 || '?'}" (${d2 !== undefined ? d2 : 'ללא מיפוי'}).`,
+  };
+}
+

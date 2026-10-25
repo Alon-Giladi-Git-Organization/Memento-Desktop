@@ -215,47 +215,27 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span>{profile.points} XP</span>
             </div>
 
-            {/* Network & Real-Time Sync Indicator */}
-            <div className="flex items-center gap-1">
-              {!isOnline ? (
-                <div
-                  title="מצב אופליין: עובד מקומית. כל השינויים נשמרים במכשיר ויסונכרנו אוטומטית לענן ברגע שתתחבר לרשת"
-                  className="flex items-center gap-1 bg-amber-100 border-2 border-amber-300 text-amber-900 p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl sm:rounded-2xl text-[11px] font-black shadow-xs whitespace-nowrap"
-                >
-                  <CloudOff className="w-3.5 h-3.5 text-amber-700 animate-pulse" />
-                  <span className="hidden md:inline">אופליין (נשמר מקומית)</span>
-                  <span className="hidden sm:inline md:hidden">אופליין</span>
-                </div>
-              ) : (
-                <div
-                  title="סנכרון ענן ו-Rowy פעיל בזמן אמת (onSnapshot): כל שינוי ב-Rowy או במכשיר מתעדכן מיידית"
-                  className="flex items-center gap-1 bg-emerald-50 border-2 border-emerald-300 text-emerald-800 p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl sm:rounded-2xl text-[11px] font-black shadow-xs whitespace-nowrap"
-                >
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                  </span>
-                  <Cloud className="w-3.5 h-3.5 text-emerald-600 hidden xs:inline" />
-                  <span className="hidden md:inline">סנכרון בזמן אמת</span>
-                  <span className="hidden sm:inline md:hidden">זמן אמת</span>
-                </div>
-              )}
-            </div>
-
-            {/* Auth Button */}
+            {/* Auth Button with live pulsing green indicator beside user profile */}
             {currentUser ? (
               <div className="flex items-center gap-1 sm:gap-2">
-                {currentUser.photoURL ? (
-                  <img
-                    src={currentUser.photoURL}
-                    alt=""
-                    className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl sm:rounded-2xl border-2 border-[#58CC02] object-cover shadow-sm"
-                  />
-                ) : (
-                  <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl sm:rounded-2xl bg-slate-100 text-[#58CC02] border-2 border-[#58CC02] flex items-center justify-center font-black text-xs sm:text-sm shadow-sm">
-                    {profile.displayName?.charAt(0) || 'U'}
-                  </div>
-                )}
+                <div className="relative inline-flex items-center" title="מחובר ומסונכרן בזמן אמת">
+                  {currentUser.photoURL ? (
+                    <img
+                      src={currentUser.photoURL}
+                      alt=""
+                      className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl sm:rounded-2xl border-2 border-[#58CC02] object-cover shadow-sm"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl sm:rounded-2xl bg-slate-100 text-[#58CC02] border-2 border-[#58CC02] flex items-center justify-center font-black text-xs sm:text-sm shadow-sm">
+                      {profile.displayName?.charAt(0) || 'U'}
+                    </div>
+                  )}
+                  {/* Beautiful green pulsing indicator right beside profile */}
+                  <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 border-2 border-white"></span>
+                  </span>
+                </div>
                 <button
                   onClick={onLogout}
                   title="התנתק"

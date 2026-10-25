@@ -66,6 +66,7 @@ export interface WorkoutsHubProps {
   onTogglePAOReady?: (number: number, explicitState?: boolean) => void;
   onSetAllPAOReady?: (ready: boolean, numbers?: number[]) => void;
   onSyncMajorAndPAOObjects?: (direction: 'majorToPao' | 'paoToMajor') => void;
+  onRestoreOriginalPAO?: () => Promise<any>;
   onAddShapePeg?: (item: PegShapeItem) => void;
   onUpdateShapePeg: (
     number: number,
@@ -137,6 +138,7 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
   onTogglePAOReady,
   onSetAllPAOReady,
   onSyncMajorAndPAOObjects,
+  onRestoreOriginalPAO,
   onAddShapePeg,
   onUpdateShapePeg,
   onDeleteShapePeg,
@@ -359,6 +361,7 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
           onOpenSummary={onOpenSummary}
           onNavigateToLogicTab={onNavigateToLogicTab}
           onSyncMajorAndPAOObjects={onSyncMajorAndPAOObjects}
+          onRestoreOriginalPAO={onRestoreOriginalPAO}
           currentUser={currentUser}
           onLogin={onLogin}
         />

@@ -65,6 +65,7 @@ import {
   ensureUserBranchExists,
   startRealtimeCloudSync,
   mergeWithRemoteItems,
+  restoreOriginalPAOAndCleanDuplicates,
 } from '../lib/cloudDbSync';
 
 const STORAGE_KEYS = {
@@ -200,13 +201,26 @@ export function useMemoryStore() {
     }
   });
 
-  // 2. PAO Items
   const [paoItems, setPaoItems] = useState<PAOItem[]>(() => {
     try {
+      const PAO_SCHEMA_VERSION = 'v3_user_csv_authentic';
+      const currentVersion = localStorage.getItem('memento_pao_version');
+      if (currentVersion !== PAO_SCHEMA_VERSION) {
+        localStorage.setItem('memento_pao_version', PAO_SCHEMA_VERSION);
+        localStorage.setItem(STORAGE_KEYS.PAO, JSON.stringify(DEFAULT_PAO_ITEMS));
+        return DEFAULT_PAO_ITEMS;
+      }
       const saved = localStorage.getItem(STORAGE_KEYS.PAO);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
+          const hasOldInitials = parsed.some(
+            (x: any) => x?.person?.includes('(ס.ס.)') || x?.person?.includes('לואי סוארס')
+          );
+          if (hasOldInitials) {
+            localStorage.setItem(STORAGE_KEYS.PAO, JSON.stringify(DEFAULT_PAO_ITEMS));
+            return DEFAULT_PAO_ITEMS;
+          }
           const valid = parsed.filter(
             (x: any) => typeof x?.number === 'number' && !isNaN(x.number) && isFinite(x.number) && x.numberStr !== 'NaN' && x.id !== 'NaN'
           );
@@ -461,6 +475,9 @@ export function useMemoryStore() {
   // Automatically mirrors edits from Rowy / Firebase Console directly into the active UI
   // When currentUser is logged in, listens only to that user's isolated branch
   useEffect(() => {
+    // Wait for auth initialization to complete so we never pull other users' documents
+    if (isAuthLoading) return;
+
     // Purge any rogue NaN documents in Firestore pao_items and major_items
     try {
       deleteDoc(doc(db, 'pao_items', 'NaN')).catch(() => {});
@@ -519,7 +536,7 @@ export function useMemoryStore() {
     return () => {
       unsubscribeRealtime();
     };
-  }, [currentUser?.uid]);
+  }, [isAuthLoading, currentUser?.uid]);
 
   // Auth Listener and Firestore Sync
   useEffect(() => {
@@ -1881,6 +1898,28 @@ export function useMemoryStore() {
     }
   };
 
+  const restoreOriginalPAO = async (): Promise<{ success: boolean; message: string; restoredCount: number; deletedCount: number }> => {
+    if (!isNetworkOnline()) {
+      return { success: false, message: 'אין חיבור לרשת לצורך שחזור וניקוי נתונים.', restoredCount: 0, deletedCount: 0 };
+    }
+    setIsSyncing(true);
+    setSyncStatusMessage('משחזר שלשות מקוריות ומנקה כפילויות ענן...');
+    try {
+      const res = await restoreOriginalPAOAndCleanDuplicates(currentUser?.uid);
+      if (res.success && res.restoredItems && res.restoredItems.length > 0) {
+        setPaoItems(res.restoredItems);
+      }
+      setSyncStatusMessage(res.message);
+      return res;
+    } catch (err: any) {
+      const msg = `שגיאה בשחזור: ${err?.message || err}`;
+      setSyncStatusMessage(msg);
+      return { success: false, message: msg, restoredCount: 0, deletedCount: 0 };
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
   return {
     // Network & Sync
     isOnline,
@@ -1889,6 +1928,7 @@ export function useMemoryStore() {
     syncStatusMessage,
     syncAllToFirestore,
     seedCloudTables,
+    restoreOriginalPAO,
 
     // Auth & Profile
     currentUser,

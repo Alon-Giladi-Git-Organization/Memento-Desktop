@@ -1002,6 +1002,51 @@ CRITICAL RULES (TO GUARANTEE FIRST-ATTEMPT ACCEPTANCE BY THE IMAGE MODEL):
   }
 });
 
+// API Endpoint: Advanced Natural AI Text-to-Speech (Gemini Flash Lite TTS)
+app.post('/api/gemini/tts', async (req: Request, res: Response) => {
+  try {
+    const { text, voiceName = 'Kore' } = req.body;
+    if (!text || typeof text !== 'string') {
+      return res.status(400).json({ error: 'Text is required for TTS' });
+    }
+
+    const cleanText = text.trim();
+    const promptText = `Speak naturally, expressively, and clearly with warm, human Hebrew pronunciation: ${cleanText}`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.8-flash-lite-tts',
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: promptText }],
+        },
+      ],
+      config: {
+        responseModalities: ['AUDIO'],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: voiceName || 'Kore' },
+          },
+        },
+      },
+    });
+
+    const candidate = response.candidates?.[0];
+    const audioPart = candidate?.content?.parts?.find((p: any) => p.inlineData?.data);
+    const audioBase64 = audioPart?.inlineData?.data;
+    const mimeType = audioPart?.inlineData?.mimeType || 'audio/wav';
+
+    if (audioBase64) {
+      return res.json({ success: true, audioBase64, mimeType });
+    }
+
+    return res.status(502).json({ error: 'No audio returned from Gemini TTS' });
+  } catch (error: any) {
+    console.warn('Gemini TTS error (will fall back to browser synthesis):', error?.message || error);
+    return res.status(500).json({ error: error?.message || 'TTS generation failed' });
+  }
+});
+
 // Vite middleware for dev / static serve for prod
 async function startServer() {
   const isDev = process.env.NODE_ENV !== 'production';
