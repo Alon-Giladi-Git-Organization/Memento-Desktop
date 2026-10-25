@@ -349,27 +349,29 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                 <span>מוכנים בלבד ({readyShapePegs.length}/{shapePegs.length})</span>
               </button>
 
-              {onSetAllShapePegsReady && (
-                <div className="flex items-center gap-1.5 text-xs bg-slate-950 p-1 rounded-xl border border-slate-800">
+              {onSetAllShapePegsReady && shapePegs.length > 0 && (() => {
+                const allShapePegsReady = readyShapePegs.length === shapePegs.length;
+                return (
                   <button
                     onClick={() => {
-                      onSetAllShapePegsReady(true);
-                      onEarnPoints(10, 'סימון כל מתלי הצורה כמוכנים');
+                      if (allShapePegsReady) {
+                        onSetAllShapePegsReady(false);
+                      } else {
+                        onSetAllShapePegsReady(true);
+                        onEarnPoints(10, 'סימון כל מתלי הצורה כמוכנים');
+                      }
                     }}
-                    className="text-xs font-bold text-yellow-400 hover:text-yellow-300 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/30 px-2.5 py-1 rounded-lg transition-all cursor-pointer"
-                    title="סמן את כל מתלי הצורה כמוכנים לתרגול (Select All)"
+                    className={`text-xs font-bold px-3.5 py-1.5 rounded-xl transition-all cursor-pointer shadow-2xs border ${
+                      allShapePegsReady
+                        ? 'bg-slate-950 hover:bg-black text-white border-slate-700'
+                        : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500'
+                    }`}
+                    title={allShapePegsReady ? 'הסר הכל מסטטוס מוכן לתרגול' : 'סמן הכל כמוכן לתרגול'}
                   >
-                    ✓ סמן הכל
+                    {allShapePegsReady ? 'הסר הכל מסטטוס מוכן לתרגול' : 'סמן הכל כמוכן לתרגול'}
                   </button>
-                  <button
-                    onClick={() => onSetAllShapePegsReady(false)}
-                    className="text-xs font-medium text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 px-2.5 py-1 rounded-lg transition-all cursor-pointer"
-                    title="בטל את כל סימוני התרגול למתלי צורה (Deselect All)"
-                  >
-                    ✗ בטל הכל
-                  </button>
-                </div>
-              )}
+                );
+              })()}
             </div>
 
             <button
@@ -715,27 +717,29 @@ export const PegsModule: React.FC<PegsModuleProps> = ({
                 <span>מוכנים בלבד ({readyBodyPegs.length}/{bodyPegs.length})</span>
               </button>
 
-              {onSetAllBodyPegsReady && (
-                <div className="flex items-center gap-1.5 text-xs bg-slate-950 p-1 rounded-xl border border-slate-800">
+              {onSetAllBodyPegsReady && bodyPegs.length > 0 && (() => {
+                const allBodyPegsReady = readyBodyPegs.length === bodyPegs.length;
+                return (
                   <button
                     onClick={() => {
-                      onSetAllBodyPegsReady(true);
-                      onEarnPoints(10, 'סימון כל תחנות הגוף כמוכנות');
+                      if (allBodyPegsReady) {
+                        onSetAllBodyPegsReady(false);
+                      } else {
+                        onSetAllBodyPegsReady(true);
+                        onEarnPoints(10, 'סימון כל תחנות הגוף כמוכנות');
+                      }
                     }}
-                    className="text-xs font-bold text-yellow-400 hover:text-yellow-300 bg-yellow-500/10 hover:bg-yellow-500/20 border border-yellow-500/30 px-2.5 py-1 rounded-lg transition-all cursor-pointer"
-                    title="סמן את כל תחנות הגוף כמוכנות לתרגול (Select All)"
+                    className={`text-xs font-bold px-3.5 py-1.5 rounded-xl transition-all cursor-pointer shadow-2xs border ${
+                      allBodyPegsReady
+                        ? 'bg-slate-950 hover:bg-black text-white border-slate-700'
+                        : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500'
+                    }`}
+                    title={allBodyPegsReady ? 'הסר הכל מסטטוס מוכן לתרגול' : 'סמן הכל כמוכן לתרגול'}
                   >
-                    ✓ סמן הכל
+                    {allBodyPegsReady ? 'הסר הכל מסטטוס מוכן לתרגול' : 'סמן הכל כמוכן לתרגול'}
                   </button>
-                  <button
-                    onClick={() => onSetAllBodyPegsReady(false)}
-                    className="text-xs font-medium text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 px-2.5 py-1 rounded-lg transition-all cursor-pointer"
-                    title="בטל את כל סימוני התרגול לתחנות הגוף (Deselect All)"
-                  >
-                    ✗ בטל הכל
-                  </button>
-                </div>
-              )}
+                );
+              })()}
             </div>
 
             <button

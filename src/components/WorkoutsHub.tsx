@@ -38,7 +38,7 @@ export interface WorkoutsHubProps {
   onNavigateToLogicTab?: () => void;
   onEarnPoints: (amount: number, reason?: string) => void;
   onUnlockBadge: (badge: string) => void;
-  onUpdateMajorDigit: (digit: number, consonants: string, word: string, hint: string) => void;
+  onUpdateMajorDigit: (digit: number, consonants: string, word?: string, hint?: string) => void;
   onResetMajorDigit: (digit: number) => void;
   onRecalculateMajor00_99FromDigits: (customDigits?: MajorItem[]) => void;
   onAddMajorItem?: (item: MajorItem) => void;
@@ -325,29 +325,31 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
       >
         {activeModule === 'major' && (
           <MajorModule
-          majorDigits={majorDigits}
-          connectingLetters={connectingLetters}
-          majorItems={majorItems}
-          onEarnPoints={onEarnPoints}
-          onUnlockBadge={onUnlockBadge}
-          onUpdateMajorDigit={onUpdateMajorDigit}
-          onResetMajorDigit={onResetMajorDigit}
-          onRecalculateMajor00_99FromDigits={onRecalculateMajor00_99FromDigits}
-          onAddMajorItem={onAddMajorItem}
-          onUpdateMajorItem={onUpdateMajorItem}
-          onDeleteMajorItem={onDeleteMajorItem}
-          onResetMajorItem={onResetMajorItem}
-          onToggleMajorReady={onToggleMajorReady}
-          onSetAllMajorReady={onSetAllMajorReady}
-          onOpenSummary={onOpenSummary}
-          onNavigateToLogicTab={onNavigateToLogicTab}
-          onSyncMajorAndPAOObjects={onSyncMajorAndPAOObjects}
-        />
-      )}
+            majorDigits={majorDigits}
+            connectingLetters={connectingLetters}
+            majorItems={majorItems}
+            paoItems={paoItems}
+            onEarnPoints={onEarnPoints}
+            onUnlockBadge={onUnlockBadge}
+            onUpdateMajorDigit={onUpdateMajorDigit}
+            onResetMajorDigit={onResetMajorDigit}
+            onRecalculateMajor00_99FromDigits={onRecalculateMajor00_99FromDigits}
+            onAddMajorItem={onAddMajorItem}
+            onUpdateMajorItem={onUpdateMajorItem}
+            onDeleteMajorItem={onDeleteMajorItem}
+            onResetMajorItem={onResetMajorItem}
+            onToggleMajorReady={onToggleMajorReady}
+            onSetAllMajorReady={onSetAllMajorReady}
+            onOpenSummary={onOpenSummary}
+            onNavigateToLogicTab={onNavigateToLogicTab}
+            onSyncMajorAndPAOObjects={onSyncMajorAndPAOObjects}
+          />
+        )}
 
       {activeModule === 'pao' && (
         <PAOModule
           paoItems={paoItems}
+          majorItems={majorItems}
           majorDigits={majorDigits}
           connectingLetters={connectingLetters}
           onEarnPoints={onEarnPoints}

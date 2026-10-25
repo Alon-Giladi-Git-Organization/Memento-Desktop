@@ -13,11 +13,12 @@ import {
   X,
   ArrowRight,
 } from 'lucide-react';
-import { PAOItem } from '../../types/memory';
+import { PAOItem, MajorItem } from '../../types/memory';
 import { getPAOInitials } from '../../lib/paoInitials';
 
 interface PAOGalleryCarouselProps {
   items: PAOItem[];
+  majorDigits?: MajorItem[];
   initialIndex?: number;
   onClose?: () => void;
   onEditItem?: (number: number) => void;
@@ -28,6 +29,7 @@ interface PAOGalleryCarouselProps {
 
 export const PAOGalleryCarousel: React.FC<PAOGalleryCarouselProps> = ({
   items,
+  majorDigits,
   initialIndex = 0,
   onClose,
   onEditItem,
@@ -174,12 +176,12 @@ export const PAOGalleryCarousel: React.FC<PAOGalleryCarouselProps> = ({
   }
 
   const currentItem = items[currentIndex];
-  const initialsObj = getPAOInitials(currentItem.number);
+  const initialsObj = getPAOInitials(currentItem.number, majorDigits);
 
   return (
     <div
-      onClick={(e) => {
-        // Light dismiss: if user clicks directly on the outer backdrop container (sides)
+      onMouseDown={(e) => {
+        // Light dismiss: only close if initial mousedown occurred directly on outer container
         if (e.target === e.currentTarget && onClose) {
           onClose();
         }
@@ -403,11 +405,12 @@ export const PAOGalleryCarousel: React.FC<PAOGalleryCarouselProps> = ({
                 {onEditItem && (
                   <button
                     type="button"
+                    onMouseDown={(e) => e.stopPropagation()}
                     onClick={() => onEditItem(currentItem.number)}
-                    className="p-2 rounded-xl bg-slate-950 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-800 transition-all cursor-pointer"
+                    className="w-9 h-9 p-2 rounded-xl bg-slate-950 hover:bg-indigo-600/30 text-slate-200 hover:text-white border border-slate-800 hover:border-indigo-500/40 transition-all cursor-pointer inline-flex items-center justify-center shrink-0"
                     title="ערוך שלשת PAO זו"
                   >
-                    <Edit3 className="w-4 h-4 text-indigo-400" />
+                    <Edit3 className="w-4 h-4 text-indigo-400 pointer-events-none" />
                   </button>
                 )}
               </div>

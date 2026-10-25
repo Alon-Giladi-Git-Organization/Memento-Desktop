@@ -283,27 +283,29 @@ export const NamesFacesModule: React.FC<NamesFacesModuleProps> = ({
 
             <div className="flex items-center gap-2 flex-wrap">
               {/* Batch Actions */}
-              {onSetAllPeopleReady && (
-                <div className="flex items-center gap-1.5 text-xs">
+              {onSetAllPeopleReady && peopleCards.length > 0 && (() => {
+                const allPeopleReady = readyPeople.length === peopleCards.length;
+                return (
                   <button
                     onClick={() => {
-                      onSetAllPeopleReady(true);
-                      onEarnPoints(15, 'סימון כל כרטיסי השמות כמוכנים');
+                      if (allPeopleReady) {
+                        onSetAllPeopleReady(false);
+                      } else {
+                        onSetAllPeopleReady(true);
+                        onEarnPoints(15, 'סימון כל כרטיסי השמות כמוכנים');
+                      }
                     }}
-                    className="text-xs font-bold text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-300 px-3 py-1.5 rounded-xl transition-all cursor-pointer shadow-2xs"
-                    title="סמן את כל כרטיסי השמות כמוכנים לתרגול (Select All)"
+                    className={`text-xs font-bold px-3.5 py-1.5 rounded-xl transition-all cursor-pointer shadow-2xs border ${
+                      allPeopleReady
+                        ? 'bg-slate-950 hover:bg-black text-white border-slate-700'
+                        : 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-500'
+                    }`}
+                    title={allPeopleReady ? 'הסר הכל מסטטוס מוכן לתרגול' : 'סמן הכל כמוכן לתרגול'}
                   >
-                    ✓ סמן הכל
+                    {allPeopleReady ? 'הסר הכל מסטטוס מוכן לתרגול' : 'סמן הכל כמוכן לתרגול'}
                   </button>
-                  <button
-                    onClick={() => onSetAllPeopleReady(false)}
-                    className="text-xs font-medium text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
-                    title="בטל את כל סימוני התרגול לכרטיסים (Deselect All)"
-                  >
-                    ✗ בטל הכל
-                  </button>
-                </div>
-              )}
+                );
+              })()}
 
               {onResetPersonFaceCards && (
                 <button

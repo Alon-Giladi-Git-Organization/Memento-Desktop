@@ -42,6 +42,8 @@ import {
   validatePAOPerson,
   checkPAODuplicates,
   DEFAULT_CONNECTING_LETTERS,
+  useIgnoredValidations,
+  buildLogicIgnoreKey,
 } from '../../lib/hebrewLogicValidator';
 import {
   getCurrentOrInitialDeckItem,
@@ -80,6 +82,7 @@ export const DEFAULT_PAO_COLUMNS: PAOColumnDef[] = [
 
 interface PAOModuleProps {
   paoItems: PAOItem[];
+  majorItems?: MajorItem[];
   majorDigits?: MajorItem[];
   connectingLetters?: string[];
   currentUser?: any;
@@ -103,6 +106,7 @@ interface PAOModuleProps {
 
 export const PAOModule: React.FC<PAOModuleProps> = ({
   paoItems,
+  majorItems = [],
   majorDigits,
   connectingLetters = DEFAULT_CONNECTING_LETTERS,
   currentUser,
@@ -116,9 +120,8 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
   onOpenSummary,
   onTogglePAOReady,
   onSetAllPAOReady,
-  onSyncMajorAndPAOObjects,
-  onRestoreOriginalPAO,
 }) => {
+  const { isIgnored, ignoreValidation } = useIgnoredValidations();
   const [subView, setSubView] = useState<'registry' | 'quiz' | 'voice'>('registry');
   const [search, setSearch] = useState('');
   const [modalImageMode, setModalImageMode] = useState<'upload' | 'ai'>('ai');
@@ -128,6 +131,8 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
 
   // Ready for practice whitelist calculation
   const readyPaoItems = paoItems.filter((item) => Boolean(item.is_ready_for_practice));
+  const allPaoReady =
+    paoItems.length > 0 && paoItems.every((item) => Boolean(item.is_ready_for_practice));
 
   // 6-digit trainer state
   const [pao6Digits, setPao6Digits] = useState('213988');
@@ -345,17 +350,39 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
     }
   };
 
+  // Edit PAO Item (Draft State for Centered Modal)
+  const [editingNum, setEditingNum] = useState<number | null>(null);
+  const [editPerson, setEditPerson] = useState('');
+  const [editAction, setEditAction] = useState('');
+  const [editObject, setEditObject] = useState('');
+  const [editScene, setEditScene] = useState('');
+  const [editImageUrl, setEditImageUrl] = useState('');
+  const [editActionNotice, setEditActionNotice] = useState<string | null>(null);
+
   // Escape key & Gallery Arrow keys handler
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (validationModal) {
+          setValidationModal(null);
+          return;
+        }
         if (selectedPreviewImage) {
           setSelectedPreviewImage(null);
           setModalIsEditing(false);
           setConfirmDeleteModal(false);
+          return;
         }
-        if (quickUploadItem) setQuickUploadItem(null);
-        if (validationModal) setValidationModal(null);
+        if (quickUploadItem) {
+          setQuickUploadItem(null);
+          return;
+        }
+        if (editingNum !== null) {
+          setEditingNum(null);
+          setEditImageUrl('');
+          setEditActionNotice(null);
+          return;
+        }
       } else if (selectedPreviewImage) {
         const activeTag = (document.activeElement?.tagName || '').toLowerCase();
         if (activeTag !== 'input' && activeTag !== 'textarea') {
@@ -369,15 +396,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedPreviewImage, quickUploadItem, validationModal, itemsWithImages]);
-
-  // Edit PAO Item (Draft State)
-  const [editingNum, setEditingNum] = useState<number | null>(null);
-  const [editPerson, setEditPerson] = useState('');
-  const [editAction, setEditAction] = useState('');
-  const [editObject, setEditObject] = useState('');
-  const [editScene, setEditScene] = useState('');
-  const [editImageUrl, setEditImageUrl] = useState('');
+  }, [selectedPreviewImage, quickUploadItem, validationModal, editingNum, itemsWithImages]);
 
   // Add PAO Item
   const [showAddForm, setShowAddForm] = useState(false);
@@ -387,6 +406,8 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
   const [newObject, setNewObject] = useState('');
   const [newScene, setNewScene] = useState('');
   const [newImageUrl, setNewImageUrl] = useState('');
+  const [newActionNotice, setNewActionNotice] = useState<string | null>(null);
+  const [quizActionNotice, setQuizActionNotice] = useState<string | null>(null);
 
   // PAO Quiz question & filter types
   type PAOQuizQuestionType =
@@ -464,31 +485,43 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
 
       // 2. Check logic conformity for person ONLY if changed (validates only initials)
       if (personChanged && pTrim && majorDigits) {
-        const pLogic = validatePAOPerson(pTrim, itemNum, majorDigits, connectingLetters);
-        if (!pLogic.isValid) {
-          setValidationModal({
-            isOpen: true,
-            title: 'הודעת ולידציה: אי-התאמה לראשי תיבות של הדמות',
-            message: pLogic.message,
-            details: `הדמות "${pTrim}" אינה עונה לכללי ראשי התיבות של מספר ${itemNum < 10 ? '0' + itemNum : itemNum}. ${pLogic.details || ''}`,
-            onConfirmBypass: () => handleSaveItem(itemNum, true),
-          });
-          return;
+        const pIgnoreKey = buildLogicIgnoreKey('pao-person', itemNum, pTrim);
+        if (!isIgnored(pIgnoreKey)) {
+          const pLogic = validatePAOPerson(pTrim, itemNum, majorDigits, connectingLetters);
+          if (!pLogic.isValid) {
+            setValidationModal({
+              isOpen: true,
+              title: 'הודעת ולידציה: אי-התאמה לראשי תיבות של הדמות',
+              message: pLogic.message,
+              details: `הדמות "${pTrim}" אינה עונה לכללי ראשי התיבות של מספר ${itemNum < 10 ? '0' + itemNum : itemNum}. ${pLogic.details || ''}`,
+              onConfirmBypass: () => {
+                ignoreValidation(pIgnoreKey);
+                handleSaveItem(itemNum, true);
+              },
+            });
+            return;
+          }
         }
       }
 
       // 3. Check logic conformity for object ONLY if changed
       if (objectChanged && oTrim && majorDigits) {
-        const oLogic = validateHebrewLogic(oTrim, itemNum, majorDigits, connectingLetters, 'pao');
-        if (!oLogic.isValid) {
-          setValidationModal({
-            isOpen: true,
-            title: 'הודעת ולידציה: אי-התאמה לחוקי הלוגיקה',
-            message: oLogic.message,
-            details: `החפץ "${oTrim}" אינו עונה לכללי הלוגיקה של מספר ${itemNum}. ${oLogic.details || ''}`,
-            onConfirmBypass: () => handleSaveItem(itemNum, true),
-          });
-          return;
+        const oIgnoreKey = buildLogicIgnoreKey('pao-object', itemNum, oTrim);
+        if (!isIgnored(oIgnoreKey)) {
+          const oLogic = validateHebrewLogic(oTrim, itemNum, majorDigits, connectingLetters, 'pao');
+          if (!oLogic.isValid) {
+            setValidationModal({
+              isOpen: true,
+              title: 'הודעת ולידציה: אי-התאמה לחוקי הלוגיקה',
+              message: oLogic.message,
+              details: `החפץ "${oTrim}" אינו עונה לכללי הלוגיקה של מספר ${itemNum}. ${oLogic.details || ''}`,
+              onConfirmBypass: () => {
+                ignoreValidation(oIgnoreKey);
+                handleSaveItem(itemNum, true);
+              },
+            });
+            return;
+          }
         }
       }
     }
@@ -598,30 +631,42 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
       }
 
       if (pTrim && majorDigits) {
-        const pLogic = validatePAOPerson(pTrim, num, majorDigits, connectingLetters);
-        if (!pLogic.isValid) {
-          setValidationModal({
-            isOpen: true,
-            title: 'הודעת ולידציה: אי-התאמה לראשי תיבות של הדמות',
-            message: pLogic.message,
-            details: `הדמות "${pTrim}" אינה עונה לכללי ראשי התיבות של מספר ${num < 10 ? '0' + num : num}. ${pLogic.details || ''}`,
-            onConfirmBypass: () => handleAddNewItem(undefined, true),
-          });
-          return;
+        const pIgnoreKey = buildLogicIgnoreKey('pao-person', num, pTrim);
+        if (!isIgnored(pIgnoreKey)) {
+          const pLogic = validatePAOPerson(pTrim, num, majorDigits, connectingLetters);
+          if (!pLogic.isValid) {
+            setValidationModal({
+              isOpen: true,
+              title: 'הודעת ולידציה: אי-התאמה לראשי תיבות של הדמות',
+              message: pLogic.message,
+              details: `הדמות "${pTrim}" אינה עונה לכללי ראשי התיבות של מספר ${num < 10 ? '0' + num : num}. ${pLogic.details || ''}`,
+              onConfirmBypass: () => {
+                ignoreValidation(pIgnoreKey);
+                handleAddNewItem(undefined, true);
+              },
+            });
+            return;
+          }
         }
       }
 
       if (oTrim && majorDigits) {
-        const oLogic = validateHebrewLogic(oTrim, num, majorDigits, connectingLetters, 'pao');
-        if (!oLogic.isValid) {
-          setValidationModal({
-            isOpen: true,
-            title: 'הודעת ולידציה: אי-התאמה לחוקי הלוגיקה',
-            message: oLogic.message,
-            details: `החפץ "${oTrim}" אינו עונה לכללי הלוגיקה של מספר ${num}. ${oLogic.details || ''}`,
-            onConfirmBypass: () => handleAddNewItem(undefined, true),
-          });
-          return;
+        const oIgnoreKey = buildLogicIgnoreKey('pao-object', num, oTrim);
+        if (!isIgnored(oIgnoreKey)) {
+          const oLogic = validateHebrewLogic(oTrim, num, majorDigits, connectingLetters, 'pao');
+          if (!oLogic.isValid) {
+            setValidationModal({
+              isOpen: true,
+              title: 'הודעת ולידציה: אי-התאמה לחוקי הלוגיקה',
+              message: oLogic.message,
+              details: `החפץ "${oTrim}" אינו עונה לכללי הלוגיקה של מספר ${num}. ${oLogic.details || ''}`,
+              onConfirmBypass: () => {
+                ignoreValidation(oIgnoreKey);
+                handleAddNewItem(undefined, true);
+              },
+            });
+            return;
+          }
         }
       }
     }
@@ -755,30 +800,42 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
       }
 
       if (personChanged && pTrim && majorDigits) {
-        const pLogic = validatePAOPerson(pTrim, currentQuizItem.number, majorDigits, connectingLetters);
-        if (!pLogic.isValid) {
-          setValidationModal({
-            isOpen: true,
-            title: 'הודעת ולידציה: אי-התאמה לראשי תיבות של הדמות',
-            message: pLogic.message,
-            details: pLogic.details,
-            onConfirmBypass: () => handleSaveQuizEdit(true),
-          });
-          return;
+        const pIgnoreKey = buildLogicIgnoreKey('pao-person', currentQuizItem.number, pTrim);
+        if (!isIgnored(pIgnoreKey)) {
+          const pLogic = validatePAOPerson(pTrim, currentQuizItem.number, majorDigits, connectingLetters);
+          if (!pLogic.isValid) {
+            setValidationModal({
+              isOpen: true,
+              title: 'הודעת ולידציה: אי-התאמה לראשי תיבות של הדמות',
+              message: pLogic.message,
+              details: pLogic.details,
+              onConfirmBypass: () => {
+                ignoreValidation(pIgnoreKey);
+                handleSaveQuizEdit(true);
+              },
+            });
+            return;
+          }
         }
       }
 
       if (objectChanged && oTrim && majorDigits) {
-        const oLogic = validateHebrewLogic(oTrim, currentQuizItem.number, majorDigits, connectingLetters, 'pao');
-        if (!oLogic.isValid) {
-          setValidationModal({
-            isOpen: true,
-            title: 'הודעת ולידציה: אי-התאמה לחוקי הלוגיקה',
-            message: oLogic.message,
-            details: oLogic.details,
-            onConfirmBypass: () => handleSaveQuizEdit(true),
-          });
-          return;
+        const oIgnoreKey = buildLogicIgnoreKey('pao-object', currentQuizItem.number, oTrim);
+        if (!isIgnored(oIgnoreKey)) {
+          const oLogic = validateHebrewLogic(oTrim, currentQuizItem.number, majorDigits, connectingLetters, 'pao');
+          if (!oLogic.isValid) {
+            setValidationModal({
+              isOpen: true,
+              title: 'הודעת ולידציה: אי-התאמה לחוקי הלוגיקה',
+              message: oLogic.message,
+              details: oLogic.details,
+              onConfirmBypass: () => {
+                ignoreValidation(oIgnoreKey);
+                handleSaveQuizEdit(true);
+              },
+            });
+            return;
+          }
         }
       }
     }
@@ -1192,26 +1249,31 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
-              {/* Batch Actions - Always display BOTH Select All and Deselect All */}
+              {/* Single Bulk Ready Toggle Button */}
               {onSetAllPAOReady && (
                 <div className="flex items-center gap-1.5 text-xs">
-                  <button
-                    onClick={() => {
-                      onSetAllPAOReady(true);
-                      onEarnPoints(20, 'סימון כל 100 שלשות PAO כמוכנות');
-                    }}
-                    className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 px-2.5 py-1.5 rounded-xl transition-all cursor-pointer"
-                    title="סמן את כל 100 שלשות ה-PAO כמוכנות לתרגול"
-                  >
-                    ✓ סמן הכל
-                  </button>
-                  <button
-                    onClick={() => onSetAllPAOReady(false)}
-                    className="text-[11px] font-bold text-slate-400 hover:text-rose-400 bg-slate-900 hover:bg-rose-500/10 border border-slate-800 hover:border-rose-500/30 px-2.5 py-1.5 rounded-xl transition-all cursor-pointer"
-                    title="בטל את כל סימוני התרגול לשלשות ה-PAO"
-                  >
-                    ✕ בטל הכל
-                  </button>
+                  {allPaoReady ? (
+                    <button
+                      type="button"
+                      onClick={() => onSetAllPAOReady(false)}
+                      className="text-xs font-bold text-white bg-slate-950 hover:bg-black border border-slate-700 px-3.5 py-1.5 rounded-xl transition-all cursor-pointer shadow-sm"
+                      title="הסר את כל שלשות ה-PAO מסטטוס מוכן לתרגול"
+                    >
+                      הסר הכל מסטטוס מוכן לתרגול
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSetAllPAOReady(true);
+                        onEarnPoints(20, 'סימון כל 100 שלשות PAO כמוכנות לתרגול');
+                      }}
+                      className="text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 border border-emerald-500 px-3.5 py-1.5 rounded-xl transition-all cursor-pointer shadow-sm"
+                      title="סמן את כל 100 שלשות ה-PAO כמוכנות לתרגול"
+                    >
+                      סמן הכל כמוכן לתרגול
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -1260,7 +1322,19 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                     <AIFieldGeneratorButton
                       promptType="pao_person"
                       inputContext={newNumber}
-                      onGenerated={(val) => setNewPerson(val)}
+                      paoContext={{
+                        number: newNumber,
+                        person: newPerson,
+                        action: newAction,
+                        object: newObject,
+                        scene: newScene,
+                      }}
+                      customDigits={majorDigits}
+                      connectingLetters={connectingLetters}
+                      onGenerated={(val) => {
+                        setNewPerson(val);
+                        setNewActionNotice(null);
+                      }}
                       label="אדם עם AI"
                       compact
                     />
@@ -1269,7 +1343,10 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                     type="text"
                     required
                     value={newPerson}
-                    onChange={(e) => setNewPerson(e.target.value)}
+                    onChange={(e) => {
+                      setNewPerson(e.target.value);
+                      if (e.target.value.trim()) setNewActionNotice(null);
+                    }}
                     placeholder="שם הדמות (למשל סילבסטר סטאלון)..."
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500"
                   />
@@ -1283,7 +1360,17 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                       promptType="pao_action"
                       inputContext={newNumber}
                       extraContext={newPerson}
+                      paoContext={{
+                        number: newNumber,
+                        person: newPerson,
+                        action: newAction,
+                        object: newObject,
+                        scene: newScene,
+                      }}
+                      customDigits={majorDigits}
+                      connectingLetters={connectingLetters}
                       onGenerated={(val) => setNewAction(val)}
+                      onNotice={(note) => setNewActionNotice(note)}
                       label="פעולה עם AI"
                       compact
                     />
@@ -1296,6 +1383,11 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                     placeholder="פעולה קינטית (למשל מתאגרף)..."
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white placeholder-slate-500"
                   />
+                  {newActionNotice && (
+                    <p className="text-[11px] text-amber-300 bg-amber-500/15 border border-amber-500/30 rounded-lg px-2 py-1 mt-1 leading-snug">
+                      ⚠️ {newActionNotice}
+                    </p>
+                  )}
                 </div>
                 <div>
                   <div className="flex items-center justify-between mb-1">
@@ -1306,6 +1398,15 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                       promptType="pao_object"
                       inputContext={newNumber}
                       extraContext={newPerson}
+                      paoContext={{
+                        number: newNumber,
+                        person: newPerson,
+                        action: newAction,
+                        object: newObject,
+                        scene: newScene,
+                      }}
+                      customDigits={majorDigits}
+                      connectingLetters={connectingLetters}
                       onGenerated={(val) => setNewObject(val)}
                       label="חפץ עם AI"
                       compact
@@ -1327,13 +1428,22 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                     <div className="flex items-center gap-1.5">
                       <Sparkles className="w-4 h-4 text-amber-400" />
                       <label className="text-xs font-bold text-amber-300">
-                        שדה רביעי: סצנה שלמה (תיאור חופשי רב-חושי)
+                        שדה רביעי: סצנה שלמה (עקרון SEE - חושים, רגש, הקצנה ותנועה)
                       </label>
                     </div>
                     <AIFieldGeneratorButton
                       promptType="pao_scene"
                       inputContext={newNumber ? `מספר ${newNumber}` : 'שלשת PAO'}
                       extraContext={`אדם: ${newPerson} | פעולה: ${newAction} | חפץ: ${newObject}`}
+                      paoContext={{
+                        number: newNumber,
+                        person: newPerson,
+                        action: newAction,
+                        object: newObject,
+                        scene: newScene,
+                      }}
+                      customDigits={majorDigits}
+                      connectingLetters={connectingLetters}
                       onGenerated={(val) => setNewScene(val)}
                       label="צור סצנה עם AI"
                       compact
@@ -1432,6 +1542,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
             {viewMode === 'gallery' ? (
               <PAOGalleryCarousel
                 items={filteredItems}
+                majorDigits={majorDigits}
                 onClose={() => setViewMode('grid')}
                 onOpenImagePreview={(item) => {
                   setSelectedPreviewImage({
@@ -1474,10 +1585,40 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                   const s = item.scene || '';
                   const isCustom = Boolean(item.scene);
                   const isHighlighted = highlightedNum === item.number;
+                  const initialsInfo = getPAOInitials(item.number, majorDigits);
+                  const personIgnoreKey = buildLogicIgnoreKey('pao-person', item.number, p || '');
+                  const objectIgnoreKey = buildLogicIgnoreKey('pao-object', item.number, o || '');
+                  const rawPersonValidation =
+                    p && p.trim() && majorDigits
+                      ? validatePAOPerson(p, item.number, majorDigits, connectingLetters)
+                      : { isValid: true, message: '' };
+                  const personValidation = isIgnored(personIgnoreKey)
+                    ? { isValid: true, message: '' }
+                    : rawPersonValidation;
+                  const rawObjectValidation =
+                    o && o.trim() && majorDigits
+                      ? validateHebrewLogic(o, item.number, majorDigits, connectingLetters, 'pao')
+                      : { isValid: true, message: '' };
+                  const objectValidation = isIgnored(objectIgnoreKey)
+                    ? { isValid: true, message: '' }
+                    : rawObjectValidation;
+
+                  const matchingMajor = majorItems.find((m) => m.number === item.number);
+                  const majorWord = matchingMajor?.defaultWord?.trim() || '';
+                  const mismatchIgnoreKey = buildLogicIgnoreKey(
+                    'major-pao-mismatch',
+                    item.number,
+                    majorWord,
+                    o || ''
+                  );
+                  const hasMajorMismatch =
+                    Boolean(o && o.trim() && majorWord && o.trim() !== majorWord) &&
+                    !isIgnored(mismatchIgnoreKey);
+
+                  const hasLogicConflict =
+                    !personValidation.isValid || !objectValidation.isValid || hasMajorMismatch;
 
                   // דפוס M3 מספר 4: Shape Morphing / Expressive Spring (שינוי צורה וקפיציות בכרטיס)
-                  // כל כרטיס PAO נהנה משינוי רדיוס פינות עדין ותנועת ריחוף פיזיקלית ב-hover/active
-                  // באמצעות עקומת Spring מהירה (M3 fast spring).
                   return (
                     <div
                       id={`pao-item-${item.number}`}
@@ -1515,6 +1656,8 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                           ? 'border-indigo-400 ring-4 ring-indigo-400/40 scale-[1.02] shadow-xl bg-indigo-950/40'
                           : isHighlighted
                           ? 'border-indigo-400 ring-4 ring-indigo-400/30 scale-[1.02] shadow-xl shadow-indigo-500/20 bg-indigo-950/20'
+                          : hasLogicConflict
+                          ? 'border-amber-500/65 ring-1 ring-amber-500/25'
                           : isCustom
                           ? 'border-indigo-500/50 shadow-sm shadow-indigo-500/10'
                           : 'border-slate-800 hover:border-slate-700'
@@ -1529,17 +1672,17 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                         </div>
                       )}
                     <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-lg font-black text-indigo-400 bg-indigo-500/10 px-2.5 py-0.5 rounded-lg border border-indigo-500/20">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-mono text-lg font-black text-indigo-400 bg-indigo-500/10 px-2.5 py-0.5 rounded-lg border border-indigo-500/20 shrink-0">
                             {item.numberStr}
                           </span>
                           <span
-                            title={`ראשי תיבות לפי שיטת Major: ${getPAOInitials(item.number).fullFormula}`}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold text-xs"
+                            title={`ראשי תיבות לפי שיטת Major (מסונכרן בזמן אמת): ${initialsInfo.fullFormula}`}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold text-xs shrink-0"
                           >
                             <span className="text-[11px] text-amber-400/70 font-normal">ר"ת:</span>
-                            <span>{getPAOInitials(item.number).initials}</span>
+                            <span>{initialsInfo.initials}</span>
                           </span>
 
                           {/* Image Thumbnail or Quick Upload trigger */}
@@ -1570,371 +1713,147 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                           ) : (
                             <button
                               type="button"
+                              onMouseDown={(e) => e.stopPropagation()}
                               onClick={() => {
                                 setQuickUploadItem(item);
                                 setQuickUploadUrl('');
                                 setQuickUploadMode('ai');
                               }}
-                              className="p-1 rounded-lg text-slate-500 hover:text-indigo-300 hover:bg-slate-900 border border-transparent hover:border-slate-800 transition-all cursor-pointer"
+                              className="w-8 h-8 p-1.5 rounded-xl text-slate-400 hover:text-indigo-300 hover:bg-slate-900 border border-transparent hover:border-slate-800 transition-all cursor-pointer inline-flex items-center justify-center shrink-0"
                               title="צרף תמונה לשלשה זו"
                             >
-                              <ImagePlus className="w-4 h-4" />
+                              <ImagePlus className="w-4 h-4 pointer-events-none" />
                             </button>
                           )}
                         </div>
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1 shrink-0 relative z-20">
                           {isCustom && (
                             <button
+                              type="button"
+                              onMouseDown={(e) => e.stopPropagation()}
                               onClick={() => {
                                 onResetPAOItem(item.number);
                                 if (isEditing) setEditingNum(null);
                               }}
                               title="אפס לברירת מחדל"
-                              className="p-1 text-slate-500 hover:text-rose-400 cursor-pointer"
+                              className="w-8 h-8 p-1.5 rounded-xl text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 cursor-pointer inline-flex items-center justify-center transition-colors"
                             >
-                              <Undo2 className="w-3.5 h-3.5" />
+                              <Undo2 className="w-3.5 h-3.5 pointer-events-none" />
                             </button>
                           )}
                           <button
                             type="button"
+                            onMouseDown={(e) => e.stopPropagation()}
                             onClick={(e) => {
                               e.preventDefault();
                               e.stopPropagation();
-                              if (isEditing) {
-                                setEditingNum(null);
-                              } else {
-                                setEditingNum(item.number);
-                                setEditPerson(item.person || '');
-                                setEditAction(item.action || '');
-                                setEditObject(item.object || '');
-                                setEditScene(item.scene || '');
-                                setEditImageUrl(item.imageUrl || '');
-                              }
+                              setEditingNum(item.number);
+                              setEditPerson(item.person || '');
+                              setEditAction(item.action || '');
+                              setEditObject(item.object || '');
+                              setEditScene(item.scene || '');
+                              setEditImageUrl(item.imageUrl || '');
+                              setEditActionNotice(null);
                             }}
-                            className="p-1 text-slate-400 hover:text-indigo-400 cursor-pointer transition-colors"
-                            title={isEditing ? 'סגור עריכה' : 'ערוך שלשה'}
+                            className="relative z-20 w-9 h-9 p-2 rounded-xl text-slate-300 hover:text-indigo-300 hover:bg-indigo-500/20 border border-transparent hover:border-indigo-500/30 cursor-pointer inline-flex items-center justify-center transition-colors shrink-0"
+                            title="ערוך שלשה בחלון מורחב"
                           >
-                            <Edit3 className="w-4 h-4" />
+                            <Edit3 className="w-4 h-4 pointer-events-none" />
                           </button>
                           {onDeletePAOItem && (
                             <button
+                              type="button"
+                              onMouseDown={(e) => e.stopPropagation()}
                               onClick={() => onDeletePAOItem(item.number)}
-                              className="p-1 text-slate-600 hover:text-rose-400 cursor-pointer"
+                              className="w-8 h-8 p-1.5 rounded-xl text-slate-600 hover:text-rose-400 cursor-pointer inline-flex items-center justify-center"
                               title="מחק מהמאגר"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-4 h-4 pointer-events-none" />
                             </button>
                           )}
                         </div>
                       </div>
 
-                      {isEditing ? (
-                        <div className="space-y-2.5 pt-1 text-right">
-                          <div>
-                            <div className="flex items-center justify-between mb-0.5">
-                              <label className="text-xs text-amber-400 font-bold">👤 אדם (Person):</label>
-                              <AIFieldGeneratorButton
-                                promptType="pao_person"
-                                inputContext={item.number.toString()}
-                                onGenerated={(val) => setEditPerson(val)}
-                                label="אדם עם AI"
-                                compact
-                              />
-                            </div>
-                            <input
-                              type="text"
-                              value={editPerson}
-                              onChange={(e) => setEditPerson(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') { e.preventDefault(); handleSaveItem(item.number); }
-                              }}
-                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm text-white"
-                            />
-                          </div>
-
-                          <div>
-                            <div className="flex items-center justify-between mb-0.5">
-                              <label className="text-xs text-purple-400 font-bold">⚡ פעולה (Action):</label>
-                              <AIFieldGeneratorButton
-                                promptType="pao_action"
-                                inputContext={item.number.toString()}
-                                extraContext={editPerson}
-                                onGenerated={(val) => setEditAction(val)}
-                                label="פעולה עם AI"
-                                compact
-                              />
-                            </div>
-                            <input
-                              type="text"
-                              value={editAction}
-                              onChange={(e) => setEditAction(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') { e.preventDefault(); handleSaveItem(item.number); }
-                              }}
-                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm text-white"
-                            />
-                          </div>
-
-                          <div>
-                            <div className="flex items-center justify-between mb-0.5">
-                              <label className="text-xs text-teal-400 font-bold">📦 חפץ (Object):</label>
-                              <AIFieldGeneratorButton
-                                promptType="pao_object"
-                                inputContext={item.number.toString()}
-                                extraContext={editPerson}
-                                onGenerated={(val) => setEditObject(val)}
-                                label="חפץ עם AI"
-                                compact
-                              />
-                            </div>
-                            <input
-                              type="text"
-                              value={editObject}
-                              onChange={(e) => setEditObject(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') { e.preventDefault(); handleSaveItem(item.number); }
-                              }}
-                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm text-white"
-                            />
-                          </div>
-
-                          {/* 4th Field: סצנה שלמה */}
-                          <div className="bg-slate-900/70 border border-amber-500/25 rounded-xl p-2.5 space-y-1">
-                            <div className="flex items-center justify-between">
-                              <label className="text-xs text-amber-300 font-bold flex items-center gap-1">
-                                <Sparkles className="w-3 h-3 text-amber-400" />
-                                <span>סצנה שלמה:</span>
-                              </label>
-                              <AIFieldGeneratorButton
-                                promptType="pao_scene"
-                                inputContext={item.number.toString()}
-                                extraContext={`אדם: ${editPerson} | פעולה: ${editAction} | חפץ: ${editObject}`}
-                                onGenerated={(val) => setEditScene(val)}
-                                label="סצנה עם AI"
-                                compact
-                              />
-                            </div>
-                            <textarea
-                              rows={4}
-                              value={editScene}
-                              onChange={(e) => setEditScene(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSaveItem(item.number); }
-                              }}
-                              placeholder="סצנה מפורטת המשלבת את 3 השדות..."
-                              className="w-full min-h-[90px] bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white"
-                            />
-                          </div>
-
-                          {/* Image Attachment in Edit Mode */}
-                          <div className="bg-slate-900/90 border border-indigo-500/30 rounded-2xl p-3.5 space-y-3">
-                            <div className="flex items-center justify-between">
-                              <label className="text-xs text-indigo-300 font-bold flex items-center gap-1.5">
-                                <ImageIcon className="w-3.5 h-3.5 text-indigo-400" />
-                                <span>תמונה ויזואלית לסצנה:</span>
-                              </label>
-
-                              {/* Mode Switcher */}
-                              <div className="flex items-center bg-slate-950 p-0.5 rounded-lg border border-slate-800">
+                      <div className="space-y-1.5 text-xs sm:text-sm">
+                        <div className="text-slate-200 flex items-center gap-1.5 flex-wrap">
+                          <span className="text-amber-400 font-bold">👤 אדם:</span>
+                          <span>{p}</span>
+                          {!personValidation.isValid && (
+                            <div
+                              title={personValidation.details || personValidation.message}
+                              className="w-full mt-1 flex flex-col gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 text-[11px] font-bold leading-snug"
+                            >
+                              <div className="flex items-start gap-1.5">
+                                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                                <span>{personValidation.message}</span>
+                              </div>
+                              <div className="flex justify-end">
                                 <button
                                   type="button"
-                                  onClick={() => setCardImageMode('ai')}
-                                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium flex items-center gap-1 transition-all ${
-                                    cardImageMode === 'ai'
-                                      ? 'bg-gradient-to-r from-amber-500 to-indigo-600 text-white shadow-sm'
-                                      : 'text-amber-400/80 hover:text-amber-300'
-                                  }`}
+                                  onClick={() => ignoreValidation(personIgnoreKey)}
+                                  className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-900/90 hover:bg-slate-800 text-amber-200 border border-amber-500/40 cursor-pointer transition-colors"
                                 >
-                                  <Sparkles className="w-3 h-3" />
-                                  <span>Gemini AI</span>
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setCardImageMode('upload')}
-                                  className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-all ${
-                                    cardImageMode === 'upload'
-                                      ? 'bg-indigo-600 text-white shadow-sm'
-                                      : 'text-slate-400 hover:text-slate-200'
-                                  }`}
-                                >
-                                  העלאת קובץ
+                                  התעלם במקרה זה
                                 </button>
                               </div>
-
-                              {editImageUrl && (
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-slate-200">
+                          <span className="text-purple-400 font-bold ml-1.5">⚡ פעולה:</span>
+                          {a}
+                        </div>
+                        <div className="text-slate-200 flex items-center gap-1.5 flex-wrap">
+                          <span className="text-teal-400 font-bold">📦 חפץ:</span>
+                          <span>{o}</span>
+                          {!objectValidation.isValid && (
+                            <div
+                              title={objectValidation.details || objectValidation.message}
+                              className="w-full mt-1 flex flex-col gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 text-[11px] font-bold leading-snug"
+                            >
+                              <div className="flex items-start gap-1.5">
+                                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                                <span>{objectValidation.message}</span>
+                              </div>
+                              <div className="flex justify-end">
                                 <button
                                   type="button"
-                                  onClick={() => setEditImageUrl('')}
-                                  className="text-[11px] text-rose-400 hover:text-rose-300 flex items-center gap-1 cursor-pointer transition-colors mr-2"
+                                  onClick={() => ignoreValidation(objectIgnoreKey)}
+                                  className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-900/90 hover:bg-slate-800 text-amber-200 border border-amber-500/40 cursor-pointer transition-colors"
                                 >
-                                  <Trash2 className="w-3 h-3" />
-                                  <span>הסר</span>
+                                  התעלם במקרה זה
                                 </button>
-                              )}
-                            </div>
-
-                            {cardImageMode === 'ai' ? (
-                              <PAOImageGeneratorTab
-                                numberStr={item.numberStr}
-                                numberVal={item.number}
-                                person={editPerson}
-                                action={editAction}
-                                object={editObject}
-                                scene={editScene}
-                                currentUser={currentUser}
-                                saveButtonLabel="שמור תמונה לשלשה זו"
-                                onLogin={onLogin}
-                                onImageGenerated={(dataUrl) => {
-                                  setEditImageUrl(dataUrl);
-                                  onUpdatePAOItem(item.number, {
-                                    person: editPerson,
-                                    action: editAction,
-                                    object: editObject,
-                                    scene: editScene,
-                                    imageUrl: dataUrl,
-                                  });
-                                  setEditingNum(null);
-                                  onEarnPoints(15, 'יצירת תמונה מנמונית עם Gemini');
-                                }}
-                              />
-                            ) : (
-                              <>
-                                {editImageUrl ? (
-                                  <div className="space-y-3">
-                                    <div className="flex items-center justify-between bg-slate-950 p-2.5 rounded-2xl border border-slate-800">
-                                      <div className="flex items-center gap-3 min-w-0">
-                                        <img
-                                          src={editImageUrl}
-                                          alt="סצנה"
-                                          className="w-14 h-14 object-cover rounded-xl border border-indigo-500/40 shrink-0"
-                                        />
-                                        <div className="min-w-0">
-                                          <span className="text-xs font-bold text-slate-200 block truncate">תמונה קיימת</span>
-                                          <span className="text-[10px] text-slate-400 block">גרור קובץ או לחץ להחלפה למטה</span>
-                                        </div>
-                                      </div>
-                                      <button
-                                        type="button"
-                                        onClick={() => setEditImageUrl('')}
-                                        className="px-2.5 py-1 text-xs text-rose-300 hover:text-white bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 rounded-xl flex items-center gap-1 cursor-pointer transition-all shrink-0"
-                                        title="הסר תמונה"
-                                      >
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                        <span>מחק תמונה</span>
-                                      </button>
-                                    </div>
-
-                                    <ImageDropzone
-                                      isProcessing={isCompressing}
-                                      title="בחר קובץ או גרור לכאן להחלפת התמונה"
-                                      subtitle="Choose a file or drag it here • JPG, PNG, WebP"
-                                      className="py-6 px-3"
-                                      onImageSelected={async (file) => {
-                                        try {
-                                          setIsCompressing(true);
-                                          const comp = await compressImageFile(file);
-                                          setEditImageUrl(comp);
-                                        } catch (err) {
-                                          console.error(err);
-                                        } finally {
-                                          setIsCompressing(false);
-                                        }
-                                      }}
-                                    />
-                                  </div>
-                                ) : (
-                                  <ImageDropzone
-                                    isProcessing={isCompressing}
-                                    title="בחר קובץ או גרור לכאן"
-                                    subtitle="Choose a file or drag it here • JPG, PNG, WebP"
-                                    className="py-6 px-3"
-                                    onImageSelected={async (file) => {
-                                      try {
-                                        setIsCompressing(true);
-                                        const comp = await compressImageFile(file);
-                                        setEditImageUrl(comp);
-                                      } catch (err) {
-                                        console.error(err);
-                                      } finally {
-                                        setIsCompressing(false);
-                                      }
-                                    }}
-                                  />
-                                )}
-
-                                <div className="flex items-center gap-2 pt-1">
-                                  <span className="text-[11px] text-slate-400 shrink-0">או קישור:</span>
-                                  <input
-                                    type="url"
-                                    value={editImageUrl.startsWith('data:') ? '' : editImageUrl}
-                                    onChange={(e) => setEditImageUrl(e.target.value)}
-                                    placeholder="https://example.com/image.jpg"
-                                    className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:border-indigo-500"
-                                  />
-                                </div>
-                              </>
-                            )}
-                          </div>
-
-                          <div className="flex items-center justify-between gap-1 pt-1">
-                            <span className="text-[10px] text-slate-500 font-mono">↵ שמירה</span>
-                            <div className="flex gap-1.5">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditingNum(null);
-                                  setEditImageUrl('');
-                                }}
-                                className="text-xs text-slate-400 hover:text-slate-200 px-2.5 py-1 cursor-pointer"
-                              >
-                                ביטול
-                              </button>
-                              <button
-                                type="button"
-                                onMouseDown={(e) => e.preventDefault()}
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  handleSaveItem(item.number);
-                                }}
-                                className="text-xs bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold px-3 py-1 rounded-lg cursor-pointer shadow-md transition-all"
-                              >
-                                שמור
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="space-y-1.5 text-xs sm:text-sm">
-                          <div className="text-slate-200">
-                            <span className="text-amber-400 font-bold ml-1.5">👤 אדם:</span>
-                            {p}
-                          </div>
-                          <div className="text-slate-200">
-                            <span className="text-purple-400 font-bold ml-1.5">⚡ פעולה:</span>
-                            {a}
-                          </div>
-                          <div className="text-slate-200">
-                            <span className="text-teal-400 font-bold ml-1.5">📦 חפץ:</span>
-                            {o}
-                          </div>
-
-                          {s === 'עודכן החפץ עבור שלשת PAO זו, וצריך ליצור סצנה חדשה' ? (
-                            <div className="text-xs text-amber-300 bg-amber-500/15 border border-amber-500/35 rounded-xl p-2.5 mt-2 flex items-start gap-2">
-                              <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                              <div className="flex-1">
-                                <span className="font-bold text-amber-300 block text-xs">החפץ עודכן מ-Major:</span>
-                                <span className="text-[11px] text-amber-200/90">{s}</span>
                               </div>
                             </div>
-                          ) : s ? (
-                            <div className="text-xs text-amber-200/90 bg-amber-500/10 border border-amber-500/20 rounded-xl p-2.5 mt-2 leading-relaxed">
-                              <span className="font-bold text-amber-400 block text-xs mb-0.5">🎬 סצנה שלמה:</span>
-                              "{s}"
+                          )}
+                          {hasMajorMismatch && (
+                            <div className="w-full mt-1 flex flex-col gap-1.5 px-2.5 py-1.5 rounded-lg bg-sky-500/15 border border-sky-500/40 text-sky-200 text-[11px] font-bold leading-snug">
+                              <div className="flex items-start gap-1.5">
+                                <AlertTriangle className="w-3.5 h-3.5 text-sky-400 shrink-0 mt-0.5" />
+                                <span>
+                                  לתשומת לבך - במודולת MAJOR הגדרת מילה מנמונית אחרת עבור מספר זה ("{majorWord}") ; מומלץ לבחור באותה המילה עבור 2 המודולות
+                                </span>
+                              </div>
+                              <div className="flex justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => ignoreValidation(mismatchIgnoreKey)}
+                                  className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-900/90 hover:bg-slate-800 text-sky-200 border border-sky-500/40 cursor-pointer transition-colors"
+                                >
+                                  התעלם במקרה זה
+                                </button>
+                              </div>
                             </div>
-                          ) : null}
+                          )}
                         </div>
-                      )}
+
+                        {s ? (
+                          <div className="text-xs text-amber-200/90 bg-amber-500/10 border border-amber-500/20 rounded-xl p-2.5 mt-2 leading-relaxed">
+                            <span className="font-bold text-amber-400 block text-xs mb-0.5">🎬 סצנה שלמה:</span>
+                            "{s}"
+                          </div>
+                        ) : null}
+                      </div>
 
                       {/* Ready for Practice Checkbox */}
                       <div className="pt-2 mt-2 border-t border-slate-800/80 flex items-center justify-between">
@@ -1986,6 +1905,35 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                       const s = item.scene || '';
                       const isCustom = Boolean(item.scene);
                       const isHighlighted = highlightedNum === item.number;
+                      const initialsInfo = getPAOInitials(item.number, majorDigits);
+                      const personIgnoreKey = buildLogicIgnoreKey('pao-person', item.number, p || '');
+                      const objectIgnoreKey = buildLogicIgnoreKey('pao-object', item.number, o || '');
+                      const rawPersonValidation =
+                        p && p.trim() && majorDigits
+                          ? validatePAOPerson(p, item.number, majorDigits, connectingLetters)
+                          : { isValid: true, message: '' };
+                      const personValidation = isIgnored(personIgnoreKey)
+                        ? { isValid: true, message: '' }
+                        : rawPersonValidation;
+                      const rawObjectValidation =
+                        o && o.trim() && majorDigits
+                          ? validateHebrewLogic(o, item.number, majorDigits, connectingLetters, 'pao')
+                          : { isValid: true, message: '' };
+                      const objectValidation = isIgnored(objectIgnoreKey)
+                        ? { isValid: true, message: '' }
+                        : rawObjectValidation;
+
+                      const matchingMajor = majorItems.find((m) => m.number === item.number);
+                      const majorWord = matchingMajor?.defaultWord?.trim() || '';
+                      const mismatchIgnoreKey = buildLogicIgnoreKey(
+                        'major-pao-mismatch',
+                        item.number,
+                        majorWord,
+                        o || ''
+                      );
+                      const hasMajorMismatch =
+                        Boolean(o && o.trim() && majorWord && o.trim() !== majorWord) &&
+                        !isIgnored(mismatchIgnoreKey);
 
                       return (
                         <tr
@@ -2035,52 +1983,18 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                               <span className="bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">
                                 {item.numberStr}
                               </span>
-                              <span className="text-[10px] text-amber-300 font-sans">
-                                ({getPAOInitials(item.number).initials})
+                              <span
+                                className="text-[10px] text-amber-300 font-sans"
+                                title={`ראשי תיבות לפי לוגיקת הספרות: ${initialsInfo.fullFormula}`}
+                              >
+                                ({initialsInfo.initials})
                               </span>
                             </div>
                           </td>
 
                           {/* Image Thumbnail Cell */}
                           <td className="py-2 px-2 text-center whitespace-nowrap">
-                            {isEditing ? (
-                              <div className="flex items-center justify-center gap-1">
-                                {editImageUrl ? (
-                                  <div className="relative group shrink-0 inline-block">
-                                    <img
-                                      src={editImageUrl}
-                                      alt={item.numberStr}
-                                      className="w-8 h-8 object-cover rounded-lg border border-pink-500/50 cursor-pointer hover:opacity-80"
-                                      onClick={() => {
-                                        setQuickUploadItem(item);
-                                        setQuickUploadUrl(editImageUrl);
-                                      }}
-                                      title="לחץ להחלפה בקונטיינר גדול"
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={() => setEditImageUrl('')}
-                                      className="absolute -top-1 -right-1 bg-rose-600 hover:bg-rose-500 text-white rounded-full p-0.5 cursor-pointer shadow"
-                                      title="הסר תמונה"
-                                    >
-                                      <X className="w-2.5 h-2.5" />
-                                    </button>
-                                  </div>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setQuickUploadItem(item);
-                                      setQuickUploadUrl(editImageUrl || item.imageUrl || '');
-                                    }}
-                                    className="p-1.5 rounded-lg border border-dashed border-pink-500/50 hover:border-pink-400 bg-pink-950/20 text-pink-300 hover:text-white cursor-pointer transition-all inline-flex items-center justify-center"
-                                    title="פתח קונטיינר העלאה וגרירה לתמונה זו"
-                                  >
-                                    <Upload className="w-3.5 h-3.5" />
-                                  </button>
-                                )}
-                              </div>
-                            ) : item.imageUrl ? (
+                            {item.imageUrl ? (
                               <div
                                 onClick={() =>
                                   setSelectedPreviewImage({
@@ -2107,93 +2021,95 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                             ) : (
                               <button
                                 type="button"
+                                onMouseDown={(e) => e.stopPropagation()}
                                 onClick={() => {
                                   setQuickUploadItem(item);
                                   setQuickUploadUrl('');
                                   setQuickUploadMode('ai');
                                 }}
-                                className="p-1 rounded text-slate-500 hover:text-indigo-400 hover:bg-slate-900 transition-colors cursor-pointer"
+                                className="w-8 h-8 p-1.5 rounded-xl text-slate-500 hover:text-indigo-400 hover:bg-slate-900 transition-colors cursor-pointer inline-flex items-center justify-center"
                                 title="צרף תמונה לשלשה זו"
                               >
-                                <ImagePlus className="w-4 h-4" />
+                                <ImagePlus className="w-4 h-4 pointer-events-none" />
                               </button>
                             )}
                           </td>
 
-                          {isEditing ? (
-                            <>
-                              <td className="py-2 px-2">
-                                <input
-                                  type="text"
-                                  value={editPerson}
-                                  onChange={(e) => setEditPerson(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') { e.preventDefault(); handleSaveItem(item.number); }
-                                  }}
-                                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white"
-                                  placeholder="דמות..."
-                                />
-                              </td>
-                              <td className="py-2 px-2">
-                                <input
-                                  type="text"
-                                  value={editAction}
-                                  onChange={(e) => setEditAction(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') { e.preventDefault(); handleSaveItem(item.number); }
-                                  }}
-                                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white"
-                                  placeholder="פעולה..."
-                                />
-                              </td>
-                              <td className="py-2 px-2">
-                                <input
-                                  type="text"
-                                  value={editObject}
-                                  onChange={(e) => setEditObject(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') { e.preventDefault(); handleSaveItem(item.number); }
-                                  }}
-                                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white"
-                                  placeholder="חפץ..."
-                                />
-                              </td>
-                              <td className="py-2 px-2">
-                                <input
-                                  type="text"
-                                  value={editScene}
-                                  onChange={(e) => setEditScene(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') { e.preventDefault(); handleSaveItem(item.number); }
-                                  }}
-                                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-white"
-                                  placeholder="סצנה שלמה..."
-                                />
-                              </td>
-                            </>
-                          ) : (
-                            <>
-                              <td className="py-2.5 px-3 font-semibold text-slate-200 whitespace-nowrap">
-                                {p}
-                              </td>
-                              <td className="py-2.5 px-3 text-slate-300 whitespace-nowrap">
-                                {a}
-                              </td>
-                              <td className="py-2.5 px-3 text-slate-300 whitespace-nowrap">
-                                {o}
-                              </td>
-                              <td className="py-2.5 px-3 text-xs max-w-xs" title={s}>
-                                {s === 'עודכן החפץ עבור שלשת PAO זו, וצריך ליצור סצנה חדשה' ? (
-                                  <span className="text-[11px] text-amber-300 bg-amber-500/20 border border-amber-500/40 rounded px-1.5 py-0.5 inline-flex items-center gap-1 font-bold">
-                                    <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />
-                                    <span>עודכן חפץ - נדרשת סצנה חדשה</span>
-                                  </span>
-                                ) : (
-                                  <span className="text-amber-200/90 truncate block">{s || <span className="text-slate-600">-</span>}</span>
-                                )}
-                              </td>
-                            </>
-                          )}
+                          <td className="py-2.5 px-3 font-semibold text-slate-200">
+                            <div className="flex flex-col gap-1">
+                              <span>{p}</span>
+                              {!personValidation.isValid && (
+                                <div
+                                  title={personValidation.details || personValidation.message}
+                                  className="inline-flex flex-col gap-1 text-[10px] text-amber-300 bg-amber-500/15 border border-amber-500/40 rounded px-1.5 py-1 font-bold leading-snug max-w-xs"
+                                >
+                                  <div className="flex items-start gap-1">
+                                    <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0 mt-0.5" />
+                                    <span>{personValidation.message}</span>
+                                  </div>
+                                  <div className="flex justify-end">
+                                    <button
+                                      type="button"
+                                      onClick={() => ignoreValidation(personIgnoreKey)}
+                                      className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-amber-200 border border-amber-500/40 cursor-pointer"
+                                    >
+                                      התעלם במקרה זה
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-300 whitespace-nowrap">
+                            {a}
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-300">
+                            <div className="flex flex-col gap-1">
+                              <span>{o}</span>
+                              {!objectValidation.isValid && (
+                                <div
+                                  title={objectValidation.details || objectValidation.message}
+                                  className="inline-flex flex-col gap-1 text-[10px] text-amber-300 bg-amber-500/15 border border-amber-500/40 rounded px-1.5 py-1 font-bold leading-snug max-w-xs"
+                                >
+                                  <div className="flex items-start gap-1">
+                                    <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0 mt-0.5" />
+                                    <span>{objectValidation.message}</span>
+                                  </div>
+                                  <div className="flex justify-end">
+                                    <button
+                                      type="button"
+                                      onClick={() => ignoreValidation(objectIgnoreKey)}
+                                      className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-amber-200 border border-amber-500/40 cursor-pointer"
+                                    >
+                                      התעלם במקרה זה
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                              {hasMajorMismatch && (
+                                <div className="inline-flex flex-col gap-1 text-[10px] text-sky-200 bg-sky-500/15 border border-sky-500/40 rounded px-1.5 py-1 font-bold leading-snug max-w-xs">
+                                  <div className="flex items-start gap-1">
+                                    <AlertTriangle className="w-3 h-3 text-sky-400 shrink-0 mt-0.5" />
+                                    <span>
+                                      לתשומת לבך - במודולת MAJOR הגדרת מילה מנמונית אחרת עבור מספר זה ("{majorWord}") ; מומלץ לבחור באותה המילה עבור 2 המודולות
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-end">
+                                    <button
+                                      type="button"
+                                      onClick={() => ignoreValidation(mismatchIgnoreKey)}
+                                      className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-sky-200 border border-sky-500/40 cursor-pointer"
+                                    >
+                                      התעלם במקרה זה
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3 text-xs max-w-xs" title={s}>
+                            <span className="text-amber-200/90 truncate block">{s || <span className="text-slate-600">-</span>}</span>
+                          </td>
 
                           <td className="py-2.5 px-3 text-center whitespace-nowrap">
                             <input
@@ -2207,60 +2123,35 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
 
                           <td className="py-2.5 px-3 text-center whitespace-nowrap">
                             <div className="flex items-center justify-center gap-1.5">
-                              {isEditing ? (
-                                <>
-                                  <button
-                                    type="button"
-                                    onMouseDown={(e) => e.preventDefault()}
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      handleSaveItem(item.number);
-                                    }}
-                                    className="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white font-bold text-xs rounded cursor-pointer shadow-sm transition-all"
-                                  >
-                                    שמור
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setEditingNum(null);
-                                      setEditImageUrl('');
-                                    }}
-                                    className="px-2 py-1 text-xs text-slate-400 hover:text-white cursor-pointer"
-                                  >
-                                    ביטול
-                                  </button>
-                                </>
-                              ) : (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      setEditingNum(item.number);
-                                      setEditPerson(item.person || '');
-                                      setEditAction(item.action || '');
-                                      setEditObject(item.object || '');
-                                      setEditScene(item.scene || '');
-                                      setEditImageUrl(item.imageUrl || '');
-                                    }}
-                                    className="p-1 text-slate-400 hover:text-indigo-400 cursor-pointer transition-colors"
-                                    title="ערוך שורה"
-                                  >
-                                    <Edit3 className="w-3.5 h-3.5" />
-                                  </button>
-                                  {isCustom && (
-                                    <button
-                                      onClick={() => onResetPAOItem(item.number)}
-                                      className="p-1 text-slate-500 hover:text-rose-400 cursor-pointer"
-                                      title="אפס לברירת מחדל"
-                                    >
-                                      <Undo2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  )}
-                                </>
+                              <button
+                                type="button"
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setEditingNum(item.number);
+                                  setEditPerson(item.person || '');
+                                  setEditAction(item.action || '');
+                                  setEditObject(item.object || '');
+                                  setEditScene(item.scene || '');
+                                  setEditImageUrl(item.imageUrl || '');
+                                  setEditActionNotice(null);
+                                }}
+                                className="relative z-10 w-8 h-8 p-1.5 rounded-xl text-slate-300 hover:text-indigo-300 hover:bg-indigo-500/20 border border-transparent hover:border-indigo-500/30 cursor-pointer inline-flex items-center justify-center transition-colors"
+                                title="ערוך שלשה בחלון מורחב"
+                              >
+                                <Edit3 className="w-4 h-4 pointer-events-none" />
+                              </button>
+                              {isCustom && (
+                                <button
+                                  type="button"
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  onClick={() => onResetPAOItem(item.number)}
+                                  className="w-8 h-8 p-1.5 rounded-xl text-slate-500 hover:text-rose-400 cursor-pointer inline-flex items-center justify-center"
+                                  title="אפס לברירת מחדל"
+                                >
+                                  <Undo2 className="w-3.5 h-3.5 pointer-events-none" />
+                                </button>
                               )}
                             </div>
                           </td>
@@ -2455,7 +2346,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                               {quizMeta.digitsP}
                             </span>
                             <span className="text-[10px] font-sans font-bold text-amber-300/90 mt-1 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                              👤 P: {getPAOInitials(parseInt(quizMeta.digitsP || '0', 10) || 0).initials}
+                              👤 P: {getPAOInitials(parseInt(quizMeta.digitsP || '0', 10) || 0, majorDigits).initials}
                             </span>
                           </div>
                           <span className="text-slate-600 self-center">-</span>
@@ -2464,7 +2355,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                               {quizMeta.digitsA}
                             </span>
                             <span className="text-[10px] font-sans font-bold text-purple-300/90 mt-1 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/20">
-                              ⚡ A: {getPAOInitials(parseInt(quizMeta.digitsA || '0', 10) || 0).initials}
+                              ⚡ A: {getPAOInitials(parseInt(quizMeta.digitsA || '0', 10) || 0, majorDigits).initials}
                             </span>
                           </div>
                           <span className="text-slate-600 self-center">-</span>
@@ -2473,7 +2364,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                               {quizMeta.digitsO}
                             </span>
                             <span className="text-[10px] font-sans font-bold text-teal-300/90 mt-1 bg-teal-500/10 px-2 py-0.5 rounded border border-teal-500/20">
-                              📦 O: {getPAOInitials(parseInt(quizMeta.digitsO || '0', 10) || 0).initials}
+                              📦 O: {getPAOInitials(parseInt(quizMeta.digitsO || '0', 10) || 0, majorDigits).initials}
                             </span>
                           </div>
                         </div>
@@ -2489,7 +2380,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                           {quizMeta.mainValue}
                         </div>
                         <span className={`text-[11px] font-sans font-bold ${quizMeta.tagColor} px-2.5 py-0.5 rounded-lg border`}>
-                          ר"ת: {getPAOInitials(currentQuizItem?.number || 0).initials}
+                          ר"ת: {getPAOInitials(currentQuizItem?.number || 0, majorDigits).initials}
                         </span>
                       </div>
                     ) : (
@@ -2510,7 +2401,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                           </span>
                         </div>
                         <span className="text-[11px] font-mono text-amber-300 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                          ר"ת: {getPAOInitials(currentQuizItem.number).initials}
+                          ר"ת: {getPAOInitials(currentQuizItem.number, majorDigits).initials}
                         </span>
                       </div>
 
@@ -2525,7 +2416,19 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                             <AIFieldGeneratorButton
                               promptType="pao_person"
                               inputContext={currentQuizItem.number.toString()}
-                              onGenerated={(val) => setQuizEditPerson(val)}
+                              paoContext={{
+                                number: currentQuizItem.numberStr,
+                                person: quizEditPerson,
+                                action: quizEditAction,
+                                object: quizEditObject,
+                                scene: quizEditScene,
+                              }}
+                              customDigits={majorDigits}
+                              connectingLetters={connectingLetters}
+                              onGenerated={(val) => {
+                                setQuizEditPerson(val);
+                                setQuizActionNotice(null);
+                              }}
                               label="AI"
                               compact
                             />
@@ -2533,7 +2436,10 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                           <input
                             type="text"
                             value={quizEditPerson}
-                            onChange={(e) => setQuizEditPerson(e.target.value)}
+                            onChange={(e) => {
+                              setQuizEditPerson(e.target.value);
+                              if (e.target.value.trim()) setQuizActionNotice(null);
+                            }}
                             placeholder="שם הדמות..."
                             className="w-full bg-slate-900 border border-slate-700 focus:border-orange-500 focus:ring-1 focus:ring-orange-500/30 rounded-lg px-2.5 py-1.5 text-xs text-white"
                           />
@@ -2549,7 +2455,17 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                               promptType="pao_action"
                               inputContext={currentQuizItem.number.toString()}
                               extraContext={quizEditPerson}
+                              paoContext={{
+                                number: currentQuizItem.numberStr,
+                                person: quizEditPerson,
+                                action: quizEditAction,
+                                object: quizEditObject,
+                                scene: quizEditScene,
+                              }}
+                              customDigits={majorDigits}
+                              connectingLetters={connectingLetters}
                               onGenerated={(val) => setQuizEditAction(val)}
+                              onNotice={(note) => setQuizActionNotice(note)}
                               label="AI"
                               compact
                             />
@@ -2561,6 +2477,11 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                             placeholder="פעולה..."
                             className="w-full bg-slate-900 border border-slate-700 focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 rounded-lg px-2.5 py-1.5 text-xs text-white"
                           />
+                          {quizActionNotice && (
+                            <p className="text-[11px] text-amber-300 bg-amber-500/15 border border-amber-500/30 rounded-lg px-2 py-1 mt-1 leading-snug">
+                              ⚠️ {quizActionNotice}
+                            </p>
+                          )}
                         </div>
 
                         <div className="bg-slate-950/80 border border-teal-500/30 rounded-xl p-3 space-y-1.5">
@@ -2573,6 +2494,15 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                               promptType="pao_object"
                               inputContext={currentQuizItem.number.toString()}
                               extraContext={quizEditPerson}
+                              paoContext={{
+                                number: currentQuizItem.numberStr,
+                                person: quizEditPerson,
+                                action: quizEditAction,
+                                object: quizEditObject,
+                                scene: quizEditScene,
+                              }}
+                              customDigits={majorDigits}
+                              connectingLetters={connectingLetters}
                               onGenerated={(val) => setQuizEditObject(val)}
                               label="AI"
                               compact
@@ -2592,12 +2522,21 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                         <div className="flex items-center justify-between">
                           <label className="text-[11px] text-amber-300 font-bold flex items-center gap-1">
                             <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                            <span>סצנה שלמה (תיאור חופשי ורב-חושי):</span>
+                            <span>סצנה שלמה (תיאור חופשי ורב-חושי לפי עקרון SEE):</span>
                           </label>
                           <AIFieldGeneratorButton
                             promptType="pao_scene"
                             inputContext={currentQuizItem.number.toString()}
                             extraContext={`אדם: ${quizEditPerson} | פעולה: ${quizEditAction} | חפץ: ${quizEditObject}`}
+                            paoContext={{
+                              number: currentQuizItem.numberStr,
+                              person: quizEditPerson,
+                              action: quizEditAction,
+                              object: quizEditObject,
+                              scene: quizEditScene,
+                            }}
+                            customDigits={majorDigits}
+                            connectingLetters={connectingLetters}
                             onGenerated={(val) => setQuizEditScene(val)}
                             label="סצנה עם AI"
                             compact
@@ -2773,7 +2712,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                                 <span>{isQuizEditing ? 'סגור עריכה' : 'שנה שלשה'}</span>
                               </button>
                               <span className="text-[11px] font-mono text-amber-300 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                                ר"ת: {getPAOInitials(currentQuizItem.number).initials}
+                                ר"ת: {getPAOInitials(currentQuizItem.number, majorDigits).initials}
                               </span>
                             </div>
                           )}
@@ -3016,13 +2955,16 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
       {selectedPreviewImage && (
         <div
           className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn"
-          onClick={() => setSelectedPreviewImage(null)}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              setSelectedPreviewImage(null);
+            }
+          }}
         >
-          {/* דפוס M3 מספר 1: Container Transform (טרנספורמציית קונטיינר)
-              התמונה הממוזערת מהכרטיס מורחבת רציף למודל תצוגה מפורטת במסך מלא.
-              האלמנט מתרחב ומשנה רדיוס פינות מ-2.25rem ל-1.5rem עם עקומת תאוטה מודגשת. */}
+          {/* דפוס M3 מספר 1: Container Transform (טרנספורמציית קונטיינר) */}
           <div
             className="relative w-full max-w-6xl xl:max-w-7xl bg-slate-900 border border-slate-700 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[92vh] m3-container-transform"
+            onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
@@ -3398,12 +3340,16 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
       {quickUploadItem && (
         <div
           className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 md:p-8 animate-fadeIn overflow-y-auto"
-          onClick={() => setQuickUploadItem(null)}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              setQuickUploadItem(null);
+            }
+          }}
         >
-          {/* דפוס M3 מספר 1: Container Transform (טרנספורמציית קונטיינר)
-              מורפינג רציף של כפתור ההעלאה מהכרטיס/השורה לקונטיינר גרירה והעלאה ייעודי רחב הממלא את רוחב המסך. */}
+          {/* דפוס M3 מספר 1: Container Transform (טרנספורמציית קונטיינר) */}
           <div
             className="w-full max-w-6xl xl:max-w-7xl max-h-[92vh] overflow-y-auto bg-slate-900 border-2 border-pink-500/40 rounded-3xl p-5 sm:p-7 text-right space-y-5 shadow-2xl m3-container-transform my-auto"
+            onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
@@ -3586,17 +3532,541 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
         </div>
       )}
 
+      {/* Expanded Centered PAO Edit Modal (with Light Dismiss via mousedown outside or Escape) */}
+      {editingNum !== null && (() => {
+        const editingItem = paoItems.find((p) => p.number === editingNum);
+        if (!editingItem) return null;
+        const initialsInfo = getPAOInitials(editingItem.number, majorDigits);
+        const modalPersonIgnoreKey = buildLogicIgnoreKey('pao-person', editingItem.number, editPerson);
+        const modalObjectIgnoreKey = buildLogicIgnoreKey('pao-object', editingItem.number, editObject);
+        const rawModalPersonValidation =
+          editPerson.trim() && majorDigits
+            ? validatePAOPerson(editPerson, editingItem.number, majorDigits, connectingLetters)
+            : { isValid: true, message: '' };
+        const modalPersonValidation = isIgnored(modalPersonIgnoreKey)
+          ? { isValid: true, message: '' }
+          : rawModalPersonValidation;
+        const rawModalObjectValidation =
+          editObject.trim() && majorDigits
+            ? validateHebrewLogic(editObject, editingItem.number, majorDigits, connectingLetters, 'pao')
+            : { isValid: true, message: '' };
+        const modalObjectValidation = isIgnored(modalObjectIgnoreKey)
+          ? { isValid: true, message: '' }
+          : rawModalObjectValidation;
+
+        const modalMatchingMajor = majorItems.find((m) => m.number === editingItem.number);
+        const modalMajorWord = modalMatchingMajor?.defaultWord?.trim() || '';
+        const modalMismatchIgnoreKey = buildLogicIgnoreKey(
+          'major-pao-mismatch',
+          editingItem.number,
+          modalMajorWord,
+          editObject
+        );
+        const modalHasMajorMismatch =
+          Boolean(editObject.trim() && modalMajorWord && editObject.trim() !== modalMajorWord) &&
+          !isIgnored(modalMismatchIgnoreKey);
+
+        return (
+          <div
+            className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 md:p-8 animate-fadeIn overflow-y-auto"
+            dir="rtl"
+            onMouseDown={(e) => {
+              // Light Dismiss: Close ONLY if the initial mousedown occurred outside the modal container
+              if (e.target === e.currentTarget) {
+                setEditingNum(null);
+                setEditImageUrl('');
+                setEditActionNotice(null);
+              }
+            }}
+          >
+            <div
+              className="w-full max-w-5xl max-h-[92vh] overflow-y-auto bg-slate-900 border-2 border-indigo-500/50 rounded-3xl p-5 sm:p-7 text-right space-y-5 shadow-2xl m3-container-transform my-auto"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-2xl sm:text-3xl font-black text-indigo-300 bg-indigo-500/15 px-3.5 py-1.5 rounded-2xl border border-indigo-500/30 shadow-inner">
+                    #{editingItem.numberStr}
+                  </span>
+                  <div>
+                    <h3 className="text-base sm:text-xl font-black text-white flex items-center gap-2 flex-wrap">
+                      <span>עריכת שלשת PAO</span>
+                      <span
+                        title={`ראשי תיבות לפי מיפוי הספרות האישי: ${initialsInfo.fullFormula}`}
+                        className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold text-xs"
+                      >
+                        <span className="text-amber-400/80 font-normal">ראשי תיבות נדרשים:</span>
+                        <span>{initialsInfo.initials}</span>
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      נוסחת המיפוי האישי למספר {editingItem.numberStr}: <strong className="text-slate-200">{initialsInfo.fullFormula}</strong> • לחץ מחוץ לחלון או <kbd className="px-1.5 py-0.5 bg-slate-800 rounded text-[10px] font-mono text-slate-300">Esc</kbd> לסגירה מהירה
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onResetPAOItem(editingItem.number);
+                      setEditingNum(null);
+                      setEditImageUrl('');
+                      setEditActionNotice(null);
+                    }}
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold text-slate-400 hover:text-rose-300 bg-slate-950 hover:bg-rose-950/30 border border-slate-800 hover:border-rose-500/30 flex items-center gap-1.5 cursor-pointer transition-all"
+                    title="אפס שלשה זו לברירת המחדל"
+                  >
+                    <Undo2 className="w-3.5 h-3.5" />
+                    <span>איפוס לברירת מחדל</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingNum(null);
+                      setEditImageUrl('');
+                      setEditActionNotice(null);
+                    }}
+                    className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer transition-colors"
+                    title="סגור חלון (Esc)"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* 3 Main PAO Fields in Expanded Horizontal Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* 1. Person */}
+                <div className="bg-slate-950/90 border border-amber-500/30 rounded-2xl p-4 space-y-2 shadow-inner">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-xs sm:text-sm text-amber-400 font-black flex items-center gap-1.5">
+                      <User className="w-4 h-4 text-amber-400" />
+                      <span>👤 אדם (Person):</span>
+                    </label>
+                    <AIFieldGeneratorButton
+                      promptType="pao_person"
+                      inputContext={editingItem.number.toString()}
+                      paoContext={{
+                        number: editingItem.numberStr,
+                        person: editPerson,
+                        action: editAction,
+                        object: editObject,
+                        scene: editScene,
+                      }}
+                      customDigits={majorDigits}
+                      connectingLetters={connectingLetters}
+                      onGenerated={(val) => {
+                        setEditPerson(val);
+                        setEditActionNotice(null);
+                      }}
+                      label="אדם עם AI"
+                      compact
+                    />
+                  </div>
+                  <input
+                    type="text"
+                    value={editPerson}
+                    onChange={(e) => {
+                      setEditPerson(e.target.value);
+                      if (e.target.value.trim()) setEditActionNotice(null);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSaveItem(editingItem.number);
+                      }
+                    }}
+                    placeholder={`דמות אמיתית/בדיונית בראשי תיבות ${initialsInfo.initials}...`}
+                    className={`w-full bg-slate-900 border ${
+                      !modalPersonValidation.isValid
+                        ? 'border-amber-500 focus:border-amber-400'
+                        : 'border-slate-700 focus:border-amber-500'
+                    } focus:ring-1 focus:ring-amber-500/30 rounded-xl px-3.5 py-2.5 text-sm font-bold text-white placeholder-slate-500`}
+                  />
+                  {!modalPersonValidation.isValid ? (
+                    <div className="text-[11px] text-amber-300 bg-amber-500/15 border border-amber-500/35 rounded-xl px-2.5 py-2 leading-snug flex flex-col gap-1.5">
+                      <div className="flex items-start gap-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                        <span>{modalPersonValidation.message}</span>
+                      </div>
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => ignoreValidation(modalPersonIgnoreKey)}
+                          className="text-[10px] font-bold px-2.5 py-0.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-amber-200 border border-amber-500/40 cursor-pointer transition-colors"
+                        >
+                          התעלם במקרה זה
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-slate-400">
+                      שם פרטי ומשפחה המתחילים באותיות המיפוי ({initialsInfo.initials}).
+                    </p>
+                  )}
+                </div>
+
+                {/* 2. Action */}
+                <div className="bg-slate-950/90 border border-purple-500/30 rounded-2xl p-4 space-y-2 shadow-inner">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-xs sm:text-sm text-purple-400 font-black flex items-center gap-1.5">
+                      <Zap className="w-4 h-4 text-purple-400" />
+                      <span>⚡ פעולה (Action):</span>
+                    </label>
+                    <AIFieldGeneratorButton
+                      promptType="pao_action"
+                      inputContext={editingItem.number.toString()}
+                      extraContext={editPerson}
+                      paoContext={{
+                        number: editingItem.numberStr,
+                        person: editPerson,
+                        action: editAction,
+                        object: editObject,
+                        scene: editScene,
+                      }}
+                      customDigits={majorDigits}
+                      connectingLetters={connectingLetters}
+                      onGenerated={(val) => setEditAction(val)}
+                      onNotice={(note) => setEditActionNotice(note)}
+                      label="פעולה עם AI"
+                      compact
+                    />
+                  </div>
+                  <input
+                    type="text"
+                    value={editAction}
+                    onChange={(e) => setEditAction(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSaveItem(editingItem.number);
+                      }
+                    }}
+                    placeholder={
+                      editPerson.trim()
+                        ? `פעולה המזוהה עם ${editPerson}...`
+                        : 'פעולה דינמית (הזן אדם להתאמה אישית)...'
+                    }
+                    className="w-full bg-slate-900 border border-slate-700 focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 rounded-xl px-3.5 py-2.5 text-sm font-bold text-white placeholder-slate-500"
+                  />
+                  {editActionNotice ? (
+                    <div className="text-[11px] text-amber-300 bg-amber-500/15 border border-amber-500/35 rounded-xl px-2.5 py-1.5 leading-snug flex items-start gap-1.5 animate-fadeIn">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                      <span>{editActionNotice}</span>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-slate-400">
+                      פעולה המאפיינת באופן מובהק את האדם שנבחר (אם שדה האדם ריק תוצע פעולה אקראית).
+                    </p>
+                  )}
+                </div>
+
+                {/* 3. Object */}
+                <div className="bg-slate-950/90 border border-teal-500/30 rounded-2xl p-4 space-y-2 shadow-inner">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-xs sm:text-sm text-teal-400 font-black flex items-center gap-1.5">
+                      <Package className="w-4 h-4 text-teal-400" />
+                      <span>📦 חפץ (Object):</span>
+                    </label>
+                    <AIFieldGeneratorButton
+                      promptType="pao_object"
+                      inputContext={editingItem.number.toString()}
+                      extraContext={editPerson}
+                      paoContext={{
+                        number: editingItem.numberStr,
+                        person: editPerson,
+                        action: editAction,
+                        object: editObject,
+                        scene: editScene,
+                      }}
+                      customDigits={majorDigits}
+                      connectingLetters={connectingLetters}
+                      onGenerated={(val) => setEditObject(val)}
+                      label="חפץ עם AI"
+                      compact
+                    />
+                  </div>
+                  <input
+                    type="text"
+                    value={editObject}
+                    onChange={(e) => setEditObject(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSaveItem(editingItem.number);
+                      }
+                    }}
+                    placeholder="חפץ מוחשי מעיצורי המספר ואותיות חיבור בלבד..."
+                    className={`w-full bg-slate-900 border ${
+                      !modalObjectValidation.isValid || modalHasMajorMismatch
+                        ? 'border-amber-500 focus:border-amber-400'
+                        : 'border-slate-700 focus:border-teal-500'
+                    } focus:ring-1 focus:ring-teal-500/30 rounded-xl px-3.5 py-2.5 text-sm font-bold text-white placeholder-slate-500`}
+                  />
+                  {!modalObjectValidation.isValid && (
+                    <div className="text-[11px] text-amber-300 bg-amber-500/15 border border-amber-500/35 rounded-xl px-2.5 py-2 leading-snug flex flex-col gap-1.5">
+                      <div className="flex items-start gap-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                        <span>{modalObjectValidation.message}</span>
+                      </div>
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => ignoreValidation(modalObjectIgnoreKey)}
+                          className="text-[10px] font-bold px-2.5 py-0.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-amber-200 border border-amber-500/40 cursor-pointer transition-colors"
+                        >
+                          התעלם במקרה זה
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {modalHasMajorMismatch && (
+                    <div className="text-[11px] text-sky-200 bg-sky-500/15 border border-sky-500/35 rounded-xl px-2.5 py-2 leading-snug flex flex-col gap-1.5">
+                      <div className="flex items-start gap-1.5">
+                        <AlertTriangle className="w-3.5 h-3.5 text-sky-400 shrink-0 mt-0.5" />
+                        <span>
+                          לתשומת לבך - במודולת MAJOR הגדרת מילה מנמונית אחרת עבור מספר זה ("{modalMajorWord}") ; מומלץ לבחור באותה המילה עבור 2 המודולות
+                        </span>
+                      </div>
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => ignoreValidation(modalMismatchIgnoreKey)}
+                          className="text-[10px] font-bold px-2.5 py-0.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-sky-200 border border-sky-500/40 cursor-pointer transition-colors"
+                        >
+                          התעלם במקרה זה
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {modalObjectValidation.isValid && !modalHasMajorMismatch && (
+                    <p className="text-[11px] text-slate-400">
+                      בנוי מעיצורי המספר בלבד + אותיות חיבור שקופות ({(connectingLetters || ['א', 'נ', 'י', 'ע', 'ו', 'ה']).join(', ')}).
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* 4. Full Mnemonic Scene (SEE Principle, Active Movement & Insane Causality, Von Restorff Focus) */}
+              <div className="bg-slate-950/90 border border-amber-500/35 rounded-2xl p-4 sm:p-5 space-y-2.5 shadow-inner">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <label className="text-xs sm:text-sm text-amber-300 font-black flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-amber-400" />
+                      <span>🎬 סצנה מנמונית שלמה (עקרון SEE • תנועה וסיבתיות מטורפת • אפקט פון רסטורף):</span>
+                    </label>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      שילוב רב-חושי (רעשים, ריחות, מרקמים), רגש והומור קיצוני, הקצנת פרופורציות ושרשרת סיבה-ותוצאה על רקע נקי ופשוט.
+                    </p>
+                  </div>
+                  <AIFieldGeneratorButton
+                    promptType="pao_scene"
+                    inputContext={editingItem.number.toString()}
+                    extraContext={`אדם: ${editPerson} | פעולה: ${editAction} | חפץ: ${editObject}`}
+                    paoContext={{
+                      number: editingItem.numberStr,
+                      person: editPerson,
+                      action: editAction,
+                      object: editObject,
+                      scene: editScene,
+                    }}
+                    customDigits={majorDigits}
+                    connectingLetters={connectingLetters}
+                    onGenerated={(val) => setEditScene(val)}
+                    label="צור סצנה עם AI"
+                  />
+                </div>
+                <textarea
+                  rows={3}
+                  value={editScene}
+                  onChange={(e) => setEditScene(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSaveItem(editingItem.number);
+                    }
+                  }}
+                  placeholder="תאר סצנה חיה, מוקצנת ורב-חושית שבה הדמות מבצעת את הפעולה על החפץ בתנועה מתפרצת..."
+                  className="w-full bg-slate-900 border border-slate-700 focus:border-amber-500 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white placeholder-slate-500 leading-relaxed"
+                />
+              </div>
+
+              {/* 5. Visual Image Section inside Modal */}
+              <div className="bg-slate-950/90 border border-indigo-500/30 rounded-2xl p-4 sm:p-5 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="text-xs sm:text-sm text-indigo-300 font-bold flex items-center gap-1.5">
+                    <ImageIcon className="w-4 h-4 text-indigo-400" />
+                    <span>תמונה ויזואלית לסצנת PAO:</span>
+                  </label>
+
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center bg-slate-900 p-1 rounded-xl border border-slate-800">
+                      <button
+                        type="button"
+                        onClick={() => setCardImageMode('ai')}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                          cardImageMode === 'ai'
+                            ? 'bg-gradient-to-r from-amber-500 to-indigo-600 text-white shadow-sm'
+                            : 'text-amber-400/80 hover:text-amber-300'
+                        }`}
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>יצירה עם Gemini AI</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCardImageMode('upload')}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                          cardImageMode === 'upload'
+                            ? 'bg-indigo-600 text-white shadow-sm'
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        📁 העלאת קובץ / קישור
+                      </button>
+                    </div>
+
+                    {editImageUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setEditImageUrl('')}
+                        className="text-xs text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 px-2.5 py-1 rounded-xl flex items-center gap-1 cursor-pointer transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>הסר תמונה</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {cardImageMode === 'ai' ? (
+                  <PAOImageGeneratorTab
+                    numberStr={editingItem.numberStr}
+                    numberVal={editingItem.number}
+                    person={editPerson}
+                    action={editAction}
+                    object={editObject}
+                    scene={editScene}
+                    currentUser={currentUser}
+                    saveButtonLabel="שמור תמונה לשלשה זו"
+                    onLogin={onLogin}
+                    onImageGenerated={(dataUrl) => {
+                      setEditImageUrl(dataUrl);
+                      onUpdatePAOItem(editingItem.number, {
+                        person: editPerson,
+                        action: editAction,
+                        object: editObject,
+                        scene: editScene,
+                        imageUrl: dataUrl,
+                      });
+                      setEditingNum(null);
+                      setEditActionNotice(null);
+                      onEarnPoints(15, 'יצירת תמונה מנמונית עם Gemini');
+                    }}
+                  />
+                ) : (
+                  <div className="space-y-3">
+                    {editImageUrl && (
+                      <div className="flex items-center justify-between bg-slate-900 p-3 rounded-2xl border border-slate-800">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <img
+                            src={editImageUrl}
+                            alt="סצנה"
+                            className="w-16 h-16 object-cover rounded-xl border border-indigo-500/40 shrink-0"
+                          />
+                          <div className="min-w-0">
+                            <span className="text-xs font-bold text-slate-200 block truncate">תמונה קיימת לשלשה #{editingItem.numberStr}</span>
+                            <span className="text-[11px] text-slate-400 block">גרור קובץ חדש או הדבק קישור למטה להחלפה</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    <ImageDropzone
+                      isProcessing={isCompressing}
+                      title={editImageUrl ? 'בחר קובץ או גרור לכאן להחלפת התמונה' : 'בחר קובץ או גרור לכאן'}
+                      subtitle="Choose a file or drag it here • JPG, PNG, WebP"
+                      className="py-5 px-4"
+                      onImageSelected={async (file) => {
+                        try {
+                          setIsCompressing(true);
+                          const comp = await compressImageFile(file);
+                          setEditImageUrl(comp);
+                        } catch (err) {
+                          console.error(err);
+                        } finally {
+                          setIsCompressing(false);
+                        }
+                      }}
+                    />
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-400 shrink-0">או קישור ישיר לתמונה:</span>
+                      <input
+                        type="url"
+                        value={editImageUrl.startsWith('data:') ? '' : editImageUrl}
+                        onChange={(e) => setEditImageUrl(e.target.value)}
+                        placeholder="https://example.com/image.jpg"
+                        className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer Action Buttons */}
+              <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-800">
+                <span className="text-xs text-slate-400">
+                  💡 טיפ: לחץ <kbd className="px-1.5 py-0.5 bg-slate-800 rounded font-mono text-[10px] text-slate-300">Enter</kbd> לשמירה מהירה או <kbd className="px-1.5 py-0.5 bg-slate-800 rounded font-mono text-[10px] text-slate-300">Esc</kbd> לביטול
+                </span>
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingNum(null);
+                      setEditImageUrl('');
+                      setEditActionNotice(null);
+                    }}
+                    className="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 cursor-pointer transition-colors"
+                  >
+                    ביטול
+                  </button>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleSaveItem(editingItem.number);
+                    }}
+                    className="px-6 py-2.5 rounded-xl text-xs sm:text-sm font-black bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white cursor-pointer shadow-lg shadow-indigo-600/30 flex items-center gap-2 transition-all"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>שמור שינויים</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Validation Alert Modal */}
       {validationModal && validationModal.isOpen && (
         <div
           className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn"
-          onClick={() => setValidationModal(null)}
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              setValidationModal(null);
+            }
+          }}
         >
-          {/* דפוס M3 מספר 1 ומספר 4: Container Transform + Damped Harmonic Spring Shake
-              הודעת האזהרה נפתחת בהתרחבות קונטיינר ומגיבה ברטט קפיצי הרמוני (Spring Shake)
-              כדי לסמן באופן אינטואיטיבי חריגה מכללי הלוגיקה והוולידציה. */}
           <div
             className="bg-slate-900 border-2 border-amber-500/80 rounded-3xl max-w-md w-full p-6 text-right space-y-4 shadow-2xl m3-container-transform animate-shake"
+            onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-3">
@@ -3624,9 +4094,9 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                 <button
                   type="button"
                   onClick={validationModal.onConfirmBypass}
-                  className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-3 py-2 rounded-xl transition-all cursor-pointer"
+                  className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold px-3.5 py-2 rounded-xl border border-slate-700 transition-all cursor-pointer"
                 >
-                  שמור בכל זאת כמקרה חריג
+                  התעלם במקרה זה
                 </button>
               )}
               <button

@@ -2,7 +2,7 @@ import express, { Request, Response } from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { GoogleGenAI, Type } from '@google/genai';
+import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
 
 dotenv.config();
 
@@ -13,6 +13,10 @@ const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 app.use(express.json({ limit: '10mb' }));
+
+// Ultra-low-latency text model & config (minimal thinking overhead for instant responses)
+const FAST_TEXT_MODEL = 'gemini-3.1-flash-lite';
+const FAST_THINKING_CONFIG = { thinkingLevel: ThinkingLevel.MINIMAL };
 
 // Initialize Gemini Client
 export function getGeminiClient(): GoogleGenAI {
@@ -98,9 +102,10 @@ app.post('/api/gemini/evaluate-association', async (req: Request, res: Response)
 }`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: FAST_TEXT_MODEL,
       contents: prompt,
       config: {
+        thinkingConfig: FAST_THINKING_CONFIG,
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
@@ -179,9 +184,10 @@ ${appContext ? JSON.stringify(appContext) : 'מאגר נתונים סטנדרט�
 - ADD_ASSOCIATION: {"category": "...", "sourceKey": "...", "targetValue": "...", "kineticScene": "...", "notes": "..."}`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: FAST_TEXT_MODEL,
       contents: formattedContents,
       config: {
+        thinkingConfig: FAST_THINKING_CONFIG,
         systemInstruction,
         temperature: 0.7,
       },
@@ -211,454 +217,828 @@ ${appContext ? JSON.stringify(appContext) : 'מאגר נתונים סטנדרט�
   }
 });
 
-// Helper to compute Hebrew Major & PAO constraints for prompts
-function getHebrewMajorConstraints(inputStr: string, extraStr: string, customDigits?: any[]): string {
-  const majorDigitsMap: Record<number, { letter: string; all: string }> = {
-    0: { letter: 'ס', all: 'ס, ז, ש דגושה' },
-    1: { letter: 'ל', all: 'ל' },
-    2: { letter: 'ב', all: 'ב' },
-    3: { letter: 'ג', all: 'ג, ק, כ' },
-    4: { letter: 'ד', all: 'ד, ת, ט' },
-    5: { letter: 'ח', all: 'ח' },
-    6: { letter: 'ש', all: 'ש, ג\', צ\'' },
-    7: { letter: 'ר', all: 'ר' },
-    8: { letter: 'מ', all: 'מ' },
-    9: { letter: 'פ', all: 'פ (רפה ודגושה)' },
+// Normalization and phonetic helpers for Hebrew Major & PAO validation on the server
+const SERVER_FINAL_LETTER_MAP: Record<string, string> = {
+  'ך': 'כ',
+  'ם': 'מ',
+  'ן': 'נ',
+  'ף': 'פ',
+  'ץ': 'צ',
+};
+
+function normalizeHebrewCharServer(ch: string): string {
+  return SERVER_FINAL_LETTER_MAP[ch] || ch;
+}
+
+function extractHebrewLettersServer(text: string): string[] {
+  if (!text) return [];
+  const matches = text.match(/[\u0590-\u05FF]/g) || [];
+  return matches
+    .filter((ch) => ch >= 'א' && ch <= 'ת')
+    .map(normalizeHebrewCharServer);
+}
+
+interface ParsedDigitMapping {
+  digit: number;
+  primaryLetter: string;
+  letters: string[];
+  displayStr: string;
+}
+
+function buildUserDigitsDictionary(customDigits?: any[]): Record<number, ParsedDigitMapping> {
+  const defaults: Record<number, { primary: string; letters: string[]; display: string }> = {
+    0: { primary: 'ס', letters: ['ס', 'ז', 'ש'], display: 'ס, ז, ש דגושה (שׂ)' },
+    1: { primary: 'ל', letters: ['ל'], display: 'ל' },
+    2: { primary: 'ב', letters: ['ב'], display: 'ב' },
+    3: { primary: 'ג', letters: ['ג', 'ק', 'כ'], display: 'ג, ק, כ' },
+    4: { primary: 'ד', letters: ['ד', 'ת', 'ט'], display: 'ד, ת, ט' },
+    5: { primary: 'ח', letters: ['ח'], display: 'ח' },
+    6: { primary: 'ש', letters: ['ש', 'ג', 'צ'], display: 'ש (שׁ), ג\', צ\'' },
+    7: { primary: 'ר', letters: ['ר'], display: 'ר' },
+    8: { primary: 'מ', letters: ['מ'], display: 'מ' },
+    9: { primary: 'פ', letters: ['פ'], display: 'פ (רפה ודגושה)' },
   };
 
-  // If user has customized the digits in the database/localStorage, strictly apply their mapping!
+  const result: Record<number, ParsedDigitMapping> = {};
+  for (let d = 0; d <= 9; d++) {
+    result[d] = {
+      digit: d,
+      primaryLetter: defaults[d].primary,
+      letters: [...defaults[d].letters],
+      displayStr: defaults[d].display,
+    };
+  }
+
   if (Array.isArray(customDigits) && customDigits.length > 0) {
     for (const cd of customDigits) {
-      if (typeof cd.number === 'number' && cd.number >= 0 && cd.number <= 9) {
-        const cons = (cd.userConsonants || cd.consonants || '').trim();
-        if (cons) {
-          const firstHebrew = cons.match(/[\u0590-\u05FF]/);
-          majorDigitsMap[cd.number] = {
-            letter: firstHebrew ? firstHebrew[0] : cons[0],
-            all: cons,
-          };
+      const d = typeof cd?.number === 'number' ? cd.number : parseInt(String(cd?.number ?? ''), 10);
+      if (!isNaN(d) && d >= 0 && d <= 9) {
+        const consRaw = String(cd.userConsonants || cd.consonants || '').trim();
+        if (consRaw) {
+          // Strip descriptive words like "דגושה" or "רפה" before extracting consonant letters
+          const cleanedCons = consRaw
+            .replace(/דגושה/g, '')
+            .replace(/רפה/g, '')
+            .replace(/ו-/g, ' ');
+          const extracted = Array.from(new Set(extractHebrewLettersServer(cleanedCons)));
+          if (extracted.length > 0) {
+            result[d] = {
+              digit: d,
+              primaryLetter: extracted[0],
+              letters: extracted,
+              displayStr: consRaw,
+            };
+          }
         }
       }
     }
   }
 
-  // Check if there is a number in input or extra
-  const match = (inputStr + ' ' + extraStr).match(/\b(\d{1,2})\b/);
-  if (!match) {
-    return `\nמיפוי האותיות והספרות הפעיל במערכת (מעודכן לפי הגדרות בסיס הנתונים):
-0 = ${majorDigitsMap[0]?.all}
-1 = ${majorDigitsMap[1]?.all}
-2 = ${majorDigitsMap[2]?.all}
-3 = ${majorDigitsMap[3]?.all}
-4 = ${majorDigitsMap[4]?.all}
-5 = ${majorDigitsMap[5]?.all}
-6 = ${majorDigitsMap[6]?.all}
-7 = ${majorDigitsMap[7]?.all}
-8 = ${majorDigitsMap[8]?.all}
-9 = ${majorDigitsMap[9]?.all}
-אותיות החיבור השקופות: "א-נ-י-ע-ו-נ-ה" (א, נ, י, ע, ו, ה, ן) שאינן מקושרות לאף מספר, ומשמשות כדבק חיבור חופשי!`;
-  }
-
-  const num = parseInt(match[1], 10);
-  if (isNaN(num) || num < 0 || num > 99) return '';
-
-  const tens = Math.floor(num / 10) % 10;
-  const units = num % 10;
-
-  const tensDef = majorDigitsMap[tens] || { letter: 'ס', all: 'ס' };
-  const unitsDef = majorDigitsMap[units] || { letter: 'ס', all: 'ס' };
-
-  if (num < 10) {
-    return `\nחוק ברזל מוחלט למספר ${num}:
-- לפי בסיס הנתונים: ספרת היסוד ${num} מייצגת את האות "${tensDef.letter}" (עיצורים מותרים: ${tensDef.all}).
-- אותיות החיבור השקופות: "א-נ-י-ע-ו-נ-ה" (א, נ, י, ע, ו, ה, ן) שאינן מקושרות למספר, ומשמשות כדבק חופשי ללא ערך מספרי!
-- חובה עבור חפץ PAO / מילה למספר ${num}: שם החפץ הבסיסי חייב להתבסס אך ורק על עיצורי הספרה "${tensDef.letter}" (בתוספת אותיות חיבור שקופות א-נ-י-ע-ו-נ-ה בלבד, בעדיפות למילה קצרה ככל הניתן)!`;
-  }
-
-  return `\nחוק ברזל מוחלט ובלתי מתפשר למספר ${num}:
-- מיפוי לפי בסיס הנתונים: ספרת העשרות ${tens} = "${tensDef.letter}" (${tensDef.all}), ספרת היחידות ${units} = "${unitsDef.letter}" (${unitsDef.all}).
-- אותיות החיבור השקופות: "א-נ-י-ע-ו-נ-ה" (א, נ, י, ע, ו, ה, ן) שאינן מקושרות למספר, ומשמשות כדבק חופשי ללא ערך מספרי!
-- חובה עבור חפץ PAO (וגם מילת Major) למספר ${num}:
-  * המילה הבסיסית לחפץ חייבת להתבסס אך ורק על עיצורי הספרות: "${tensDef.letter}" (ספרת עשרות) ו-"${unitsDef.letter}" (ספרת יחידות), בתוספת אותיות חיבור שקופות בלבד (א, נ, י, ע, ו, ה, ן).
-  * עדיפות עליונה למילה קצרה ככל הניתן (למשל עבור 15 עם 1=${tensDef.letter} ו-5=${unitsDef.letter}: אופציות לגיטימיות ומעולות הן: "לוח", "לחי", "לחן", "לחם")!
-  * עטוף את המילה הקצרה בתיאור רב-חושי מוחשי, בולט ומוחשי (צבעים עזים, מרקם, ריח, טמפרטורה), אך שם החפץ הבסיסי חייב להישאר מעוגן באותיות אלו בדיוק.
-- חובה עבור דמות PAO למספר ${num}: ראשי התיבות של השם הפרטי ושם המשפחה של הדמות חייבים להיות בדיוק: ${tensDef.letter}.${unitsDef.letter}. (למשל: ס.ח., ל.ד., ב.ג., פ.ס.).`;
+  return result;
 }
 
+function formatUserMappingDictionaryPrompt(
+  digitsDict: Record<number, ParsedDigitMapping>,
+  connectingLetters: string[]
+): string {
+  const connDisplay = connectingLetters.join(', ');
+  return `=== מילון מיפוי האותיות והספרות האישי של המשתמש (חוקי המשחק המחייבים 0-9) ===
+0 = ${digitsDict[0].displayStr} (אותיות תקפות: ${digitsDict[0].letters.join(', ')})
+1 = ${digitsDict[1].displayStr} (אותיות תקפות: ${digitsDict[1].letters.join(', ')})
+2 = ${digitsDict[2].displayStr} (אותיות תקפות: ${digitsDict[2].letters.join(', ')})
+3 = ${digitsDict[3].displayStr} (אותיות תקפות: ${digitsDict[3].letters.join(', ')})
+4 = ${digitsDict[4].displayStr} (אותיות תקפות: ${digitsDict[4].letters.join(', ')})
+5 = ${digitsDict[5].displayStr} (אותיות תקפות: ${digitsDict[5].letters.join(', ')})
+6 = ${digitsDict[6].displayStr} (אותיות תקפות: ${digitsDict[6].letters.join(', ')})
+7 = ${digitsDict[7].displayStr} (אותיות תקפות: ${digitsDict[7].letters.join(', ')})
+8 = ${digitsDict[8].displayStr} (אותיות תקפות: ${digitsDict[8].letters.join(', ')})
+9 = ${digitsDict[9].displayStr} (אותיות תקפות: ${digitsDict[9].letters.join(', ')})
+אותיות חיבור/ניקוד מותרות (ללא ערך מספרי): ${connDisplay} (וכן צורות סופיות כגון ן)
+==========================================================================`;
+}
+
+// Validate that a suggested Person name has initials matching tensDigit and unitsDigit
+function serverValidatePersonInitials(
+  name: string,
+  tensDigit: number,
+  unitsDigit: number,
+  digitsDict: Record<number, ParsedDigitMapping>
+): boolean {
+  const clean = (name || '')
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/["'״׳]/g, '')
+    .trim();
+  const words = clean.split(/[\s\-–—\.]+/).filter((w) => w.length > 0);
+  if (words.length < 2) return false;
+
+  const firstLetters = extractHebrewLettersServer(words[0]);
+  if (firstLetters.length === 0) return false;
+  const init1 = firstLetters[0];
+
+  const tensAllowed = new Set(digitsDict[tensDigit]?.letters || []);
+  const unitsAllowed = new Set(digitsDict[unitsDigit]?.letters || []);
+
+  if (!tensAllowed.has(init1)) return false;
+
+  for (let i = 1; i < words.length; i++) {
+    const wLetters = extractHebrewLettersServer(words[i]);
+    if (wLetters.length > 0 && unitsAllowed.has(wLetters[0])) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Blacklist of person names, English transliterations, pronouns, prepositions, and abstract non-objects
+const NON_OBJECT_BLACKLIST = new Set<string>([
+  'בני', 'בוי', 'אבי', 'אחי', 'אמי', 'אמא', 'אבא', 'בנו', 'בנה', 'בן', 'בת',
+  'בי', 'בו', 'בה', 'לי', 'לו', 'לה', 'מי', 'מה', 'זו', 'זה', 'אי', 'אל', 'על',
+  'עד', 'עם', 'אם', 'או', 'אך', 'רק', 'גם', 'כל', 'כן', 'לא', 'נא', 'גיא', 'נוי',
+  'רוי', 'שי', 'טל', 'חן', 'דן', 'רן', 'גד', 'נח', 'סוד', 'סוף', 'בכי', 'כוח',
+  'חוב', 'חום', 'פשע', 'רז', 'רב', 'מול', 'מון', 'דאה', 'דוח', 'לחן', 'קיא', 'שה', 'שסע', 'חי',
+]);
+
+// Validate that a suggested Object or Major Word is a valid tangible noun using ONLY the number's consonants + connectingLetters
+function serverValidateObjectWord(
+  wordText: string,
+  targetNumber: number,
+  digitsDict: Record<number, ParsedDigitMapping>,
+  connectingLetters: string[],
+  isMajorMode: boolean
+): boolean {
+  const clean = (wordText || '')
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/["'״׳]/g, '')
+    .trim();
+  if (!clean) return false;
+
+  // Reject single-character strings or blacklisted non-objects (names, transliterations, abstract words)
+  if (clean.length < 2 || NON_OBJECT_BLACKLIST.has(clean)) return false;
+
+  // Should be a concise noun/object (1-2 words max)
+  const wordCount = clean.split(/\s+/).filter(Boolean).length;
+  if (wordCount > 2) return false;
+
+  const allLetters = extractHebrewLettersServer(clean);
+  if (allLetters.length < 2) return false;
+
+  const normConnecting = new Set(connectingLetters.map(normalizeHebrewCharServer));
+  const nonConnecting = allLetters.filter((ch) => !normConnecting.has(ch));
+  if (nonConnecting.length === 0) return false;
+
+  const letterToDigits = new Map<string, number[]>();
+  for (let d = 0; d <= 9; d++) {
+    for (const ch of digitsDict[d]?.letters || []) {
+      const norm = normalizeHebrewCharServer(ch);
+      const arr = letterToDigits.get(norm) || [];
+      if (!arr.includes(d)) arr.push(d);
+      letterToDigits.set(norm, arr);
+    }
+  }
+
+  // Every non-connecting letter must belong to a valid digit
+  for (const ch of nonConnecting) {
+    if (!letterToDigits.has(ch)) return false;
+  }
+
+  // Single-digit Major (0-9)
+  if (isMajorMode && targetNumber >= 0 && targetNumber <= 9) {
+    return nonConnecting.every((ch) => (letterToDigits.get(ch) || []).includes(targetNumber));
+  }
+
+  const tens = Math.floor(targetNumber / 10) % 10;
+  const units = targetNumber % 10;
+
+  // For PAO 00-09, also allow single-digit consonant matching units (e.g. 01 -> עלה, 02 -> בננה)
+  if (!isMajorMode && tens === 0) {
+    const allMatchUnits = nonConnecting.every((ch) => (letterToDigits.get(ch) || []).includes(units));
+    if (allMatchUnits) return true;
+  }
+
+  // If tens === units (e.g. 00, 11, 22), allow 1 or 2 identical consonants of that digit
+  if (tens === units) {
+    return nonConnecting.every((ch) => (letterToDigits.get(ch) || []).includes(tens));
+  }
+
+  // Otherwise must have exactly 2 consonant groups: first matching tens, second matching units
+  if (nonConnecting.length !== 2) return false;
+  const firstMatchesTens = (letterToDigits.get(nonConnecting[0]) || []).includes(tens);
+  const secondMatchesUnits = (letterToDigits.get(nonConnecting[1]) || []).includes(units);
+  return firstMatchesTens && secondMatchesUnits;
+}
+
+// Comprehensive Hebrew tangible objects pool (חפצים ועצמים מוחשיים בלבד) filtered dynamically against the user's custom 0-9 mapping + connecting letters
+const HEBREW_NOUN_CANDIDATES_POOL: string[] = [
+  // Single-digit tangible objects (0-9 with connecting letters א, ה, ו, י, נ, ע)
+  'סוס', 'סושי', 'אוזן',
+  'לב', 'עלה', 'נעל', 'לול', 'אלה', 'איל',
+  'בננה', 'אבן', 'בובה', 'בועה', 'ענב', 'אבוב', 'בית',
+  'כוס', 'עוגה', 'עוגן', 'גג', 'קן', 'ענק', 'קנה',
+  'תה', 'עט', 'תות', 'תאנה', 'דוד', 'נדנדה',
+  'אח', 'חוח', 'חוט',
+  'אש', 'שעון', 'שן', 'שושנה', 'עשן', 'עציץ',
+  'נר', 'ארון', 'נייר', 'הר', 'איור', 'אור',
+  'מנוע', 'מים', 'ים', 'מעיין',
+  'עפיפון', 'פנינה', 'ענף', 'אופן', 'פוף', 'אף', 'פה',
+  // Double-consonant tangible objects (00-99 with connecting letters א, ה, ו, י, נ, ע)
+  'סל', 'סיר', 'ספר', 'סרט', 'סבון', 'שק', 'שיח', 'שום', 'שף', 'סולם', 'סכין',
+  'לוח', 'לחי', 'לוז', 'לבה', 'לק', 'ילד', 'לשון', 'לירה', 'לום', 'לפיד', 'לימון', 'לחם',
+  'בז', 'בלון', 'בול', 'בנק', 'בושם', 'בור', 'באר', 'במה', 'במבה', 'בופה',
+  'גז', 'גל', 'גב', 'גביע', 'כד', 'קש', 'קיר', 'אגם', 'קוף', 'כתר', 'כדור', 'כלב', 'כובע',
+  'טס', 'דלי', 'דוב', 'דג', 'דשא', 'דירה', 'דם', 'דף', 'דלת', 'דגל', 'דרקון', 'תוף',
+  'חסה', 'חול', 'חג', 'חץ', 'חור', 'חוף', 'חרב', 'חבל', 'חתול',
+  'צל', 'צב', 'צוק', 'שוט', 'שושן', 'שור', 'שופר', 'שולחן', 'שטיח',
+  'רעל', 'רובה', 'רוק', 'רדיו', 'ראש', 'רשת', 'רכבת',
+  'מוס', 'מבצר', 'מאג', 'מד', 'מוח', 'מיץ', 'מור', 'מנוף', 'מפתח', 'מטוס', 'מראה', 'מנורה',
+  'פז', 'פיל', 'פנס', 'פאב', 'פך', 'פת', 'פיח', 'פח', 'פיצה', 'פר', 'פרה', 'פנים', 'פטיש', 'פרח',
+];
+
+function getValidPoolWordsForNumber(
+  targetNumber: number,
+  digitsDict: Record<number, ParsedDigitMapping>,
+  connectingLetters: string[],
+  isMajorMode: boolean
+): string[] {
+  const valid = HEBREW_NOUN_CANDIDATES_POOL.filter((w) =>
+    serverValidateObjectWord(w, targetNumber, digitsDict, connectingLetters, isMajorMode)
+  );
+  if (valid.length > 0) return valid;
+
+  // Fallback to default objects if custom mapping has no matches in pool
+  const defaultObjectsByDigit: Record<number, string[]> = {
+    0: ['סוס', 'סושי', 'אוזן'],
+    1: ['עלה', 'נעל', 'לול'],
+    2: ['בננה', 'אבן', 'בובה', 'בועה'],
+    3: ['כוס', 'עוגה', 'עוגן', 'גג'],
+    4: ['עט', 'תות', 'תה', 'דוד'],
+    5: ['אח', 'חוט', 'חוח'],
+    6: ['שעון', 'שן', 'שושנה', 'אש'],
+    7: ['נר', 'ארון', 'נייר', 'הר'],
+    8: ['מנוע', 'מים', 'ים'],
+    9: ['עפיפון', 'פנינה', 'ענף', 'פוף'],
+  };
+  const units = targetNumber % 10;
+  return defaultObjectsByDigit[units] || ['סוס'];
+}
+
+// Curated famous people pool by number (00-99) for instant validation fallback
+const CURATED_PEOPLE_BY_NUMBER: Record<number, string[]> = {
+  0: ['סילבסטר סטאלון', 'סטיבן סיגל', 'סופיה סמית', 'סם סמית'],
+  1: ['סטן לי', 'סמואל לוי', 'סופיה לורן', 'סימון לבייב'],
+  2: ["ספונג' בוב", 'סנדרה בולוק', 'סשה ברון', 'סימון ביילס'],
+  3: ['סטיבן קינג', 'סטיב קארל', 'סיימון קאוול', 'סופיה קופולה'],
+  4: ['סלבדור דאלי', 'סנופ דוג', 'סלין דיון', 'סופיה דאל'],
+  5: ['סדאם חוסיין', 'סלמה הייק', 'סטיבן הוקינג'],
+  6: ['סטיבן שפילברג', 'סופיה שחר', 'סמי שם'],
+  7: ["סטיב רוג'רס", 'סת רוגן', 'סרחיו ראמוס'],
+  8: ['ספיידר מן', 'סופר מן', 'סטיב מרטין'],
+  9: ['סיגמונד פרויד', 'שרה פיילין', 'סבסטיאן פטל'],
+  10: ['לוק סקייווקר', 'לואיס סוארס', 'ליסה סימפסון'],
+  11: ['לינדזי לוהאן', 'לוסי לו', 'לארי לוי'],
+  12: ["לברון ג'יימס", 'לוק בסון', 'ליאור בנאי'],
+  13: ['לארה קרופט', 'ליידי גאגא', 'לאונרד כהן'],
+  14: ['ליאונרדו דיקפריו', 'לארי דייוויד', 'לנה דל'],
+  15: ["ליטל ח'מינאי", 'לואיס המילטון', 'ליאור חלפון'],
+  16: ['ליאור שליין', 'לוק שואו', 'ליאה שבת'],
+  17: ["ליונל ריצ'י", 'ליאור רז', 'לו ריד'],
+  18: ['ליונל מסי', 'ליאה מישל', 'לואיס מיגל'],
+  19: ['לואיס פיגו', 'לוק פרי', 'ליאור פרחי'],
+  20: ['בארט סימפסון', 'רוברט סמית', 'בריטני ספירס'],
+  21: ['ברוס לי', 'באז שנות-אור', 'בן לוי'],
+  22: ['באגס באני', 'ביל בור', 'בריז\'יט בארדו'],
+  23: ['ביל גייטס', 'בני גנץ', 'בן גוריון'],
+  24: ['בוב דילן', 'בטי דייוויס', 'בראד דייוויס'],
+  25: ['בנימין חוטובלי', 'בני חן', 'ברק חירם'],
+  26: ['בן שפירו', 'ברק שמיר', 'בועז שרעבי'],
+  27: ['בראדלי קופר', 'בר רפאלי', 'בוב רוס'],
+  28: ['ברונו מארס', 'בוב מארלי', 'ביל מארי'],
+  29: ['בראד פיט', 'בוב פוס', 'בני פרידמן'],
+};
+
+function getFallbackPersonForNumber(
+  targetNumber: number,
+  digitsDict: Record<number, ParsedDigitMapping>,
+  cycleIdx: number
+): string {
+  const tens = Math.floor(targetNumber / 10) % 10;
+  const units = targetNumber % 10;
+  const curated = CURATED_PEOPLE_BY_NUMBER[targetNumber] || [];
+  const validCurated = curated.filter((p) =>
+    serverValidatePersonInitials(p, tens, units, digitsDict)
+  );
+  if (validCurated.length > 0) {
+    return validCurated[cycleIdx % validCurated.length];
+  }
+
+  // Synthesize valid Hebrew first + last name matching tens & units letters
+  const firstNamesByLetter: Record<string, string[]> = {
+    'ס': ['סילבסטר', 'סטיבן', 'סופיה', 'סמי'],
+    'ז': ['זאב', 'זוהר', 'זינדין'],
+    'ל': ['ליאונרדו', 'לארה', 'ליאור', 'לוק'],
+    'ב': ['בראד', 'ברוס', 'בנימין', 'בר'],
+    'ג': ['גלי', 'גיא', 'ג\'ורג\'', 'גדי'],
+    'ק': ['קוונטין', 'קובי', 'קיאנו'],
+    'כ': ['כריסטיאנו', 'כריס', 'כרמל'],
+    'ד': ['דניאל', 'דוד', 'דונלד', 'דנה'],
+    'ת': ['תום', 'תמר', 'תומר'],
+    'ט': ['טוני', 'טיילור', 'טל'],
+    'ח': ['חיים', 'חנה', 'חגי', 'חן'],
+    'ש': ['שרלוק', 'שון', 'שירה', 'שמעון'],
+    'צ': ['צ\'ארלי', 'צבי', 'צופית'],
+    'ר': ['רוברט', 'רונאלדו', 'רמי', 'ריטה'],
+    'מ': ['מרילין', 'מייקל', 'משה', 'מאיה'],
+    'פ': ['פאבלו', 'פיטר', 'פנינה', 'פול'],
+  };
+
+  const lastNamesByLetter: Record<string, string[]> = {
+    'ס': ['סטאלון', 'סימפסון', 'ספירס', 'סמית'],
+    'ז': ['זידאן', 'זוהר', 'זלנסקי'],
+    'ל': ['לוי', 'לי', 'לוהאן', 'לורן'],
+    'ב': ['בוב', 'בולוק', 'בנאי', 'בראיינט'],
+    'ג': ['גייטס', 'גאגא', 'גנץ', 'גרין'],
+    'ק': ['קרופט', 'קינג', 'קروز', 'קופולה'],
+    'כ': ['כהן', 'כץ', 'כספי'],
+    'ד': ['דיקפריו', 'דאלי', 'דילן', 'דמון'],
+    'ת': ['תבורי', 'תורג\'מן'],
+    'ט': ['טראמפ', 'טרנטינו', 'טסה'],
+    'ח': ['חוסיין', 'חדד', 'חלפון', 'חן'],
+    'ש': ['שפילברג', 'שליין', 'שמיר', 'שבת'],
+    'צ': ['צ\'פלין', 'צוקרברג'],
+    'ר': ['רוג\'רס', 'רפאלי', 'ריצ\'י', 'רז'],
+    'מ': ['מונרו', 'מסי', 'מארלי', 'מאסק'],
+    'פ': ['פרויד', 'פיט', 'פיקאסו', 'פרס'],
+  };
+
+  const tLet = digitsDict[tens]?.primaryLetter || 'ס';
+  const uLet = digitsDict[units]?.primaryLetter || 'ס';
+  const fList = firstNamesByLetter[tLet] || [`${tLet}מי`];
+  const lList = lastNamesByLetter[uLet] || [`${uLet}הן`];
+  return `${fList[cycleIdx % fList.length]} ${lList[(cycleIdx + 1) % lList.length]}`;
+}
+
+// System Prompt Instructions for Mnemonic "Scene" Generation (The SEE Principle, Dynamics & Action, Clarity & Focus)
+const MNEMONIC_SCENE_SYSTEM_INSTRUCTIONS = `=== הנחיות מערכת ליצירת "סצנה" מנמונית (Mnemonic Scene Generation Principles) ===
+מטרת העל: ליצור זיכרון בולט במיוחד, מוחשי ומחובר רגשית (Highly Salient, Tangible, and Emotionally Connected Memory) על בסיס ערכי ה-PAO / Major שנבחרו, תוך יישום קפדני של שלושת העקרונות הבאים:
+
+1. עקרון ה-SEE (Senses, Emotion, Exaggeration - חושים, רגש, הגזמה):
+   - Senses (חושים): צור חוויה רב-חושית מלאה. אל תסתפק בדימוי ויזואלי בלבד! שלב רעשים חזקים, ריחות דומיננטיים, מרקמים פיזיים וטעמים מוחשיים. ככל שיופעלו יותר אזורים במוח, כך הזיכרון ייצרב עמוק יותר.
+   - Emotion (רגש): המוח זוכר בצורה מושלמת חוויות שמעוררות רגש עז. הפוך את הסצנה למצחיקה בטירוף, מפחידה, אבסורדית או מפתיעה. הומור קיצוני, פרוע או וולגרי-קומי עובד בצורה הטובה ביותר.
+   - Exaggeration (הגזמה): שנה את הפרופורציות של החפצים (למשל: נמלה בגודל פיל, חפץ עצום בגודל בניין) או הכפל כמויות בצורה בלתי הגיונית (למשל: אלפי כדורי טניס שנשפכים מהחלון).
+
+2. דינמיקה ופעולה (Dynamics and Action - Action & Interaction):
+   - Active Movement (תנועה אקטיבית): תמונות סטטיות נשכחות מהר. ודא שהאלמנטים בסצנה נמצאים באינטראקציה דינמית סוערת — מתנגשים, רצים, נשברים, מתנפצים או מתפוצצים.
+   - Insane Causality (סיבתיות מטורפת): חבר את הרכיבים שצריך לזכור באמצעות קשר של סיבה ותוצאה מוטרף (למשל: הדמות בועטת/מפעילה את החפץ, שמתנפץ וגורם לתגובת שרשרת מוחשית).
+
+3. בהירות ומיקוד (Clarity and Focus - The Von Restorff Effect / אפקט פון רסטורף):
+   - Mnemonic Focus (מיקוד מנמוני): למרות שהסצנה עשירה בחושים, אל תעמיס עליה פרטי רקע מיותרים שאינם רלוונטיים למידע המקודד. הרקע חייב להיות פשוט ונקי כדי שהאלמנטים הקריטיים (אדם, פעולה, חפץ) יבלטו בחדות.
+   - Uniqueness (ייחודיות ובולטות): הפוך את הפריט שצריך לזכור לאלמנט הכי ביזארי, חריג ויוצא דופן בנוף הכולל של הסצנה.
+==================================================================================`;
+
 // API Endpoint: Mnemonic Generation Tool (PAO, Major, Names, Academic concepts)
-// Rich Dynamic Hebrew Mnemonic Generator for PAO, Major, and Associations with Multisensory Richness
-function generateHebrewMnemonicFallback(
-  type: string,
-  inputStr: string,
-  extraStr: string,
-  cycle = 0,
-  customDigits?: any[]
-) {
-  // Extract number if present in input or extra
-  const match = (inputStr + ' ' + extraStr).match(/\b(\d{1,2})\b/);
-  const num = match ? parseInt(match[1], 10) : NaN;
-  const numStr = !isNaN(num) ? (num < 10 ? `0${num}` : `${num}`) : '';
-  const idx = Math.max(0, cycle);
+app.post('/api/gemini/generate-mnemonic', async (req: Request, res: Response) => {
+  const {
+    type,
+    input,
+    extra,
+    cycle,
+    customDigits,
+    connectingLetters,
+    paoContext,
+    previousSuggestions,
+  } = req.body;
 
-  // Parse existing fields from extraStr if user provided Person, Action, Object
-  let contextPerson = '';
-  let contextAction = '';
-  let contextObject = '';
+  const inputStr = String(input || '').trim();
+  const extraStr = String(extra || '').trim();
+  const cycleNum = typeof cycle === 'number' ? cycle : 0;
+  const prevList: string[] = Array.isArray(previousSuggestions) ? previousSuggestions : [];
 
+  // 1. Build User's Custom Letter-to-Number Dictionary (0-9) and Connecting Letters
+  const activeConnectingLetters: string[] =
+    Array.isArray(connectingLetters) && connectingLetters.length > 0
+      ? connectingLetters
+      : ['א', 'ה', 'ו', 'י', 'נ', 'ע'];
+
+  const digitsDict = buildUserDigitsDictionary(customDigits);
+  const userDictionaryBlock = formatUserMappingDictionaryPrompt(digitsDict, activeConnectingLetters);
+
+  // 2. Extract Number and Existing Field Context (Person, Action, Object, Scene)
   const cleanPrefix = (str: string) =>
-    str
+    String(str || '')
       .replace(/^(?:אדם|דמות|פעולה|חפץ|סצנה|person|action|object|scene)[:=\s-]+/i, '')
       .replace(/^["'״׳]|["'״׳]$/g, '')
       .trim();
 
-  try {
-    if (extraStr.startsWith('{')) {
-      const parsedJson = JSON.parse(extraStr);
-      contextPerson = cleanPrefix(parsedJson.person || parsedJson.userPerson || '');
-      contextAction = cleanPrefix(parsedJson.action || parsedJson.userAction || '');
-      contextObject = cleanPrefix(parsedJson.object || parsedJson.userObject || '');
-    }
-  } catch {}
+  let contextPerson = cleanPrefix(paoContext?.person || '');
+  let contextAction = cleanPrefix(paoContext?.action || '');
+  let contextObject = cleanPrefix(paoContext?.object || '');
+  let contextScene = cleanPrefix(paoContext?.scene || '');
 
-  if (!contextPerson || !contextAction || !contextObject) {
-    const pMatch = extraStr.match(/(?:דמות|אדם|person)[:=]\s*([^,\n|]+)/i);
-    const aMatch = extraStr.match(/(?:פעולה|action)[:=]\s*([^,\n|]+)/i);
-    const oMatch = extraStr.match(/(?:חפץ|object)[:=]\s*([^,\n|]+)/i);
-    if (pMatch) contextPerson = cleanPrefix(pMatch[1]);
-    if (aMatch) contextAction = cleanPrefix(aMatch[1]);
-    if (oMatch) contextObject = cleanPrefix(oMatch[1]);
-  }
-
-  if (!contextPerson || !contextAction || !contextObject) {
-    const parts = extraStr.split('|').map((s) => cleanPrefix(s.trim()));
-    if (parts.length >= 3) {
-      if (!contextPerson) contextPerson = parts[0];
-      if (!contextAction) contextAction = parts[1];
-      if (!contextObject) contextObject = parts[2];
-    }
-  }
-
-  // Hebrew Major consonants mapping
-  const majorDigitsMap: Record<number, { letter: string; all: string; words: string[] }> = {
-    0: { letter: 'ס', all: 'ס, ז, ש דגושה', words: ['סוס', 'סל', 'סיגריה', 'ספר', 'סיר', 'סרט'] },
-    1: { letter: 'ל', all: 'ל', words: ['לב', 'לוח', 'לחם', 'לימון', 'לפיד', 'לול'] },
-    2: { letter: 'ב', all: 'ב', words: ['בית', 'ברז', 'בננה', 'בלון', 'בובה', 'בז'] },
-    3: { letter: 'ג', all: 'ג, ק, כ', words: ['כוס', 'כדור', 'כתר', 'כלב', 'כובע', 'כוכב', 'גג', 'קיר'] },
-    4: { letter: 'ד', all: 'ד, ת, ט', words: ['דלת', 'דוב', 'דגל', 'דרקון', 'דבורה', 'דלי', 'תה'] },
-    5: { letter: 'ח', all: 'ח', words: ['חץ', 'חרב', 'חבל', 'חתול', 'חולצה', 'חצוצרה', 'חי'] },
-    6: { letter: 'ש', all: 'ש, ג\', צ\'', words: ['שמש', 'שעון', 'שופר', 'שולחן', 'שושנה', 'שטיח', 'אש'] },
-    7: { letter: 'ר', all: 'ר', words: ['רכבת', 'רובה', 'רדיו', 'רשת', 'רקטה', 'ראש', 'אור'] },
-    8: { letter: 'מ', all: 'מ', words: ['מים', 'מפתח', 'מטוס', 'מראה', 'מטרייה', 'מנורה', 'ים'] },
-    9: { letter: 'פ', all: 'פ (רפה ודגושה)', words: ['פה', 'פיל', 'פטיש', 'פרח', 'פרפר', 'פסנתר', 'פיצה'] },
-  };
-
-  // If user has customized the digits in the database/localStorage, strictly apply their mapping!
-  if (Array.isArray(customDigits) && customDigits.length > 0) {
-    for (const cd of customDigits) {
-      if (typeof cd.number === 'number' && cd.number >= 0 && cd.number <= 9) {
-        const cons = (cd.userConsonants || cd.consonants || '').trim();
-        if (cons) {
-          const firstHebrew = cons.match(/[\u0590-\u05FF]/);
-          majorDigitsMap[cd.number] = {
-            letter: firstHebrew ? firstHebrew[0] : cons[0],
-            all: cons,
-            words: majorDigitsMap[cd.number]?.words || [],
-          };
-        }
-      }
-    }
-  }// Consonant-aware sensory objects for PAO and Major words (strictly adhering to number consonants + transparent connectors)
-  function getConsonantSensoryObject(numberVal: number, tLetter: string, uLetter: string, cycleIdx: number): string {
-    // Curated rich sensory words based on Hebrew Major letter combinations
-    const specificObjectMap: Record<number, string[]> = {
-      0: ['סוס פרא לבן אצילי שמריח מחציר רטוב ורוקע בפרסות כסופות', 'סל נצרים קלוע שמלא בתפוזים ריחניים וטריים', 'סיר ברזל יצוק שחור ומעלה אדי מרק חם'],
-      1: ['לב אודם ענק ופועם באור אדום זוהר שמפיץ חום עז', 'לוח עץ אורן עתיק ומחוספס שמדיף ריח שרף', 'לפיד בוער בלהבה כתומה מתפרצת שמפיצה ריח עשן'],
-      2: ['בית עץ חמים עם ארובה מפיצת עשן לבן בריח אורנים', 'בלון הליום אדום מבריק שמרחף אל השמיים', 'בובת חרסינה עתיקה עם עיני אזמרגד נוצצות'],
-      3: ['כוס בדולח צלולה שמתנפצת לקול צלצול זכוכית עז', 'כתר זהב כבד משובץ אבני אודם לוהטות שמפיצות חום', 'כדור פלדה כבד ומבריק שמקפיא את הידיים'],
-      4: ['ספל תה חרסינה רותח שמעלה אדי נענע מתוקים', 'דלת עץ אלון עתיקה וכבדה עם ידית פליז קרה', 'דוב פרווה ענק ורך שמריח מדבש יער'],
-      5: ['חץ פלדה מוזהב וחד שנורה במעוף מהיר ומשמיע שריקה', 'חרב סמוראי כסופה שחותכת משי צבעוני באוויר', 'חבל מלחים עבה מחוספס שמריח ממי ים ומלח'],
-      6: ['להבות אש מתפרצות ומפצפצות בריח גופרית עז', 'שעון חול מוזהב שגרגריו נושרים בקול רשרוש עדין', 'שופר איל עתיק שמפיק צליל תרועה רועם'],
-      7: ['זרקור אור קסום מסנוור שמקרין אלומת לייזר לבנה', 'רכבת קיטור עתיקה מפליטה עשן סמיך וצפירה חדה', 'רובה ציד עתיק מעץ מהגוני שמריח מאבק שריפה'],
-      8: ['גלי ים קרירים ושוצפים שמתנפצים ברסס מים מלוח', 'מפתח זהב עתיק וכבד שפותח תיבת אוצר סודית', 'מטוס סילון כסוף שמזנק במהירות שיא אל העננים'],
-      9: ['פה ענקי פעור עם שיני זהב נוצצות', 'פיל אפריקאי ענק שמרים חדק ותוקע בקול רועם', 'פרח ורוד ענק עם גבעול קרח צלול שמפיץ ניחוח ורדים מתוק'],
-      14: ['ילד קטן במעיל גשם צהוב שמשיט סירת נייר זוהרת', 'דגל משי לבן שמתנפנף ברוח סוערת ומצלצל בתורן'],
-      15: [
-        'לוח עץ עתיק ומחוספס שמדיף ריח שרף אורנים חזק',
-        'לחי סמוקה וחמה למגע שמפיצה ניחוח ורדים מתוק',
-        'דף לחן תווים מוזהב שנוצץ ומשמיע מנגינת כינור צלולה',
-        'כיכר לחם מחמצת לוהטת ופריכה שנבצעת ומפיצה ריח אפייה משכר',
-      ],
-      20: ['בז צייד מהיר בעל מקור פלדה שמנקר ברעש', 'בוס קשוח בחליפת פסים שמעשן סיגר בריח טבק עשיר'],
-      21: ['בלון הליום מבריק שמרחף אל העננים', 'בול דואר זוהר עם חותמת שעווה אדומה'],
-      22: ['בובת חרסינה עתיקה עם שמלת משי', 'בוץ שחור סמיך שמבעבע בחום'],
-      23: ['כספת בנק ענקית שמגלה מטילי זהב נוצצים', 'בקבוק יין עתיק ומאובק שנחלץ בקול פקיקה'],
-      24: ['בית עץ חמים עם ארובה מפיצת עשן לבן', 'בד משי אדום שני מתנפנף ברוח סוערת'],
-      25: ['פח מתכת כבד שרועם בחבטה עזה', 'בכי של דמעות זכוכית נוצצות שמטפטפות על לחי'],
-      26: ['בקבוק בושם קריסטל יקר שמתיז ענן ריחני של יסמין', 'בוץ סמיך שטומן בתוכו מגפי עור'],
-      27: ['ברז מים מזהב שמשפריץ סילון מים קרים וצלולים', 'בור עמוק ואפל באדמה עם הד חוזר'],
-      28: ['שקית במבה צהובה שנפתחת בריח בוטנים חזק', 'במת תיאטרון גדולה עם אור זרקורים מהפנט'],
-      29: ['שולחן בופה עמוס מטעמים וצלחות זהב', 'כרית פוף ענקית שצוללים לתוכה ברכות'],
-      91: ['פיל אפריקאי ענק שרוקע בפרסותיו ותוקע בחדק', 'פנס כיס מאיר באלומת אור כחולה ובוהקת'],
-      92: ['פאב הומה אדם עם כוסות בירה מוקצפות שמריחות מלתת', 'פח אשפה ענקי שמשמיע קול מתכתי'],
-      94: ['פת לחם חמה שנבצעת ומפיצה ריח שמרים', 'פטיש ברזל כבד שמנפץ סלע לרסיסים'],
-      95: ['פיח שחור סמיך שיוצא מארובת עשן לוהטת', 'פח שמן זך שמטפטף טיפות זהב'],
-    };
-
-    if (specificObjectMap[numberVal] && specificObjectMap[numberVal].length > 0) {
-      const opts = specificObjectMap[numberVal];
-      return opts[cycleIdx % opts.length];
-    }
-
-    // Dynamic generation matching tLetter and uLetter:
-    return `${tLetter}${uLetter} מנמוני חושי ומובהק עם צבעים בוהקים, מרקם מחוספס וריח עז שנקלט מיידית בזיכרון`;
-  }
-
-  // Curated sensory objects list for multisensory rich associations
-  const sensoryObjectsList = [
-    'פרח ורוד ענק עם גבעול שעשוי מקרח צלול שמפיץ ניחוח ורדים מתוק',
-    'לוח עץ אורן עתיק ומחוספס שמדיף ריח שרף חזק',
-    'סוס פרא אצילי שמריח מחציר רטוב ורוקע בפרסות כסופות',
-    'חרב סמוראי כסופה שחותכת משי צבעוני באוויר',
-    'כוס בדולח צלולה שמתנפצת לקול צלצול זכוכית עז',
-    'שעון חול מוזהב שגרגריו נושרים בקול רשרוש עדין',
-    'מפתח זהב עתיק וכבד שפותח תיבת אוצר סודית',
-    'פיל אפריקאי ענק שמרים חדק ותוקע בקול רועם',
-  ];
-
-  // If type is pao_object or major_word and we have a number, select consonant-aligned object!
-  let consonantObject = '';
-  if (!isNaN(num)) {
-    const tens = Math.floor(num / 10) % 10;
-    const units = num % 10;
-    const tLet = majorDigitsMap[tens]?.letter || 'ס';
-    const uLet = majorDigitsMap[units]?.letter || 'ס';
-    consonantObject = getConsonantSensoryObject(num, tLet, uLet, idx);
-  }
-
-  const selObject = contextObject || (consonantObject && (type === 'pao_object' || type?.includes('major')) ? consonantObject : sensoryObjectsList[idx % sensoryObjectsList.length]);
-
-  // Sensory-Rich, Dynamic Kinetic Actions
-  const sensoryActionsList = [
-    'בגלימת משי אדומה צורח מזעם ומכה בעוצמה ב',
-    'עם סרט זיעה על המצח, מזיע ומריח מאבקת שריפה, מרים כמו משקולת ברזל את',
-    'מזנק באוויר ומטיח בעוצמה מחרישת אוזניים על',
-    'מקליד באטרף של ניצוצות וגיצי אש לוהטים מעל',
-    'מקפיא בקרח זוהר בתוך שבריר שנייה לקול קראנץ\' חד את',
-    'מלהטט באוויר בסיבובים מהירים שמפיצים עשן סגול מעל',
-    'יורה קרן לייזר ירוקה מסנוורת שמחממת ומבעבעת את',
-    'שובר ומנפץ לרסיסי זהב מנצנצים ורעש רסיסים את',
-    'ממיס בלפיד אש כחולה מתפרצת שמדיפה חום עז את',
-    'רוקם בחוטי חשמל מוארים שפולטים ריח אוזון סביב',
-    'מציף בבועות סבון ענקיות וזוהרות בריח ורדים את',
-    'מצלם בהבזק אור לבן מסנוור של מצלמת ענק את',
-  ];
-
-  // Tailored Persons
-  let specificPersons: string[] = [];
-  if (!isNaN(num)) {
-    const tens = Math.floor(num / 10) % 10;
-    const units = num % 10;
-    const tLet = majorDigitsMap[tens]?.letter || 'ס';
-    const uLet = majorDigitsMap[units]?.letter || 'ס';
-
-    if (num === 0) specificPersons = ['סילבסטר סטאלון (ס.ס.)', 'סטיבן סיגל (ס.ס.)', 'סמי סוס (ס.ס.)'];
-    else if (num === 1) specificPersons = ['סטן לי (ס.ל.)', 'סמואל ל. ג\'קסון (ס.ל.)', 'סנדי לב (ס.ל.)'];
-    else if (num === 2) specificPersons = ['סשה ברון כהן (ס.ב.)', 'סנדרה בולוק (ס.ב.)', 'סטיב באלמר (ס.ב.)'];
-    else if (num === 3) specificPersons = ['סטיבן קינג (ס.ק.)', 'סטיב קארל (ס.ק.)', 'סנדי קרוגר (ס.ק.)'];
-    else if (num === 4) specificPersons = ['סלבדור דאלי (ס.ד.)', 'סנופ דוג (ס.ד.)', 'סטנלי דרוקר (ס.ד.)'];
-    else if (num === 14) specificPersons = ['ליאונרדו דיקפריו (ל.ד.)', 'לארי דייוויד (ל.ד.)', 'לוק דונצ\'יץ\' (ל.ד.)'];
-    else if (num === 23) specificPersons = ['ביל גייטס (ב.ג.)', 'בני גנץ (ב.ג.)', 'בובי גרג (ב.ג.)'];
-    else if (num === 88) specificPersons = ['מרילין מונרו (מ.מ.)', 'מוחמד מורסי (מ.מ.)', 'משה מונטיפיורי (מ.מ.)'];
-    else {
-      specificPersons = [
-        `מאסטר הזיכרון (${tLet}.${uLet}.)`,
-        `ספורטאי (${tLet}.${uLet}.) מנצח`,
-        `האלוף #${numStr} (${tLet}.${uLet}.)`,
-        `דמות מוכרת (${tLet}.${uLet}.)`,
-      ];
-    }
-  }
-
-  const chosenPersons = specificPersons.length > 0 ? specificPersons : [
-    'סילבסטר סטאלון (ס.ס.)',
-    'סטיבן קינג (ס.ק.)',
-    'אלברט איינשטיין (א.א.)',
-    'שוליית מנמוניקה',
-  ];
-
-  const selPerson = contextPerson || chosenPersons[idx % chosenPersons.length];
-  const selAction = contextAction || sensoryActionsList[idx % sensoryActionsList.length];
-
-  // Dynamic Multisensory Full Scenes tailored strictly to the selected person, action, and object
-  const multisensoryScenes = [
-    `${selPerson} בעיניים דרוכות ורוויות נחישות, מפעיל כוח אדיר ומבצע ${selAction} בעוצמה מסחררת ישירות על גבי ${selObject}, בעוד רסיסי אור זוהרים בצבע ניאון סגול ניתזים סביב בריח מנטה עז וקריר!`,
-    `בפריים קולנועי דרמטי ובלתי נשכח: ${selPerson} מזנק קדימה ומבצע ${selAction} על ${selObject}, כשגל עשן סמיך בריח שרף אורנים מתפשט וצליל שבירה מתכתי רועם מהדהד בחלל!`,
-    `${selPerson} מוקף בהילה מוזהבת זוהרת וחמה, תופס עמדה מרכזית ו${selAction} את ${selObject} שמסתחרר באוויר ופולט ניחוח שוקולד מתוק לקול תשואות מחרישות אוזניים!`,
-    `סצנה רב-חושית עשירה: ${selPerson} פועל בריכוז מוחלט כשבידיו הוא ${selAction} את ${selObject}, תוך שרוח קרירה מפיצה ריח ים מלוח ולהבות כחולות מרצדות מסביב!`,
-    `${selPerson} עוטה בגד מבריק בצבעי אש זוהרים, שואג בתנופה קינטית אדירה ו${selAction} מעל ${selObject} שמצלצל בהד פעמונים צלול ומשאיר שובל ניצוצות מרהיב!`,
-    `תמונת זיכרון חדה ומוחשית: ${selPerson} מתקרב במהירות שיא ומבצע ${selAction} מול ${selObject} הלוהט, כשטיפות טל קפואות מתיזות לכל עבר בריח ורדים רענן ותחושת חשמל באוויר!`,
-    `${selPerson} בריכוז שיא ובעוצמה בלתי ניתנת לעצירה, מבצע ${selAction} על ${selObject}, בעוד האור מסביב מתחלף לטורקיז זוהר וריח הדרים מרענן ממלא את הסצנה!`
-  ];
-
-  const fullScene = multisensoryScenes[idx % multisensoryScenes.length];
-
-  let headline = `אסוציאציה חושית ל-${inputStr || 'פריט'}`;
-  let hebrewKeyword = inputStr;
-  let paoPerson = selPerson;
-  let paoAction = selAction;
-  let paoObject = selObject;
-  let visualScene = fullScene;
-  let explanation = `חיבור רב-חושי (צבע, ריח, מגע ותנועה) המקבע את הזיכרון בהיפוקמפוס.`;
-  let palacePlacementTip = `הצב את הסצנה במרכז התחנה כשהיא פולטת ריח חזק ותנועה חיה.`;
-
-  if (type === 'pao_object') {
-    headline = `חפץ PAO מוחשי למספר ${numStr || inputStr}`;
-    hebrewKeyword = selObject;
-    visualScene = selObject;
-  } else if (type === 'pao_action') {
-    headline = `פעולה קינטית למספר ${numStr || inputStr}`;
-    hebrewKeyword = selAction;
-    visualScene = selAction;
-  } else if (type === 'pao_person') {
-    headline = `דמות PAO למספר ${numStr || inputStr}`;
-    hebrewKeyword = selPerson;
-    visualScene = selPerson;
-  } else if (type === 'pao_scene') {
-    headline = `סצנה שלמה רב-חושית למספר ${numStr || inputStr}`;
-    visualScene = fullScene;
-  } else if (type?.includes('major_word') || type === 'major_consonants') {
-    if (!isNaN(num)) {
-      const tens = Math.floor(num / 10) % 10;
-      const units = num % 10;
-      const tensList = majorDigitsMap[tens]?.words || ['סם'];
-      const combinedWord = `${tensList[idx % tensList.length]}`;
-      hebrewKeyword = combinedWord;
-      headline = `מילת Major למספר ${numStr}`;
-      visualScene = `המספר ${numStr} מקושר ישירות למילה "${combinedWord}", וממנה בוקע אור לבן עז וריח של מנטה טרייה.`;
-    }
-  } else if (type?.includes('major_hint')) {
-    visualScene = `במרכז הפריים מוצב דימוי ענק וזוהר בצבע ארגמן של ${extraStr || inputStr}, שמדיף ריח אש ומתנפץ לאלפי רסיסי זהב מנצנצים.`;
-  } else if (type?.includes('name') || type?.includes('face')) {
-    const anchors = [
-      'מבט חודר וגבות מוגבהות עם צלקת דקה',
-      'חיוך רחב עם שן זהב זוהרת ומבריקה',
-      'קמטי צחוק בולטים ומבט חם בעיניים',
-      'משקפיים עגולים ענקיים שמשקפים להבות אש',
-      'תלתלים שחורים פראיים שמריחים מבושם מתוק',
-    ];
-    headline = `עוגן וסצנה לשם ${inputStr}`;
-    hebrewKeyword = anchors[idx % anchors.length];
-    visualScene = `על גבי ${hebrewKeyword}, מונח סמל ענק וזוהר של ${inputStr} בריח שוקולד מתוק והתנגשות קינטית בלתי נשכחת!`;
-  }
-
-  return {
-    headline,
-    visualScene,
-    explanation,
-    palacePlacementTip,
-    hebrewKeyword,
-    paoPerson: selPerson,
-    paoAction: selAction,
-    paoObject: selObject,
-    fullScene,
-  };
-}
-
-// API Endpoint: Mnemonic Generation Tool (PAO, Major, Names, Academic concepts)
-app.post('/api/gemini/generate-mnemonic', async (req: Request, res: Response) => {
-  const { type, input, extra, cycle, customDigits } = req.body;
-  const inputStr = String(input || '').trim();
-  const extraStr = String(extra || '').trim();
-  const cycleNum = typeof cycle === 'number' ? cycle : 0;
-
-  const majorConstraints = getHebrewMajorConstraints(inputStr, extraStr, customDigits);
-
-  // If a valid Gemini API key is present and doesn't look like a placeholder, try Gemini
-  const apiKey = process.env.GEMINI_API_KEY;
-  const isValidApiKeyFormat = Boolean(apiKey && apiKey.length > 10 && !apiKey.includes('YOUR_') && !apiKey.includes('PLACEHOLDER'));
-
-  if (isValidApiKeyFormat) {
+  if (!contextPerson && !contextAction && !contextObject && extraStr) {
     try {
-      const prompt = `אתה רב-אמן בינלאומי לפיתוח מיומנויות זיכרון (Mnemonics) ואלוף זיכרון עולמי.
-תפקידך להמיר מספרים, מילים, שמות או שלשות PAO לתמונות אסוציאטיביות ויזואליות רב-חושיות, חדות ובלתי נשכחות.
+      if (extraStr.startsWith('{')) {
+        const parsedJson = JSON.parse(extraStr);
+        contextPerson = cleanPrefix(parsedJson.person || parsedJson.userPerson || '');
+        contextAction = cleanPrefix(parsedJson.action || parsedJson.userAction || '');
+        contextObject = cleanPrefix(parsedJson.object || parsedJson.userObject || '');
+      }
+    } catch {}
 
-סוג המשימה: ${type} (אפשרויות: pao_scene, pao_object, pao_action, pao_person, major_word, major_hint, name_face_anchor, name_face_substitute, name_face_scene, academic_concept, palace_scene)
-קלט המשתמש: "${inputStr}"
-מידע נוסף והקשר (כולל שדות קיימים: אדם/פעולה/חפץ/סצנה): "${extraStr}"
-איטרציה/אופציה מספר: ${cycleNum + 1} (חשוב מאוד: הצע בכל איטרציה רעיון שונה, מקורי ומפתיע!)
-${majorConstraints}
+    if (!contextPerson && !contextAction && !contextObject) {
+      const pMatch = extraStr.match(/(?:דמות|אדם|person)[:=]\s*([^,\n|]+)/i);
+      const aMatch = extraStr.match(/(?:פעולה|action)[:=]\s*([^,\n|]+)/i);
+      const oMatch = extraStr.match(/(?:חפץ|object)[:=]\s*([^,\n|]+)/i);
+      if (pMatch) contextPerson = cleanPrefix(pMatch[1]);
+      if (aMatch) contextAction = cleanPrefix(aMatch[1]);
+      if (oMatch) contextObject = cleanPrefix(oMatch[1]);
+    }
+  }
 
-חוקי ברזל חיוניים של אקדמיית הזיכרון (עקרון רב-חושי שורשי):
-1. אסוציאציות בלתי נשכחות חייבות לכלול את כל החושים:
-   - צבעים עזים וספציפיים (אדום שני, סגול ניאון, זהב בוהק, ירוק אזמרגד)
-   - ריחות וטעמים מוחשיים (ריח חציר רטוב, אבקת שריפה חריפה, ורדים מתוקים, עשן גופרית, מנטה מקפיאה, שוקולד מריר)
-   - תחושות מגע וטמפרטורה (קרח צלול מקפיא, עור מחוספס, ברזל כבד וקר, להבות אש חמות)
-   - קולות ותנועה קינטית דרמטית מוגזמת (שאגה, צרחה, שבירה, ניפוץ, זינוק)
-2. לעולם אל תציע מילה בודדת סתמית או חפץ מופשט (כגון "חפץ בולט", "חפץ", או "פרח")!
-   - דוגמה רעה: "פרח"
-   - דוגמה מצוינת: "פרח ורוד ענק עם גבעול שעשוי מקרח צלול שמפיץ ניחוח ורדים מתוק וקריר"
-3. עבור pao_object (חפץ PAO עבור מספר מסוים):
-   - חובה מוחלטת ללא פשרות: שם החפץ הבסיסי חייב להיגזר אך ורק מעיצורי הספרות של המספר (לפי לוגיקת הספרות והאותיות הפעילה בבסיס הנתונים כמפורט לעיל) בתוספת אותיות חיבור שקופות (א-נ-י-ע-ו-נ-ה) בלבד!
-   - עדיפות עליונה למילים קצרות וקולעות ככל הניתן!
-   - דוגמה קריטית: עבור המספר 15 שבו 1=ל ו-5=ח: המילה חייבת להתבסס על ל' ו-ח' בתוספת אותיות חיבור שקופות כרצונך. אופציות לגיטימיות ומעולות יהיו למשל: 'לוח', 'לחי', 'לחן', 'לחם'!
-   - עטוף את המילה הקצרה בתיאור ויזואלי ורב-חושי מוחשי (צבעים, מרקם, ריח, טמפרטורה). למשל: 'לוח עץ עתיק ומחוספס שמדיף ריח שרף אורנים חזק', 'לחי סמוקה חמה ורכה שמפיצה ניחוח ורדים מתוק', 'דף לחן תווים מוזהב שנוצץ ומשמיע מנגינת כינור צלולה'.
-4. עבור pao_action: פעולה קינטית מוגזמת עם תנועה, רגש והשפעה חושית.
-5. עבור pao_person: דמות מפורסמת או מוכרת שראשי התיבות של שמה תואמים בדיוק את אותיות הספרות.
-6. עבור pao_scene (סצנה שלמה):
-   - קח את שלושת השדות הייחודיים שהמשתמש הזין: הדמות (Person), הפעולה (Action) והחפץ (Object) המוגדרים בקלט/מידע הנוסף (אפילו אם היוזר טרם שמר אותם).
-   - חובה מוחלטת: הסצנה חייבת להתמקד אך ורק בדמות הספציפית שהוזנה, בפעולה הספציפית שהוזנה ובחפץ הספציפי שהוזן!
-   - אל תשתמש בשום אופן בסילבסטר סטאלון, כפפות אגרוף או אורוות סוסים אלא אם כן אלו בדיוק הערכים שהוזנו!
-   - שלב את שלושתם בפריים קולנועי חי, דרמטי ורב-חושי (צבעים עזים, ריחות מוחשיים, טמפרטורה, קולות ותנועה קינטית מוגזמת).
-   - בכל איטרציה (איטרציה מספר ${cycleNum + 1}), הצע תיאור חדש, מרענן ושונה לחלוטין!
+  // Extract target number
+  let targetNum =
+    typeof paoContext?.number === 'number' && !isNaN(paoContext.number)
+      ? paoContext.number
+      : NaN;
+  if (isNaN(targetNum)) {
+    const numMatch = (String(paoContext?.numberStr || '') + ' ' + inputStr + ' ' + extraStr).match(/\b(\d{1,2})\b/);
+    if (numMatch) targetNum = parseInt(numMatch[1], 10);
+  }
+  const hasValidNum = !isNaN(targetNum) && targetNum >= 0 && targetNum <= 99;
+  const tensDigit = hasValidNum ? Math.floor(targetNum / 10) % 10 : 0;
+  const unitsDigit = hasValidNum ? targetNum % 10 : 0;
+  const paddedNumStr = hasValidNum ? (targetNum < 10 ? `0${targetNum}` : `${targetNum}`) : inputStr;
 
-השב אך ורק בפורמט JSON תקני:
+  const client = getGeminiClient();
+
+  try {
+    // =========================================================================
+    // CASE 1: PAO PERSON (אדם)
+    // =========================================================================
+    if (type === 'pao_person' && hasValidNum) {
+      const tensDef = digitsDict[tensDigit];
+      const unitsDef = digitsDict[unitsDigit];
+
+      const personPrompt = `אתה מומחה למערכות זיכרון (PAO ו-Major) בעברית.
+${userDictionaryBlock}
+
+המשימה שלך: הצע שם של אדם אמיתי או דמות בדיונית מוכרת (סלבריטאי, דמות מקולנוע/טלוויזיה/קומיקס, מנהיג, ספורטאי, מדען או דמות תרבותית) עבור המספר הדו-ספרתי "${paddedNumStr}".
+
+חוקי ברזל מחייבים לשדה "אדם" (Person):
+1. השם חייב להיות מורכב משתי מילים בעברית: שם פרטי + שם משפחה (או כינוי מוכר בן 2 מילים, כגון "ספונג' בוב" או "לארה קרופט").
+2. האות הראשונה של השם הפרטי חייבת להתחיל באחת האותיות של ספרת העשרות (${tensDigit}): [${tensDef.letters.join(', ')}].
+3. האות הראשונה של שם המשפחה חייבת להתחיל באחת האותיות של ספרת היחידות (${unitsDigit}): [${unitsDef.letters.join(', ')}].
+4. דוגמה להמחשה: עבור המספר '${paddedNumStr}', ספרה ראשונה '${tensDigit}' ממופה לאות '${tensDef.primaryLetter}', וספרה שנייה '${unitsDigit}' ממופה לאות '${unitsDef.primaryLetter}', לכן ראשי התיבות חייבים להיות '${tensDef.primaryLetter}.${unitsDef.primaryLetter}.' (או מבין האותיות המותרות [${tensDef.letters.join('/')}] ו-[${unitsDef.letters.join('/')}]).
+5. אל תוסיף סוגריים או ראשי תיבות בתוך המחרוזת עצמה — החזר אך ורק את השם המלא הנקי (למשל: "סילבסטר סטאלון" או "לארה קרופט").
+${contextAction ? `6. הקשר קיים בשדה פעולה: "${contextAction}" (אם אפשר, בחר דמות שמתקשרת יפה לפעולה זו, אך חוק ראשי התיבות קודם לכל!).` : ''}
+${contextObject ? `7. הקשר קיים בשדה חפץ: "${contextObject}".` : ''}
+${prevList.length > 0 ? `8. אל תחזור על הצעות קודמות שכבר הוצעו: [${prevList.join(', ')}]. הצע דמויות חדשות ושונות!` : ''}
+
+השב אך ורק ב-JSON תקני במבנה הבא (הצע 5 דמויות שונות שמקיימות את חוק ראשי התיבות במדויק):
 {
-  "headline": string,
-  "visualScene": string,
-  "explanation": string,
-  "palacePlacementTip": string,
-  "hebrewKeyword": string,
-  "paoPerson": string,
-  "paoAction": string,
-  "paoObject": string,
-  "fullScene": string
+  "candidates": ["שם פרטי שם משפחה", "שם פרטי שם משפחה", "שם פרטי שם משפחה", "שם פרטי שם משפחה", "שם פרטי שם משפחה"]
 }`;
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
-        contents: prompt,
+      const response = await client.models.generateContent({
+        model: FAST_TEXT_MODEL,
+        contents: personPrompt,
         config: {
+          thinkingConfig: FAST_THINKING_CONFIG,
           responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              headline: { type: Type.STRING },
-              visualScene: { type: Type.STRING },
-              explanation: { type: Type.STRING },
-              palacePlacementTip: { type: Type.STRING },
-              hebrewKeyword: { type: Type.STRING },
-              paoPerson: { type: Type.STRING },
-              paoAction: { type: Type.STRING },
-              paoObject: { type: Type.STRING },
-              fullScene: { type: Type.STRING },
-            },
-            required: ['headline', 'visualScene', 'hebrewKeyword', 'paoPerson', 'paoAction', 'paoObject', 'fullScene'],
-          },
+          temperature: 0.85,
         },
       });
 
       const parsed = JSON.parse(response.text || '{}');
-      if (parsed.paoObject || parsed.visualScene || parsed.hebrewKeyword || parsed.fullScene) {
-        return res.json(parsed);
-      }
-    } catch (error: any) {
-      console.warn('Gemini API call failed, using high-fidelity Hebrew engine:', error?.message || error);
-    }
-  }
+      const rawCandidates: string[] = Array.isArray(parsed.candidates)
+        ? parsed.candidates
+        : parsed.paoPerson
+        ? [parsed.paoPerson]
+        : [];
 
-  // High-fidelity Hebrew phonetic & kinetic mnemonic generator
-  const generated = generateHebrewMnemonicFallback(type, inputStr, extraStr, cycleNum, customDigits);
-  return res.json(generated);
+      const cleanedCandidates = rawCandidates
+        .map((c) => String(c || '').replace(/\([^)]*\)/g, '').replace(/["'״׳]/g, '').trim())
+        .filter((c) => serverValidatePersonInitials(c, tensDigit, unitsDigit, digitsDict));
+
+      const freshCandidates = cleanedCandidates.filter((c) => !prevList.includes(c));
+      const chosenPerson =
+        freshCandidates[0] ||
+        cleanedCandidates[cycleNum % Math.max(1, cleanedCandidates.length)] ||
+        getFallbackPersonForNumber(targetNum, digitsDict, cycleNum);
+
+      return res.json({
+        headline: `דמות PAO למספר ${paddedNumStr}`,
+        paoPerson: chosenPerson,
+        hebrewKeyword: chosenPerson,
+        visualScene: chosenPerson,
+        fullScene: chosenPerson,
+      });
+    }
+
+    // =========================================================================
+    // CASE 2: PAO ACTION (פעולה)
+    // =========================================================================
+    if (type === 'pao_action') {
+      const effectivePerson = contextPerson || (extraStr && !extraStr.includes('|') ? cleanPrefix(extraStr) : '');
+      const isPersonEmpty = !effectivePerson || effectivePerson.trim().length === 0;
+
+      const actionPrompt = isPersonEmpty
+        ? `אתה מומחה למערכות זיכרון (PAO) בעברית.
+${userDictionaryBlock}
+
+המשימה שלך: הצע פעולה (Action) עבור מספר "${paddedNumStr}" במערכת ה-PAO.
+שים לב: שדה ה"אדם" (Person) עדיין ריק וטרם הוגדר על ידי המשתמש!
+לכן עליך:
+1. להציע 5 פעולות אקטיביות, קינטיות, מוחשיות ודינמיות באקראי בעברית בגוף שלישי הווה (למשל: "מנפץ בפטיש", "מקפיא בחנקן נוזלי", "מלהטט בלהבות", "מנסר במסור חשמלי", "משגר מתותח"), באורך 1 עד 3 מילים בלבד.
+2. לציין במפורש בשדה "actionNote" הודעה ברורה למשתמש שהפעולה נבחרה באופן אקראי מכיוון שטרם הוגדרה דמות בשדה "אדם".
+${contextObject ? `3. אם ניתן, הפעולה יכולה להתאים לביצוע על החפץ "${contextObject}", אך ללא הזכרת שם החפץ עצמו בתוך שדה הפעולה.` : ''}
+${prevList.length > 0 ? `4. אל תחזור על פעולות קודמות שהוצעו: [${prevList.join(', ')}].` : ''}
+
+השב אך ורק ב-JSON תקני:
+{
+  "candidates": ["פעולה 1", "פעולה 2", "פעולה 3", "פעולה 4", "פעולה 5"],
+  "isRandomAction": true,
+  "actionNote": "שים לב: הפעולה נבחרה באקראי מכיוון שטרם הוגדרה דמות בשדה 'אדם'. מומלץ להגדיר דמות תחילה כדי שהפעולה תאפיין אותה."
+}`
+        : `אתה מומחה למערכות זיכרון (PAO) בעברית.
+${userDictionaryBlock}
+
+המשימה שלך: הצע פעולה (Action) עבור מספר "${paddedNumStr}" במערכת ה-PAO.
+הדמות שנבחרה בשדה "אדם" (Person) היא: "${effectivePerson}".
+${contextObject ? `החפץ הקיים בשדה "חפץ" (Object) הוא: "${contextObject}".` : ''}
+
+חוקי ברזל לשדה "פעולה" (Action):
+1. הפעולה חייבת להתאים לדמות "${effectivePerson}" ולאפיין אותה באופן מובהק וברור (פעולה מזוהה עם הדמות, המקצוע שלה, הכוחות שלה, או תחום ההיכרות שלה — למשל עבור "סילבסטר סטאלון": "מתאגרף"; עבור "סטיבן שפילברג": "מצלם במצלמת קולנוע"; עבור "ליאונרדו דיקפריו": "מחבק על חרטום ספינה" או "מניף אוסקר").
+2. נסח את הפעולה כפועל אקטיבי ודינמי בזמן הווה (1 עד 3 מילים בלבד), ללא הכללת שם הדמות או שם החפץ בתוך טקסט הפעולה.
+${prevList.length > 0 ? `3. אל תחזור על הצעות קודמות: [${prevList.join(', ')}]. הצע זוויות חדשות שמאפיינות את "${effectivePerson}"!` : ''}
+
+השב אך ורק ב-JSON תקני:
+{
+  "candidates": ["פעולה אופיינית 1", "פעולה אופיינית 2", "פעולה אופיינית 3", "פעולה אופיינית 4", "פעולה אופיינית 5"],
+  "isRandomAction": false,
+  "actionNote": ""
+}`;
+
+      const response = await client.models.generateContent({
+        model: FAST_TEXT_MODEL,
+        contents: actionPrompt,
+        config: {
+          thinkingConfig: FAST_THINKING_CONFIG,
+          responseMimeType: 'application/json',
+          temperature: 0.8,
+        },
+      });
+
+      const parsed = JSON.parse(response.text || '{}');
+      const rawCandidates: string[] = Array.isArray(parsed.candidates)
+        ? parsed.candidates
+        : parsed.paoAction
+        ? [parsed.paoAction]
+        : [];
+
+      const cleanedCandidates = rawCandidates
+        .map((c) => String(c || '').replace(/^["'״׳]|["'״׳]$/g, '').trim())
+        .filter((c) => c.length > 1);
+
+      const freshCandidates = cleanedCandidates.filter((c) => !prevList.includes(c));
+      const fallbackRandomActions = ['מנפץ בפטיש', 'מקפיא בקרח', 'מלהטט בלהבות', 'משגר מתותח', 'מחשמל בעוצמה'];
+      const chosenAction =
+        freshCandidates[0] ||
+        cleanedCandidates[cycleNum % Math.max(1, cleanedCandidates.length)] ||
+        fallbackRandomActions[cycleNum % fallbackRandomActions.length];
+
+      const randomNote = isPersonEmpty
+        ? parsed.actionNote ||
+          'שים לב: הפעולה נבחרה באקראי מכיוון שטרם הוגדרה דמות בשדה "אדם". מומלץ להגדיר דמות תחילה כדי שהפעולה תאפיין אותה.'
+        : '';
+
+      return res.json({
+        headline: `פעולת PAO למספר ${paddedNumStr}`,
+        paoAction: chosenAction,
+        hebrewKeyword: chosenAction,
+        visualScene: chosenAction,
+        fullScene: chosenAction,
+        isRandomAction: isPersonEmpty,
+        actionNote: randomNote,
+      });
+    }
+
+    // =========================================================================
+    // CASE 3: PAO OBJECT (חפץ) & MAJOR WORD (מילת Major)
+    // =========================================================================
+    if ((type === 'pao_object' || type === 'major_word') && hasValidNum) {
+      const isMajorSingleDigit = type === 'major_word' && targetNum >= 0 && targetNum <= 9;
+      const tensDef = digitsDict[tensDigit];
+      const unitsDef = digitsDict[unitsDigit];
+      const validPoolWords = getValidPoolWordsForNumber(
+        targetNum,
+        digitsDict,
+        activeConnectingLetters,
+        type === 'major_word'
+      );
+
+      const phoneticRuleDesc = isMajorSingleDigit
+        ? `המילה חייבת להיבנות אך ורק מעיצור של הספרה ${targetNum} ([${unitsDef.letters.join(', ')}]) בתוספת אותיות החיבור המותרות בלבד ([${activeConnectingLetters.join(', ')}]). אסור בתכלית האיסור לכלול אף עיצור של ספרה אחרת!`
+        : `המילה חייבת להיבנות אך ורק מעיצור של ספרת העשרות ${tensDigit} ([${tensDef.letters.join(', ')}]) ואחריו עיצור של ספרת היחידות ${unitsDigit} ([${unitsDef.letters.join(', ')}]), בתוספת אותיות החיבור המותרות בלבד ([${activeConnectingLetters.join(', ')}], כולל ן סופית). אסור בתכלית האיסור לכלול במילה אף עיצור נוסף שאינו ברשימת אותיות החיבור!`;
+
+      const objectPrompt = `אתה מומחה לפונטיקה עברית ולמערכות הזיכרון PAO ו-Major.
+${userDictionaryBlock}
+
+המשימה שלך: הצע אך ורק שם של **חפץ פיזי או עצם מוחשי** בעברית עבור המספר "${isMajorSingleDigit ? targetNum : paddedNumStr}".
+
+חוקי ברזל מוחלטים (ללא שום חריגות!):
+1. **חפצים ועצמים מוחשיים בלבד**: כל הצעה חייבת להיות עצם פיזי או חפץ מוחשי שאפשר לראות, להחזיק או לגעת בו (למשל: בננה, אבן, בובה, בועה, סיר, כוס, לפיד, חרב, שעון, נעל).
+2. **איסור מוחלט על מילים שאינן חפצים**: אסור בתכלית האיסור להציע שמות פרטיים של אנשים (כגון "בני", "אבי", "גיא"), מילים באנגלית בתעתיק עברי (כגון "בוי"), כינויי שייכות או קרבה משפחתית ("בני", "אחי", "אמא"), פעלים, שמות תואר, או מושגים מופשטים (כגון "סוד", "חוב", "כוח", "פשע"). אם קיימים רק מעט חפצים מוחשיים תקניים בצירוף העיצורים הזה, החזר רק את החפצים האמיתיים הקיימים ואל תמציא מילים!
+3. **חוק פונטי מוחלט**: ${phoneticRuleDesc}
+4. בדוק אות-אחר-אות בכל חפץ שאתה מציע: כל אות במילה חייבת להיות או עיצור של המספר (${isMajorSingleDigit ? unitsDef.letters.join('/') : `${tensDef.letters.join('/')} ואז ${unitsDef.letters.join('/')}`}) או אות חיבור מתוך [${activeConnectingLetters.join(', ')}].
+5. החזר רק את שם החפץ/העצם עצמו (מילה אחת קצרה ומוחשית, ללא תיאורים מסביב וללא שמות תואר).
+6. דוגמאות לחפצים ועצמים תקינים עבור המספר ${isMajorSingleDigit ? targetNum : paddedNumStr} לפי המיפוי הנוכחי: [${validPoolWords.join(', ')}].
+${contextPerson || contextAction ? `7. הקשר קיים בשלשה: אדם="${contextPerson || 'טרם הוגדר'}", פעולה="${contextAction || 'טרם הוגדרה'}". אם קיים חפץ תקף שמשתלב מצוין עם הדמות והפעולה, העדף אותו!` : ''}
+${prevList.length > 0 ? `8. אל תחזור על חפצים שכבר הוצעו: [${prevList.join(', ')}].` : ''}
+
+השב אך ורק ב-JSON תקני:
+{
+  "candidates": ["חפץ1", "חפץ2", "חפץ3", "חפץ4", "חפץ5", "חפץ6"]
+}`;
+
+      const response = await client.models.generateContent({
+        model: FAST_TEXT_MODEL,
+        contents: objectPrompt,
+        config: {
+          thinkingConfig: FAST_THINKING_CONFIG,
+          responseMimeType: 'application/json',
+          temperature: 0.7,
+        },
+      });
+
+      const parsed = JSON.parse(response.text || '{}');
+      const rawCandidates: string[] = Array.isArray(parsed.candidates)
+        ? parsed.candidates
+        : parsed.paoObject || parsed.hebrewKeyword
+        ? [parsed.paoObject || parsed.hebrewKeyword]
+        : [];
+
+      // Strictly filter candidates through serverValidateObjectWord so zero invalid consonants ever slip through
+      const validGeminiCandidates = rawCandidates
+        .map((c) => String(c || '').replace(/\([^)]*\)/g, '').replace(/["'״׳]/g, '').trim())
+        .filter((c) =>
+          serverValidateObjectWord(c, targetNum, digitsDict, activeConnectingLetters, type === 'major_word')
+        );
+
+      const combinedValid = Array.from(new Set([...validGeminiCandidates, ...validPoolWords]));
+      const freshValid = combinedValid.filter((w) => !prevList.includes(w));
+      const chosenWord =
+        freshValid[0] ||
+        combinedValid[cycleNum % Math.max(1, combinedValid.length)] ||
+        validPoolWords[0];
+
+      return res.json({
+        headline: `חפץ/מילה למספר ${paddedNumStr}`,
+        paoObject: chosenWord,
+        hebrewKeyword: chosenWord,
+        visualScene: chosenWord,
+        fullScene: chosenWord,
+      });
+    }
+
+    // =========================================================================
+    // CASE 4: PAO SCENE (סצנה שלמה) & MAJOR HINT (סצנה קינטית ל-Major)
+    // =========================================================================
+    if (type === 'pao_scene' || type === 'major_hint') {
+      const effectiveWord = contextObject || cleanPrefix(extraStr) || inputStr;
+      const isPaoScene = type === 'pao_scene';
+
+      const scenePrompt = `אתה אלוף זיכרון עולמי ומומחה ליצירת סצנות מנמוניות בלתי נשכחות בעברית.
+${userDictionaryBlock}
+
+${MNEMONIC_SCENE_SYSTEM_INSTRUCTIONS}
+
+המשימה שלך: צור סצנה מנמונית חיה, עוצמתית ובלתי נשכחת בעברית (2 עד 3 משפטים עסיסיים וממוקדים) עבור ${
+        isPaoScene
+          ? `שלשת ה-PAO של מספר #${paddedNumStr}:
+- 👤 אדם (Person): "${contextPerson || 'דמות מסתורית'}"
+- ⚡ פעולה (Action): "${contextAction || 'מבצע פעולה עוצמתית על'}"
+- 📦 חפץ (Object): "${contextObject || 'החפץ'}"`
+          : `מילת ה-Major של מספר #${paddedNumStr}:
+- 🎯 מילת המפתח (Keyword): "${effectiveWord}"`
+      }
+
+דגשים מחייבים ליצירת הסצנה:
+1. שלב את ${isPaoScene ? `שלושת הרכיבים ("${contextPerson}", "${contextAction}", "${contextObject}")` : `המילה "${effectiveWord}"`} בתוך אינטראקציה דינמית אחת עם סיבתיות מוטרפת (Insane Causality) ותנועה אקטיבית מתפרצת (Active Movement).
+2. יישם במלואו את עקרון ה-SEE: שלב חושים מרובים (קול חזק, ריח דומיננטי, מרקם פיזי/טמפרטורה או טעם), רגש קיצוני (הומור פרוע, אבסורד מוחלט או הלם), והגזמה קיצונית של פרופורציות או כמויות.
+3. יישם את אפקט פון רסטורף (Von Restorff Effect): שמור על רקע נקי ופשוט לחלוטין ללא פרטי תפאורה מיותרים, כך שהדמות, הפעולה והחפץ יהיו האלמנטים הכי ביזאריים ובולטים בפריים.
+${prevList.length > 0 ? `4. זוהי הצעה חדשה (איטרציה ${cycleNum + 1}). אל תחזור על סצנות קודמות: הצע תרחיש חדש ומפתיע לחלוטין!` : ''}
+
+השב אך ורק ב-JSON תקני:
+{
+  "fullScene": "תיאור הסצנה המנמונית המלאה בעברית (2-3 משפטים)...",
+  "headline": "כותרת קצרה לסצנה"
+}`;
+
+      const response = await client.models.generateContent({
+        model: FAST_TEXT_MODEL,
+        contents: scenePrompt,
+        config: {
+          thinkingConfig: FAST_THINKING_CONFIG,
+          responseMimeType: 'application/json',
+          temperature: 0.85,
+        },
+      });
+
+      const parsed = JSON.parse(response.text || '{}');
+      const sceneText = String(parsed.fullScene || parsed.visualScene || '').trim();
+      if (sceneText) {
+        return res.json({
+          headline: parsed.headline || `סצנה מנמונית #${paddedNumStr}`,
+          fullScene: sceneText,
+          visualScene: sceneText,
+          explanation: 'סצנה שנבנתה לפי עקרון ה-SEE, סיבתיות מטורפת ואפקט פון רסטורף.',
+          hebrewKeyword: effectiveWord,
+          paoPerson: contextPerson,
+          paoAction: contextAction,
+          paoObject: contextObject,
+        });
+      }
+    }
+
+    // =========================================================================
+    // CASE 5: MAJOR CONSONANTS OR OTHER MNEMONIC FIELDS (Palace, Names, Academic)
+    // =========================================================================
+    if (type === 'major_consonants' && hasValidNum) {
+      const isSingle = targetNum >= 0 && targetNum <= 9;
+      const consText = isSingle
+        ? digitsDict[targetNum].displayStr
+        : `${digitsDict[tensDigit].primaryLetter} + ${digitsDict[unitsDigit].primaryLetter}`;
+      return res.json({
+        headline: `עיצורים למספר ${paddedNumStr}`,
+        hebrewKeyword: consText,
+        visualScene: consText,
+        fullScene: consText,
+      });
+    }
+
+    // General mnemonic generation (Palaces, Names & Faces, Academic, etc.)
+    const generalPrompt = `אתה אלוף זיכרון עולמי ומומחה למנמוניקה בעברית.
+${userDictionaryBlock}
+${MNEMONIC_SCENE_SYSTEM_INSTRUCTIONS}
+
+סוג המשימה: ${type}
+קלט המשתמש: "${inputStr}"
+הקשר נוסף: "${extraStr}"
+איטרציה: ${cycleNum + 1}
+
+השב אך ורק ב-JSON תקני:
+{
+  "headline": "כותרת קצרה",
+  "hebrewKeyword": "מילת מפתח או עוגן קצר",
+  "visualScene": "תיאור הסצנה המנמונית לפי עקרון ה-SEE ואפקט פון רסטורף",
+  "fullScene": "תיאור הסצנה המלאה",
+  "explanation": "הסבר קצר"
+}`;
+
+    const genRes = await client.models.generateContent({
+      model: FAST_TEXT_MODEL,
+      contents: generalPrompt,
+      config: {
+        thinkingConfig: FAST_THINKING_CONFIG,
+        responseMimeType: 'application/json',
+        temperature: 0.8,
+      },
+    });
+    const parsedGen = JSON.parse(genRes.text || '{}');
+    return res.json(parsedGen);
+  } catch (error: any) {
+    console.warn('Gemini mnemonic generation error, using phonetic rule fallback:', error?.message || error);
+
+    // Rule-compliant fallback using the user's custom 0-9 dictionary & connecting letters
+    const validWords = getValidPoolWordsForNumber(
+      hasValidNum ? targetNum : 0,
+      digitsDict,
+      activeConnectingLetters,
+      type === 'major_word'
+    );
+    const chosenObj = contextObject || validWords[cycleNum % validWords.length];
+    const chosenPers =
+      contextPerson ||
+      getFallbackPersonForNumber(hasValidNum ? targetNum : 0, digitsDict, cycleNum);
+    const isPersonMissing = !contextPerson || !contextPerson.trim();
+    const fallbackActions = ['מתאגרף בעוצמה', 'מנפץ בפטיש', 'מקפיא בקרח', 'מלהטט בלהבות', 'משגר מתותח'];
+    const chosenAct = contextAction || fallbackActions[cycleNum % fallbackActions.length];
+    const fallbackScene = `${chosenPers} מזנק בעוצמה אדירה ו${chosenAct} ישירות אל תוך ${chosenObj} ענק בגודל משאית שמתפוצץ לרסיסים זוהרים; נשמע קול נפץ מחריש אוזניים, ריח חריף של עשן ומנטה קפואה ממלא את האף והרסיסים קרים ומחוספסים למגע על רקע נקי לחלוטין!`;
+
+    return res.json({
+      headline: `אסוציאציה למספר ${paddedNumStr}`,
+      hebrewKeyword: type === 'pao_person' ? chosenPers : type === 'pao_action' ? chosenAct : chosenObj,
+      paoPerson: chosenPers,
+      paoAction: chosenAct,
+      paoObject: chosenObj,
+      visualScene: fallbackScene,
+      fullScene: fallbackScene,
+      isRandomAction: type === 'pao_action' && isPersonMissing,
+      actionNote:
+        type === 'pao_action' && isPersonMissing
+          ? 'שים לב: הפעולה נבחרה באקראי מכיוון שטרם הוגדרה דמות בשדה "אדם". מומלץ להגדיר דמות תחילה כדי שהפעולה תאפיין אותה.'
+          : '',
+    });
+  }
 });
 
 // API Endpoint: AI Performance & Cognitive Technique Analysis
@@ -695,9 +1075,10 @@ ${JSON.stringify((testHistory || []).slice(0, 15))}
 }`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: FAST_TEXT_MODEL,
       contents: prompt,
       config: {
+        thinkingConfig: FAST_THINKING_CONFIG,
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
@@ -811,7 +1192,10 @@ app.post('/api/gemini/generate-pao-image', async (req: Request, res: Response) =
     let synthesizedPrompt = '';
     try {
       const flashSynthesis = await client.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: FAST_TEXT_MODEL,
+        config: {
+          thinkingConfig: FAST_THINKING_CONFIG,
+        },
         contents: `You are an expert cognitive illustration prompter specializing in the PAO mnemonic memory system and abstract caricature art.
 Convert the following Hebrew PAO triplet and complete scene into a single, vibrant, humorous abstract caricature cartoon image generation prompt in English.
 

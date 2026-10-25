@@ -351,15 +351,9 @@
               box-shadow 220ms var(--m3-easing-emphasized-decelerate),
               border-color 180ms ease,
               background-color 180ms ease;
-  will-change: transform, border-radius;
 }
 .m3-shape-morph:hover {
-  transform: translateY(-2.5px) scale(1.02);
   border-radius: 1.35rem;
-}
-.m3-shape-morph:active {
-  transform: translateY(1.5px) scale(0.97);
-  border-radius: 0.85rem;
 }
 
 /* Expressive Chip Micro-Interaction */

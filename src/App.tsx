@@ -252,6 +252,8 @@ export default function App() {
           <NumberLogicModule
             majorDigits={majorDigits}
             connectingLetters={connectingLetters}
+            majorItems={majorItems}
+            paoItems={paoItems}
             onUpdateMajorDigit={updateMajorDigit}
             onResetMajorDigit={resetMajorDigit}
             onUpdateConnectingLetters={updateConnectingLetters}

@@ -1,15 +1,4 @@
-// PAO (Person-Action-Object) Initials and Major System Consonant Mapping
-// In accordance with the default Hebrew Major System mapping:
-// 0 = ס (ס, ז, שׂ)
-// 1 = ל
-// 2 = ב (ב, פ דגושה)
-// 3 = כ (כ, ק, ג)
-// 4 = ד (ט, ת, ד)
-// 5 = ח
-// 6 = ש (שׁ, צ)
-// 7 = ר
-// 8 = מ
-// 9 = פ (פ, ב רפה)
+import { parseConsonantTokens } from './hebrewLogicValidator';
 
 export interface DigitConsonantDef {
   primary: string;
@@ -18,16 +7,16 @@ export interface DigitConsonantDef {
 }
 
 export const MAJOR_DIGITS_MAPPING: Record<number, DigitConsonantDef> = {
-  0: { primary: 'ס', allConsonants: 'ס, ז, שׂ (ש דגושה)', mnemonicWord: 'סוס' },
+  0: { primary: 'ס', allConsonants: 'ס, ז, שׂ', mnemonicWord: 'סוס' },
   1: { primary: 'ל', allConsonants: 'ל', mnemonicWord: 'לב' },
-  2: { primary: 'ב', allConsonants: 'ב', mnemonicWord: 'בית' },
-  3: { primary: 'ג', allConsonants: 'ג, ק, כ', mnemonicWord: 'כוס' },
-  4: { primary: 'ד', allConsonants: 'ד, ת, ט', mnemonicWord: 'תה' },
+  2: { primary: 'ב', allConsonants: 'בּ, ב', mnemonicWord: 'בית' },
+  3: { primary: 'ג', allConsonants: 'ג, ק, כּ, כ', mnemonicWord: 'כוס' },
+  4: { primary: 'ד', allConsonants: 'ד, תּ, ת, ט', mnemonicWord: 'תה' },
   5: { primary: 'ח', allConsonants: 'ח', mnemonicWord: 'חי' },
-  6: { primary: 'ש', allConsonants: 'שׁ, ג\', צ\'', mnemonicWord: 'אש' },
+  6: { primary: 'ש', allConsonants: "שׁ, ג', צ, צ'", mnemonicWord: 'אש' },
   7: { primary: 'ר', allConsonants: 'ר', mnemonicWord: 'אור' },
   8: { primary: 'מ', allConsonants: 'מ', mnemonicWord: 'ים' },
-  9: { primary: 'פ', allConsonants: 'פ (רפה ודגושה)', mnemonicWord: 'פה' },
+  9: { primary: 'פ', allConsonants: 'פּ, פ', mnemonicWord: 'פה' },
 };
 
 export interface PAOInitialsResult {
@@ -38,13 +27,13 @@ export interface PAOInitialsResult {
   initials: string; // e.g. "ל.ד."
   spaced: string; // e.g. "ל · ד"
   tensConsonants: string; // e.g. "ל"
-  unitsConsonants: string; // e.g. "ד/ת/ט"
-  fullFormula: string; // e.g. "1=ל, 4=ד/ת/ט"
+  unitsConsonants: string; // e.g. "ד, ת, ט"
+  fullFormula: string; // e.g. "1=ל | 4=ד, ת, ט"
 }
 
 /**
- * Returns the two canonical initials for any 2-digit number (00 to 99)
- * based on the Major System mapping, with optional customDigits override.
+ * Returns the live initials and consonant formula for any 2-digit number (00 to 99)
+ * pulled directly (Live Binding) from the Numbers Logic module (`customDigits`).
  */
 export function getPAOInitials(
   number: number,
@@ -74,20 +63,24 @@ export function getPAOInitials(
     const customTensObj = customDigits.find((d) => d.number === tensDigit);
     if (customTensObj) {
       const cons = (customTensObj.consonants || '').trim();
-      if (cons) {
-        tensConsonants = cons;
-        const firstHebrew = cons.match(/[\u0590-\u05FF]/);
-        if (firstHebrew) tensLetter = firstHebrew[0];
+      tensConsonants = cons || 'ללא עיצור';
+      const tokens = parseConsonantTokens(cons);
+      if (tokens.length > 0) {
+        tensLetter = tokens[0];
+      } else {
+        tensLetter = '?';
       }
     }
 
     const customUnitsObj = customDigits.find((d) => d.number === unitsDigit);
     if (customUnitsObj) {
       const cons = (customUnitsObj.consonants || '').trim();
-      if (cons) {
-        unitsConsonants = cons;
-        const firstHebrew = cons.match(/[\u0590-\u05FF]/);
-        if (firstHebrew) unitsLetter = firstHebrew[0];
+      unitsConsonants = cons || 'ללא עיצור';
+      const tokens = parseConsonantTokens(cons);
+      if (tokens.length > 0) {
+        unitsLetter = tokens[0];
+      } else {
+        unitsLetter = '?';
       }
     }
   }
@@ -101,6 +94,6 @@ export function getPAOInitials(
     spaced: `${tensLetter} · ${unitsLetter}`,
     tensConsonants,
     unitsConsonants,
-    fullFormula: `${tensDigit}=${tensLetter}, ${unitsDigit}=${unitsLetter}`,
+    fullFormula: `${tensDigit}=[${tensConsonants}] • ${unitsDigit}=[${unitsConsonants}]`,
   };
 }

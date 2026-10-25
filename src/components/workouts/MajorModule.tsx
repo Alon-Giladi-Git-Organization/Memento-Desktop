@@ -16,20 +16,23 @@ import {
   Sliders,
   Sparkles,
   BookOpen,
-  CheckSquare,
   Check,
   ArrowLeft,
-  ListFilter,
   AlertTriangle,
+  X,
+  Package,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { MajorItem } from '../../types/memory';
+import { MajorItem, PAOItem } from '../../types/memory';
 import { isHebrewFuzzyMatch, isHebrewMultiFieldSearchMatch } from '../../lib/fuzzyMatch';
 import { AIFieldGeneratorButton } from '../AIFieldGeneratorButton';
 import {
   validateHebrewLogic,
   checkMajorDuplicates,
   DEFAULT_CONNECTING_LETTERS,
+  getLiveMajorConsonants,
+  useIgnoredValidations,
+  buildLogicIgnoreKey,
 } from '../../lib/hebrewLogicValidator';
 import {
   getCurrentOrInitialDeckItem,
@@ -43,9 +46,10 @@ interface MajorModuleProps {
   majorDigits: MajorItem[];
   connectingLetters?: string[];
   majorItems: MajorItem[];
+  paoItems?: PAOItem[];
   onEarnPoints: (amount: number, reason?: string) => void;
   onUnlockBadge: (badge: string) => void;
-  onUpdateMajorDigit: (digit: number, consonants: string, word: string, hint: string) => void;
+  onUpdateMajorDigit: (digit: number, consonants: string, word?: string, hint?: string) => void;
   onResetMajorDigit: (digit: number) => void;
   onRecalculateMajor00_99FromDigits: (customDigits?: MajorItem[]) => void;
   onAddMajorItem?: (item: MajorItem) => void;
@@ -72,10 +76,9 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
   majorDigits,
   connectingLetters = DEFAULT_CONNECTING_LETTERS,
   majorItems,
+  paoItems = [],
   onEarnPoints,
   onUnlockBadge,
-  onUpdateMajorDigit,
-  onResetMajorDigit,
   onRecalculateMajor00_99FromDigits,
   onAddMajorItem,
   onUpdateMajorItem,
@@ -85,8 +88,8 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
   onToggleMajorReady,
   onSetAllMajorReady,
   onNavigateToLogicTab,
-  onSyncMajorAndPAOObjects,
 }) => {
+  const { isIgnored, ignoreValidation } = useIgnoredValidations();
   const [subView, setSubView] = useState<'table' | 'digits' | 'quiz'>('table');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [search, setSearch] = useState('');
@@ -96,18 +99,13 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
 
   // Ready for practice items calculation (Strict Whitelist Filtering)
   const readyItems = majorItems.filter((item) => Boolean(item.is_ready_for_practice));
+  const allMajorReady =
+    majorItems.length > 0 && majorItems.every((item) => Boolean(item.is_ready_for_practice));
 
-  // Editing Major Item (00-99)
+  // Editing Major Item (0-99) via Expanded Modal Container
   const [editingNum, setEditingNum] = useState<number | null>(null);
   const [editWord, setEditWord] = useState('');
-  const [editConsonants, setEditConsonants] = useState('');
   const [editHint, setEditHint] = useState('');
-
-  // Editing Single Digit (0-9) Mapping
-  const [editingDigitNum, setEditingDigitNum] = useState<number | null>(null);
-  const [editDigitConsonants, setEditDigitConsonants] = useState('');
-  const [editDigitWord, setEditDigitWord] = useState('');
-  const [editDigitHint, setEditDigitHint] = useState('');
 
   // Validation alert modal state
   const [validationModal, setValidationModal] = useState<{
@@ -115,18 +113,31 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
     title: string;
     message: string;
     details?: string;
+    ignoreKey?: string;
     onConfirmBypass?: () => void;
   } | null>(null);
 
-  const handleSaveDigit = (digitNum: number) => {
-    onUpdateMajorDigit(
-      digitNum,
-      editDigitConsonants.trim(),
-      editDigitWord.trim(),
-      editDigitHint.trim()
-    );
-    setEditingDigitNum(null);
-    onEarnPoints(10, `עדכון לוגיקת ספרה ${digitNum}`);
+  // Light Dismiss via Escape key for MAJOR Edit Modal & Validation Modal
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (validationModal?.isOpen) {
+          setValidationModal(null);
+          return;
+        }
+        if (editingNum !== null) {
+          setEditingNum(null);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [editingNum, validationModal]);
+
+  const handleOpenEditModal = (item: MajorItem) => {
+    setEditingNum(item.number);
+    setEditWord(item.defaultWord || '');
+    setEditHint(item.imageHint || '');
   };
 
   const handleSaveItem = (itemNum: number, bypassValidation = false) => {
@@ -145,23 +156,35 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
         return;
       }
 
-      // 2. Check logic conformity
-      const logicRes = validateHebrewLogic(wordToSave, itemNum, majorDigits, connectingLetters, 'major');
-      if (!logicRes.isValid) {
-        setValidationModal({
-          isOpen: true,
-          title: 'הודעת ולידציה: אי-התאמה לחוקי הלוגיקה',
-          message: logicRes.message,
-          details: logicRes.details || `המילה "${wordToSave}" אינה תואמת לעיצורים שהוגדרו עבור ספרה ${itemNum}.`,
-          onConfirmBypass: () => handleSaveItem(itemNum, true),
-        });
-        return;
+      // 2. Check logic conformity (unless ignored)
+      const logicIgnoreKey = buildLogicIgnoreKey('major-word', itemNum, wordToSave);
+      if (!isIgnored(logicIgnoreKey)) {
+        const logicRes = validateHebrewLogic(wordToSave, itemNum, majorDigits, connectingLetters, 'major');
+        if (!logicRes.isValid) {
+          setValidationModal({
+            isOpen: true,
+            title: 'הודעת ולידציה: חריגה מהלוגיקה',
+            message: logicRes.message,
+            details: logicRes.details,
+            ignoreKey: logicIgnoreKey,
+            onConfirmBypass: () => {
+              ignoreValidation(logicIgnoreKey);
+              handleSaveItem(itemNum, true);
+            },
+          });
+          return;
+        }
       }
     }
 
+    const liveCons =
+      getLiveMajorConsonants(itemNum, majorDigits) ||
+      majorItems.find((m) => m.number === itemNum)?.consonants ||
+      '';
+
     onUpdateMajorItem(itemNum, {
       defaultWord: wordToSave,
-      consonants: editConsonants.trim(),
+      consonants: liveCons,
       imageHint: editHint.trim(),
     });
     setEditingNum(null);
@@ -176,12 +199,10 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
     }
   };
 
-
   // Add New Major Item Modal/State
   const [showAddForm, setShowAddForm] = useState(false);
   const [newNumber, setNewNumber] = useState('');
   const [newWord, setNewWord] = useState('');
-  const [newConsonants, setNewConsonants] = useState('');
   const [newHint, setNewHint] = useState('');
 
   // Quiz State (Strictly over readyItems via non-repeating permutation cycle)
@@ -192,7 +213,6 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
   const [revealHint, setRevealHint] = useState(false);
   const [isQuizEditing, setIsQuizEditing] = useState(false);
   const [quizEditWord, setQuizEditWord] = useState('');
-  const [quizEditConsonants, setQuizEditConsonants] = useState('');
   const [quizEditHint, setQuizEditHint] = useState('');
 
   // Peek/Mount quiz question when switching to quiz subview without advancing
@@ -281,22 +301,34 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
         return;
       }
 
-      const logicRes = validateHebrewLogic(wordToSave, currentQuizItem.number, majorDigits, connectingLetters, 'major');
-      if (!logicRes.isValid) {
-        setValidationModal({
-          isOpen: true,
-          title: 'הודעת ולידציה: אי-התאמה לחוקי הלוגיקה',
-          message: logicRes.message,
-          details: logicRes.details,
-          onConfirmBypass: () => handleSaveQuizEdit(true),
-        });
-        return;
+      const logicIgnoreKey = buildLogicIgnoreKey('major-word', currentQuizItem.number, wordToSave);
+      if (!isIgnored(logicIgnoreKey)) {
+        const logicRes = validateHebrewLogic(wordToSave, currentQuizItem.number, majorDigits, connectingLetters, 'major');
+        if (!logicRes.isValid) {
+          setValidationModal({
+            isOpen: true,
+            title: 'הודעת ולידציה: חריגה מהלוגיקה',
+            message: logicRes.message,
+            details: logicRes.details,
+            ignoreKey: logicIgnoreKey,
+            onConfirmBypass: () => {
+              ignoreValidation(logicIgnoreKey);
+              handleSaveQuizEdit(true);
+            },
+          });
+          return;
+        }
       }
     }
 
+    const liveCons =
+      getLiveMajorConsonants(currentQuizItem.number, majorDigits) ||
+      currentQuizItem.consonants ||
+      '';
+
     onUpdateMajorItem(currentQuizItem.number, {
       defaultWord: wordToSave,
-      consonants: quizEditConsonants.trim(),
+      consonants: liveCons,
       imageHint: quizEditHint.trim(),
     });
     setIsQuizEditing(false);
@@ -324,25 +356,34 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
         return;
       }
 
-      const logicRes = validateHebrewLogic(wordToSave, num, majorDigits, connectingLetters, 'major');
-      if (!logicRes.isValid) {
-        setValidationModal({
-          isOpen: true,
-          title: 'הודעת ולידציה: אי-התאמה לחוקי הלוגיקה',
-          message: logicRes.message,
-          details: logicRes.details,
-          onConfirmBypass: () => handleAddNewItem(undefined, true),
-        });
-        return;
+      const logicIgnoreKey = buildLogicIgnoreKey('major-word', num, wordToSave);
+      if (!isIgnored(logicIgnoreKey)) {
+        const logicRes = validateHebrewLogic(wordToSave, num, majorDigits, connectingLetters, 'major');
+        if (!logicRes.isValid) {
+          setValidationModal({
+            isOpen: true,
+            title: 'הודעת ולידציה: חריגה מהלוגיקה',
+            message: logicRes.message,
+            details: logicRes.details,
+            ignoreKey: logicIgnoreKey,
+            onConfirmBypass: () => {
+              ignoreValidation(logicIgnoreKey);
+              handleAddNewItem(undefined, true);
+            },
+          });
+          return;
+        }
       }
     }
+
+    const liveCons = getLiveMajorConsonants(num, majorDigits) || '';
 
     if (onAddMajorItem) {
       onAddMajorItem({
         number: num,
         numberStr: numStr,
         defaultWord: wordToSave,
-        consonants: newConsonants.trim(),
+        consonants: liveCons,
         imageHint: newHint.trim(),
         is_ready_for_practice: true,
       });
@@ -350,7 +391,6 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
 
     setNewNumber('');
     setNewWord('');
-    setNewConsonants('');
     setNewHint('');
     setShowAddForm(false);
     setValidationModal(null);
@@ -437,7 +477,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
         </div>
       </div>
 
-      {/* Connecting Letters Rule Note / חוק אותיות הקישור */}
+      {/* Connecting Letters Rule Note / חוק אותיות הקישור (Live Data Binding from Numbers Logic) */}
       <div className="bg-gradient-to-r from-sky-50 via-white to-indigo-50 border border-sky-200 rounded-2xl p-4 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-right">
         <div className="flex items-start sm:items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-sky-100 text-sky-700 border border-sky-300 flex items-center justify-center font-bold shrink-0 text-lg shadow-xs">
@@ -446,17 +486,14 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
           <div className="space-y-1">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-sm font-black text-sky-900">
-                חוק אותיות החיבור (ללא ערך מספרי):
+                חוק אותיות החיבור (מסונכרן בזמן אמת מהמוח הלוגי):
               </span>
               <span className="text-sm font-mono font-bold text-sky-800 bg-sky-100 px-2.5 py-0.5 rounded-lg border border-sky-300">
-                א', נ', י', ע', ו', ה'
-              </span>
-              <span className="text-xs font-black text-amber-800 bg-amber-100 px-2.5 py-0.5 rounded-lg border border-amber-300">
-                ביטוי עזר לזיכרון: "א-נ-י-ע-ו-נ-ה"
+                {connectingLetters.length > 0 ? connectingLetters.map((l) => `${l}'`).join(', ') : 'ללא אותיות חיבור'}
               </span>
             </div>
             <p className="text-xs text-slate-600 leading-relaxed">
-              אותיות אלו שקופות לחלוטין ומשמשות כחומרי קישור חופשיים. כל מילות המאגר מבוססות <strong>אך ורק</strong> על עיצורי המספר עצמו + אותיות החיבור (למשל: <span className="text-amber-800 font-bold">11 = לול</span>, כי 1=ל ו-ו' אות חיבור).
+              אותיות אלו שקופות לחלוטין ומשמשות כחומרי קישור חופשיים. כל מילות המאגר מבוססות <strong>אך ורק</strong> על עיצורי המספר עצמו לפי לוגיקת הספרות + אותיות החיבור הפעילות.
             </p>
           </div>
         </div>
@@ -543,55 +580,31 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
-              {/* Batch Actions - Always display BOTH Select All and Deselect All */}
+              {/* Single Bulk Ready Toggle Button */}
               {onSetAllMajorReady && (
                 <div className="flex items-center gap-1.5 text-xs">
-                  {decadeFilter !== 'all' ? (
-                    <>
-                      <button
-                        onClick={() => {
-                          const d = parseInt(decadeFilter, 10);
-                          const nums = Array.from({ length: 10 }, (_, i) => d + i);
-                          onSetAllMajorReady(true, nums);
-                          onEarnPoints(10, `סימון עשור ${d} כמוכן לתרגול`);
-                        }}
-                        className="text-xs font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 px-2.5 py-1.5 rounded-xl transition-all cursor-pointer shadow-xs"
-                        title="סמן את כל 10 המספרים בעשור זה כמוכנים לתרגול"
-                      >
-                        ✓ סמן עשור {decadeFilter}
-                      </button>
-                      <button
-                        onClick={() => {
-                          const d = parseInt(decadeFilter, 10);
-                          const nums = Array.from({ length: 10 }, (_, i) => d + i);
-                          onSetAllMajorReady(false, nums);
-                        }}
-                        className="text-xs font-medium text-slate-400 hover:text-rose-400 bg-slate-950 hover:bg-rose-500/10 border border-slate-800 hover:border-rose-500/30 px-2 py-1.5 rounded-xl transition-all cursor-pointer"
-                        title="בטל סימון לעשור זה"
-                      >
-                        ✗ בטל עשור
-                      </button>
-                    </>
-                  ) : null}
-
-                  <button
-                    onClick={() => {
-                      onSetAllMajorReady(true);
-                      onEarnPoints(20, 'סימון כל 100 מספרי Major כמוכנים');
-                    }}
-                    className="text-xs font-bold text-emerald-400 hover:text-emerald-300 bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 px-3 py-1.5 rounded-xl transition-all cursor-pointer shadow-xs"
-                    title="סמן את כל 100 המספרים כמוכנים לתרגול (Select All)"
-                  >
-                    ✓ סמן הכל (100)
-                  </button>
-
-                  <button
-                    onClick={() => onSetAllMajorReady(false)}
-                    className="text-xs font-medium text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 px-3 py-1.5 rounded-xl transition-all cursor-pointer"
-                    title="בטל את כל סימוני התרגול (Deselect All)"
-                  >
-                    ✗ בטל הכל
-                  </button>
+                  {allMajorReady ? (
+                    <button
+                      type="button"
+                      onClick={() => onSetAllMajorReady(false)}
+                      className="text-xs font-bold text-white bg-slate-950 hover:bg-black border border-slate-700 px-3.5 py-2 rounded-xl transition-all cursor-pointer shadow-sm"
+                      title="הסר את כל המספרים מסטטוס מוכן לתרגול"
+                    >
+                      הסר הכל מסטטוס מוכן לתרגול
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        onSetAllMajorReady(true);
+                        onEarnPoints(20, 'סימון כל מספרי Major כמוכנים לתרגול');
+                      }}
+                      className="text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 border border-emerald-500 px-3.5 py-2 rounded-xl transition-all cursor-pointer shadow-sm"
+                      title="סמן את כל המספרים כמוכנים לתרגול"
+                    >
+                      סמן הכל כמוכן לתרגול
+                    </button>
+                  )}
                 </div>
               )}
 
@@ -658,7 +671,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
               className="bg-slate-950 border border-amber-500/40 rounded-2xl p-4 sm:p-5 space-y-3 animate-fadeIn"
             >
               <h4 className="text-xs font-bold text-amber-400">הוספת מספר ואסוציאציה חדשה למאגר</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-right">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-right">
                 <div>
                   <label className="text-[10px] text-slate-400 block font-semibold mb-1">
                     המספר (למשל 100):
@@ -674,14 +687,21 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-[10px] text-slate-400 font-semibold">
-                      מילה מנמונית:
+                      מילת/חפץ עוגן (עצם מוחשי):
                     </label>
                     <AIFieldGeneratorButton
                       promptType="major_word"
                       inputContext={newNumber}
-                      extraContext={newConsonants}
+                      extraContext={
+                        newNumber && !isNaN(parseInt(newNumber, 10))
+                          ? getLiveMajorConsonants(parseInt(newNumber, 10), majorDigits)
+                          : ''
+                      }
+                      paoContext={{ number: newNumber, object: newWord }}
+                      customDigits={majorDigits}
+                      connectingLetters={connectingLetters}
                       onGenerated={(val) => setNewWord(val)}
-                      label="מילה עם AI"
+                      label="חפץ עם AI"
                       compact
                     />
                   </div>
@@ -690,26 +710,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                     required
                     value={newWord}
                     onChange={(e) => setNewWord(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white"
-                  />
-                </div>
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-[10px] text-slate-400 font-semibold">
-                      עיצורים / אותיות:
-                    </label>
-                    <AIFieldGeneratorButton
-                      promptType="major_consonants"
-                      inputContext={newNumber}
-                      onGenerated={(val) => setNewConsonants(val)}
-                      label="עיצורים"
-                      compact
-                    />
-                  </div>
-                  <input
-                    type="text"
-                    value={newConsonants}
-                    onChange={(e) => setNewConsonants(e.target.value)}
+                    placeholder="חפץ או עצם מוחשי בלבד..."
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-white"
                   />
                 </div>
@@ -722,6 +723,9 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                       promptType="major_hint"
                       inputContext={newNumber}
                       extraContext={newWord}
+                      paoContext={{ number: newNumber, object: newWord, scene: newHint }}
+                      customDigits={majorDigits}
+                      connectingLetters={connectingLetters}
                       onGenerated={(val) => setNewHint(val)}
                       label="סצנה עם AI"
                       compact
@@ -761,9 +765,29 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                 {filteredItems.map((item) => {
                   const isEditing = editingNum === item.number;
                   const activeWord = item.defaultWord || '';
-                  const activeConsonants = item.consonants || '';
+                  const activeConsonants =
+                    getLiveMajorConsonants(item.number, majorDigits) || item.consonants || '';
                   const activeHint = item.imageHint || '';
-                  const isCustom = false;
+                  const logicIgnoreKey = buildLogicIgnoreKey('major-word', item.number, activeWord);
+                  const rawWordValidation = activeWord.trim()
+                    ? validateHebrewLogic(activeWord, item.number, majorDigits, connectingLetters, 'major')
+                    : { isValid: true, message: '' };
+                  const wordValidation = isIgnored(logicIgnoreKey)
+                    ? { isValid: true, message: '' }
+                    : rawWordValidation;
+
+                  const matchingPao = paoItems.find((p) => p.number === item.number);
+                  const paoObj = matchingPao?.object?.trim() || '';
+                  const mismatchIgnoreKey = buildLogicIgnoreKey(
+                    'major-pao-mismatch',
+                    item.number,
+                    activeWord,
+                    paoObj
+                  );
+                  const hasPaoMismatch =
+                    Boolean(activeWord.trim() && paoObj && activeWord.trim() !== paoObj) &&
+                    !isIgnored(mismatchIgnoreKey);
+
                   const isHighlighted = highlightedNum === item.number;
 
                   // דפוס M3 מספר 4: Shape Morphing / Expressive Spring (שינוי צורה וקפיציות בכרטיס Major)
@@ -772,202 +796,127 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                       id={`major-item-${item.number}`}
                       key={item.number}
                       className={`bg-slate-950 border rounded-2xl p-4 transition-all duration-300 flex flex-col justify-between m3-shape-morph ${
-                        item.is_ready_for_practice
+                        isEditing
+                          ? 'border-amber-400 ring-2 ring-amber-400/30'
+                          : !wordValidation.isValid || hasPaoMismatch
+                          ? 'border-amber-500/70 ring-1 ring-amber-500/30'
+                          : item.is_ready_for_practice
                           ? 'border-emerald-500/60 ring-2 ring-emerald-500/20 bg-emerald-950/15'
                           : isHighlighted
                           ? 'border-amber-400 ring-4 ring-amber-400/30 scale-[1.02] shadow-xl shadow-amber-500/20 bg-amber-950/20'
-                          : isCustom
-                          ? 'border-amber-500/50 shadow-sm shadow-amber-500/10'
                           : 'border-slate-800 hover:border-slate-700'
                       }`}
                     >
-                    <div className="space-y-2.5">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono text-xl font-black text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-lg border border-amber-500/20">
-                            {item.numberStr}
-                          </span>
-                          <span className="text-xs text-amber-300/80 font-mono font-bold">
-                            [{activeConsonants}]
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-1">
-                          {isCustom && (
-                            <button
-                              onClick={() => {
-                                onResetMajorItem(item.number);
-                                if (isEditing) setEditingNum(null);
-                              }}
-                              title="אפס לברירת מחדל"
-                              className="p-1.5 text-slate-500 hover:text-rose-400 cursor-pointer"
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-xl font-black text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-lg border border-amber-500/20">
+                              {item.numberStr}
+                            </span>
+                            <span
+                              className="text-xs text-amber-300/80 font-mono font-bold"
+                              title="עיצורים מסונכרנים בזמן אמת ממודולת לוגיקת הספרות"
                             >
-                              <Undo2 className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-                          <button
-                            onClick={() => {
-                              if (isEditing) {
-                                setEditingNum(null);
-                              } else {
-                                setEditingNum(item.number);
-                                setEditWord(activeWord);
-                                setEditConsonants(activeConsonants);
-                                setEditHint(activeHint || '');
-                              }
-                            }}
-                            className="p-1.5 text-slate-400 hover:text-amber-400 cursor-pointer"
-                            title="ערוך מספר"
-                          >
-                            <Edit3 className="w-4 h-4" />
-                          </button>
-                          {onDeleteMajorItem && (
+                              [{activeConsonants}]
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1">
                             <button
-                              onClick={() => onDeleteMajorItem(item.number)}
-                              className="p-1.5 text-slate-600 hover:text-rose-400 cursor-pointer"
-                              title="מחק מהמאגר"
+                              type="button"
+                              onMouseDown={(e) => e.stopPropagation()}
+                              onClick={() => handleOpenEditModal(item)}
+                              className="relative z-10 w-8 h-8 p-1.5 rounded-xl text-slate-300 hover:text-amber-300 hover:bg-amber-500/15 cursor-pointer inline-flex items-center justify-center transition-colors"
+                              title="ערוך מספר בחלון עריכה מורחב"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Edit3 className="w-4 h-4 pointer-events-none" />
                             </button>
+                            {onDeleteMajorItem && (
+                              <button
+                                onClick={() => onDeleteMajorItem(item.number)}
+                                className="p-1.5 text-slate-600 hover:text-rose-400 cursor-pointer"
+                                title="מחק מהמאגר"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="text-base font-bold text-white tracking-wide">{activeWord}</h4>
+                          </div>
+                          {!wordValidation.isValid && (
+                            <div
+                              title={wordValidation.details || wordValidation.message}
+                              className="w-full flex flex-col gap-1.5 px-2.5 py-2 rounded-xl bg-amber-500/15 border border-amber-500/50 text-amber-300 text-[11px] font-bold leading-snug"
+                            >
+                              <div className="flex items-start gap-1.5">
+                                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                                <span>{wordValidation.message}</span>
+                              </div>
+                              <div className="flex justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => ignoreValidation(logicIgnoreKey)}
+                                  className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-amber-200 border border-amber-500/40 cursor-pointer transition-colors"
+                                >
+                                  התעלם במקרה זה
+                                </button>
+                              </div>
+                            </div>
                           )}
-                        </div>
-                      </div>
-
-                      {isEditing ? (
-                        <div className="space-y-2.5 pt-1 text-right">
-                          <div>
-                            <div className="flex items-center justify-between mb-1">
-                              <label className="text-xs text-slate-300 font-bold">מילה מנמונית:</label>
-                              <AIFieldGeneratorButton
-                                promptType="major_word"
-                                inputContext={item.number.toString()}
-                                extraContext={editConsonants || item.consonants}
-                                onGenerated={(val) => setEditWord(val)}
-                                label="מילה עם AI"
-                                compact
-                              />
+                          {hasPaoMismatch && (
+                            <div className="w-full flex flex-col gap-1.5 px-2.5 py-2 rounded-xl bg-sky-500/15 border border-sky-500/50 text-sky-200 text-[11px] font-bold leading-snug">
+                              <div className="flex items-start gap-1.5">
+                                <AlertTriangle className="w-3.5 h-3.5 text-sky-400 shrink-0 mt-0.5" />
+                                <span>
+                                  לתשומת לבך - במודולת PAO הגדרת חפץ אחר עבור מספר זה ("{paoObj}") ; מומלץ לבחור באותה המילה עבור 2 המודולות
+                                </span>
+                              </div>
+                              <div className="flex justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => ignoreValidation(mismatchIgnoreKey)}
+                                  className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-sky-200 border border-sky-500/40 cursor-pointer transition-colors"
+                                >
+                                  התעלם במקרה זה
+                                </button>
+                              </div>
                             </div>
-                            <input
-                              type="text"
-                              value={editWord}
-                              onChange={(e) => setEditWord(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault();
-                                  handleSaveItem(item.number);
-                                }
-                              }}
-                              placeholder="מילה מנמונית..."
-                              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-sm text-white focus:outline-none focus:border-amber-500"
-                            />
-                          </div>
-
-                          <div>
-                            <div className="flex items-center justify-between mb-1">
-                              <label className="text-xs text-slate-300 font-bold">עיצורים (למשל: ס + ר):</label>
-                              <AIFieldGeneratorButton
-                                promptType="major_consonants"
-                                inputContext={item.number.toString()}
-                                onGenerated={(val) => setEditConsonants(val)}
-                                label="עיצורים"
-                                compact
-                              />
-                            </div>
-                            <input
-                              type="text"
-                              value={editConsonants}
-                              onChange={(e) => setEditConsonants(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault();
-                                  handleSaveItem(item.number);
-                                }
-                              }}
-                              placeholder="עיצורים (ס + ר)..."
-                              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-sm text-amber-200 focus:outline-none focus:border-amber-500"
-                            />
-                          </div>
-
-                          <div>
-                            <div className="flex items-center justify-between mb-1">
-                              <label className="text-xs text-slate-300 font-bold">סצנה קינטית / דימוי חושי:</label>
-                              <AIFieldGeneratorButton
-                                promptType="major_hint"
-                                inputContext={item.number.toString()}
-                                extraContext={editWord}
-                                onGenerated={(val) => setEditHint(val)}
-                                label="סצנה עם AI"
-                                compact
-                              />
-                            </div>
-                            <input
-                              type="text"
-                              value={editHint}
-                              onChange={(e) => setEditHint(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault();
-                                  handleSaveItem(item.number);
-                                }
-                              }}
-                              placeholder="סצנה קינטית רב-חושית..."
-                              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs sm:text-sm text-slate-200 focus:outline-none focus:border-amber-500"
-                            />
-                          </div>
-
-                          <div className="flex items-center justify-between gap-1 pt-1">
-                            <span className="text-[11px] text-slate-500 font-mono">↵ Enter לשמירה</span>
-                            <div className="flex gap-1.5">
-                              <button
-                                onClick={() => setEditingNum(null)}
-                                className="text-xs text-slate-400 hover:text-slate-200 px-2 py-1"
-                              >
-                                ביטול
-                              </button>
-                              <button
-                                onClick={() => handleSaveItem(item.number)}
-                                className="text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-1 rounded-lg cursor-pointer shadow-xs"
-                              >
-                                שמור
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <h4 className="text-base font-bold text-white tracking-wide">{activeWord}</h4>
+                          )}
                           {activeHint && (
                             <p className="text-xs text-slate-300 bg-slate-900/80 p-2 rounded-xl border border-slate-800 leading-relaxed">
                               ⚡ {activeHint}
                             </p>
                           )}
-                        </>
-                      )}
+                        </div>
 
-                      {/* Ready for Practice Checkbox */}
-                      <div className="pt-2.5 mt-2 border-t border-slate-800/80 flex items-center justify-between">
-                        <label className="inline-flex items-center gap-2 cursor-pointer select-none py-1.5 px-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 transition-all">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(item.is_ready_for_practice)}
-                            onChange={() => handleToggleItemReady(item.number, item.is_ready_for_practice)}
-                            className="w-4 h-4 rounded text-emerald-500 focus:ring-emerald-500 cursor-pointer accent-emerald-500"
-                          />
-                          <span className={`text-xs font-bold ${item.is_ready_for_practice ? 'text-emerald-400' : 'text-slate-400'}`}>
-                            מוכן לתרגול
-                          </span>
-                        </label>
-                        {item.is_ready_for_practice && (
-                          <span className="text-xs bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1">
-                            <Check className="w-3.5 h-3.5 text-emerald-400" />
-                            <span>מוכן</span>
-                          </span>
-                        )}
+                        {/* Ready for Practice Checkbox */}
+                        <div className="pt-2.5 mt-2 border-t border-slate-800/80 flex items-center justify-between">
+                          <label className="inline-flex items-center gap-2 cursor-pointer select-none py-1.5 px-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 transition-all">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(item.is_ready_for_practice)}
+                              onChange={() => handleToggleItemReady(item.number, item.is_ready_for_practice)}
+                              className="w-4 h-4 rounded text-emerald-500 focus:ring-emerald-500 cursor-pointer accent-emerald-500"
+                            />
+                            <span className={`text-xs font-bold ${item.is_ready_for_practice ? 'text-emerald-400' : 'text-slate-400'}`}>
+                              מוכן לתרגול
+                            </span>
+                          </label>
+                          {item.is_ready_for_practice && (
+                            <span className="text-xs bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1">
+                              <Check className="w-3.5 h-3.5 text-emerald-400" />
+                              <span>מוכן</span>
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
               </div>
             ) : (
               /* List View (רשימה נקייה, מרווחת ונוחה לעין) */
@@ -977,7 +926,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                     <tr>
                       <th className="py-3 px-4 w-16 text-center">מספר</th>
                       <th className="py-3 px-4 w-28">עיצורים</th>
-                      <th className="py-3 px-4 w-36">מילה</th>
+                      <th className="py-3 px-4 w-48">מילה (חפץ מוחשי)</th>
                       <th className="py-3 px-4">דימוי חושי קינטי</th>
                       <th className="py-3 px-4 w-32 text-center">מוכן לתרגול</th>
                       <th className="py-3 px-4 w-24 text-left">פעולות</th>
@@ -985,11 +934,29 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                   </thead>
                   <tbody className="divide-y divide-slate-800/60 text-sm">
                     {filteredItems.map((item) => {
-                      const isEditing = editingNum === item.number;
                       const activeWord = item.defaultWord || '';
-                      const activeConsonants = item.consonants || '';
+                      const activeConsonants =
+                        getLiveMajorConsonants(item.number, majorDigits) || item.consonants || '';
                       const activeHint = item.imageHint || '';
-                      const isCustom = false;
+                      const logicIgnoreKey = buildLogicIgnoreKey('major-word', item.number, activeWord);
+                      const rawWordValidation = activeWord.trim()
+                        ? validateHebrewLogic(activeWord, item.number, majorDigits, connectingLetters, 'major')
+                        : { isValid: true, message: '' };
+                      const wordValidation = isIgnored(logicIgnoreKey)
+                        ? { isValid: true, message: '' }
+                        : rawWordValidation;
+
+                      const matchingPao = paoItems.find((p) => p.number === item.number);
+                      const paoObj = matchingPao?.object?.trim() || '';
+                      const mismatchIgnoreKey = buildLogicIgnoreKey(
+                        'major-pao-mismatch',
+                        item.number,
+                        activeWord,
+                        paoObj
+                      );
+                      const hasPaoMismatch =
+                        Boolean(activeWord.trim() && paoObj && activeWord.trim() !== paoObj) &&
+                        !isIgnored(mismatchIgnoreKey);
 
                       return (
                         <tr
@@ -1003,70 +970,54 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                             {item.numberStr}
                           </td>
                           <td className="py-3 px-4 font-mono text-amber-300 font-semibold text-xs">
-                            {isEditing ? (
-                              <input
-                                type="text"
-                                value={editConsonants}
-                                onChange={(e) => setEditConsonants(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    handleSaveItem(item.number);
-                                  }
-                                }}
-                                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-amber-300"
-                              />
-                            ) : (
-                              activeConsonants
-                            )}
+                            {activeConsonants}
                           </td>
                           <td className="py-3 px-4 font-bold text-white text-base">
-                            {isEditing ? (
-                              <input
-                                type="text"
-                                value={editWord}
-                                onChange={(e) => setEditWord(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter') {
-                                    e.preventDefault();
-                                    handleSaveItem(item.number);
-                                  }
-                                }}
-                                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-sm text-white"
-                              />
-                            ) : (
+                            <div className="flex flex-col gap-1.5">
                               <span>{activeWord}</span>
-                            )}
+                              {!wordValidation.isValid && (
+                                <div
+                                  title={wordValidation.details || wordValidation.message}
+                                  className="inline-flex flex-col gap-1 text-[11px] text-amber-300 bg-amber-500/15 border border-amber-500/40 rounded-lg px-2 py-1.5 font-bold leading-snug"
+                                >
+                                  <div className="flex items-start gap-1">
+                                    <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                                    <span>{wordValidation.message}</span>
+                                  </div>
+                                  <div className="flex justify-end">
+                                    <button
+                                      type="button"
+                                      onClick={() => ignoreValidation(logicIgnoreKey)}
+                                      className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-amber-200 border border-amber-500/40 cursor-pointer"
+                                    >
+                                      התעלם במקרה זה
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                              {hasPaoMismatch && (
+                                <div className="inline-flex flex-col gap-1 text-[11px] text-sky-200 bg-sky-500/15 border border-sky-500/40 rounded-lg px-2 py-1.5 font-bold leading-snug">
+                                  <div className="flex items-start gap-1">
+                                    <AlertTriangle className="w-3.5 h-3.5 text-sky-400 shrink-0 mt-0.5" />
+                                    <span>
+                                      לתשומת לבך - במודולת PAO הגדרת חפץ אחר עבור מספר זה ("{paoObj}") ; מומלץ לבחור באותה המילה עבור 2 המודולות
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-end">
+                                    <button
+                                      type="button"
+                                      onClick={() => ignoreValidation(mismatchIgnoreKey)}
+                                      className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-sky-200 border border-sky-500/40 cursor-pointer"
+                                    >
+                                      התעלם במקרה זה
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
                           </td>
                           <td className="py-3 px-4 text-xs text-slate-300">
-                            {isEditing ? (
-                              <div className="space-y-1">
-                                <input
-                                  type="text"
-                                  value={editHint}
-                                  onChange={(e) => setEditHint(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                      e.preventDefault();
-                                      handleSaveItem(item.number);
-                                    }
-                                  }}
-                                  className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-200"
-                                />
-                                <div className="flex gap-1">
-                                  <AIFieldGeneratorButton
-                                    promptType="major_hint"
-                                    inputContext={item.number.toString()}
-                                    extraContext={editWord}
-                                    onGenerated={(val) => setEditHint(val)}
-                                    label="הצע סצנה AI"
-                                    compact
-                                  />
-                                </div>
-                              </div>
-                            ) : (
-                              activeHint || <span className="text-slate-600 italic">ללא סצנה</span>
-                            )}
+                            {activeHint || <span className="text-slate-600 italic">ללא סצנה</span>}
                           </td>
                           <td className="py-3 px-4 text-center">
                             <label className="inline-flex items-center gap-1.5 cursor-pointer select-none py-1 px-2.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 transition-all">
@@ -1083,46 +1034,15 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                           </td>
                           <td className="py-3 px-4 text-left">
                             <div className="flex items-center gap-1 justify-end">
-                              {isEditing ? (
-                                <>
-                                  <button
-                                    onClick={() => handleSaveItem(item.number)}
-                                    className="px-2 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-lg cursor-pointer"
-                                  >
-                                    שמור
-                                  </button>
-                                  <button
-                                    onClick={() => setEditingNum(null)}
-                                    className="px-1.5 py-1 text-xs text-slate-400 hover:text-white cursor-pointer"
-                                  >
-                                    ביטול
-                                  </button>
-                                </>
-                              ) : (
-                                <>
-                                  <button
-                                    onClick={() => {
-                                      setEditingNum(item.number);
-                                      setEditWord(activeWord);
-                                      setEditConsonants(activeConsonants);
-                                      setEditHint(activeHint || '');
-                                    }}
-                                    className="p-1 text-slate-400 hover:text-amber-400 cursor-pointer"
-                                    title="ערוך שורה"
-                                  >
-                                    <Edit3 className="w-3.5 h-3.5" />
-                                  </button>
-                                  {isCustom && (
-                                    <button
-                                      onClick={() => onResetMajorItem(item.number)}
-                                      className="p-1 text-slate-500 hover:text-rose-400 cursor-pointer"
-                                      title="איפוס לברירת מחדל"
-                                    >
-                                      <Undo2 className="w-3.5 h-3.5" />
-                                    </button>
-                                  )}
-                                </>
-                              )}
+                              <button
+                                type="button"
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onClick={() => handleOpenEditModal(item)}
+                                className="w-8 h-8 p-1.5 rounded-xl text-slate-300 hover:text-amber-300 hover:bg-amber-500/15 cursor-pointer inline-flex items-center justify-center transition-colors"
+                                title="ערוך שורה בחלון עריכה מורחב"
+                              >
+                                <Edit3 className="w-4 h-4 pointer-events-none" />
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -1155,7 +1075,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
         </div>
       )}
 
-      {/* SUB-VIEW: DIGITS 0-9 MAPPING & LOGIC EDITOR */}
+      {/* SUB-VIEW: DIGITS 0-9 ANCHOR WORDS (No Consonant Editing Here — Consonants Edited Only in Numbers Logic) */}
       {subView === 'digits' && (
         <div className="space-y-6 animate-fadeIn">
           {/* Explanation Banner */}
@@ -1164,35 +1084,54 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
               <div>
                 <h3 className="text-lg font-black text-amber-400 flex items-center gap-2">
                   <Sliders className="w-5 h-5 text-amber-400" />
-                  <span>עריכה והתאמה אישית של ספרות היסוד (0-9)</span>
+                  <span>חפצי עוגן לספרות היסוד (0-9)</span>
                 </h3>
                 <p className="text-xs sm:text-sm text-slate-400 mt-1">
-                  כל מילות ה-Major וה-PAO בכל האפליקציה נגזרות ממיפוי זה. ניתן להתאים אישית כל ספרה, ולאחר מכן לחשב מחדש את כל מאגר 00-99.
+                  כאן ניתן לערוך את חפצי העוגן והסצנות של ספרות 0-9. עריכת העיצורים עצמם מתבצעת אך ורק במודולת "לוגיקת מספרים".
                 </p>
               </div>
 
-              {onRecalculateMajor00_99FromDigits && (
-                <button
-                  onClick={() => {
-                    onRecalculateMajor00_99FromDigits(majorDigits);
-                    onEarnPoints(25, 'חישוב מחדש של מאגר 00-99 לפי מיפוי הספרות');
-                    setSyncToast('מאגר 00-99 חושב ועודכן בהצלחה!');
-                    setTimeout(() => setSyncToast(null), 3000);
-                  }}
-                  className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs sm:text-sm rounded-xl transition-all cursor-pointer shadow-md shrink-0 flex items-center gap-2"
-                >
-                  <Wand2 className="w-4 h-4" />
-                  <span>החל מיפוי על כל 00-99</span>
-                </button>
-              )}
+              <div className="flex items-center gap-2 flex-wrap">
+                {onNavigateToLogicTab && (
+                  <button
+                    type="button"
+                    onClick={onNavigateToLogicTab}
+                    className="px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-amber-300 border border-amber-500/40 font-bold text-xs sm:text-sm rounded-xl transition-all cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Sliders className="w-4 h-4" />
+                    <span>ערוך עיצורים בלוגיקת מספרים</span>
+                  </button>
+                )}
+                {onRecalculateMajor00_99FromDigits && (
+                  <button
+                    onClick={() => {
+                      onRecalculateMajor00_99FromDigits(majorDigits);
+                      onEarnPoints(25, 'חישוב מחדש של מאגר 00-99 לפי מיפוי הספרות');
+                      setSyncToast('מאגר 00-99 חושב ועודכן בהצלחה!');
+                      setTimeout(() => setSyncToast(null), 3000);
+                    }}
+                    className="px-4 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-bold text-xs sm:text-sm rounded-xl transition-all cursor-pointer shadow-md shrink-0 flex items-center gap-2"
+                  >
+                    <Wand2 className="w-4 h-4" />
+                    <span>החל מיפוי על כל 00-99</span>
+                  </button>
+                )}
+              </div>
             </div>
+
+            {syncToast && (
+              <div className="bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 text-xs font-bold px-4 py-2.5 rounded-xl flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>{syncToast}</span>
+              </div>
+            )}
 
             {/* Connecting Letters Reminder */}
             <div className="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-right">
               <div className="space-y-1">
-                <span className="text-xs font-bold text-sky-400 block">אותיות החיבור השקופות:</span>
+                <span className="text-xs font-bold text-sky-400 block">אותיות החיבור השקופות (מסונכרנות בזמן אמת):</span>
                 <span className="font-mono font-black text-base text-sky-300">
-                  א', נ', י', ע', ו', ה' ("א-נ-י-ע-ו-נ-ה")
+                  {connectingLetters.length > 0 ? connectingLetters.map((l) => `${l}'`).join(', ') : 'ללא אותיות חיבור'}
                 </span>
                 <p className="text-xs text-slate-400">
                   אותיות אלו אינן מקושרות לאף ספרה, ומשמשות תמיד כדבק חיבור חופשי למילים ולדימויים.
@@ -1204,131 +1143,125 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
           {/* Digits 0-9 Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
             {majorDigits.map((d) => {
-              const isEditing = editingDigitNum === d.number;
+              const majorItem = majorItems.find((m) => m.number === d.number) || d;
               const activeConsonants = d.consonants;
-              const activeWord = d.defaultWord;
-              const activeHint = d.imageHint;
+              const activeWord = majorItem.defaultWord || '';
+              const activeHint = majorItem.imageHint || '';
+              const logicIgnoreKey = buildLogicIgnoreKey('major-word', d.number, activeWord);
+              const rawDigitValidation = activeWord.trim()
+                ? validateHebrewLogic(activeWord, d.number, majorDigits, connectingLetters, 'major')
+                : { isValid: true, message: '' };
+              const digitValidation = isIgnored(logicIgnoreKey)
+                ? { isValid: true, message: '' }
+                : rawDigitValidation;
+
+              const matchingPao = paoItems.find((p) => p.number === d.number);
+              const paoObj = matchingPao?.object?.trim() || '';
+              const mismatchIgnoreKey = buildLogicIgnoreKey(
+                'major-pao-mismatch',
+                d.number,
+                activeWord,
+                paoObj
+              );
+              const hasPaoMismatch =
+                Boolean(activeWord.trim() && paoObj && activeWord.trim() !== paoObj) &&
+                !isIgnored(mismatchIgnoreKey);
 
               return (
                 <div
                   key={d.number}
                   className={`bg-slate-950 border rounded-2xl p-4 flex flex-col justify-between transition-all ${
-                    isEditing
-                      ? 'border-amber-400 ring-2 ring-amber-400/30'
+                    !digitValidation.isValid || hasPaoMismatch
+                      ? 'border-amber-500/70 ring-1 ring-amber-500/30'
                       : 'border-slate-800 hover:border-slate-700'
                   }`}
                 >
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 font-mono font-black text-xl flex items-center justify-center">
-                        {d.number}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 font-mono font-black text-xl flex items-center justify-center">
+                          {d.number}
+                        </span>
+                        <span
+                          className="text-xs font-mono font-bold text-amber-300/90 bg-slate-900 px-2 py-1 rounded-lg border border-slate-800"
+                          title="עיצורים מסונכרנים ממודולת לוגיקת מספרים"
+                        >
+                          [{activeConsonants}]
+                        </span>
+                      </div>
                       <div className="flex items-center gap-1">
                         <button
-                          onClick={() => {
-                            if (isEditing) {
-                              setEditingDigitNum(null);
-                            } else {
-                              setEditingDigitNum(d.number);
-                              setEditDigitConsonants(activeConsonants);
-                              setEditDigitWord(activeWord);
-                              setEditDigitHint(activeHint);
-                            }
-                          }}
-                          className="p-1.5 text-slate-400 hover:text-amber-400 cursor-pointer"
-                          title="ערוך ספרה זו"
+                          type="button"
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={() => handleOpenEditModal(majorItem)}
+                          className="w-8 h-8 p-1.5 rounded-xl text-slate-300 hover:text-amber-300 hover:bg-amber-500/15 cursor-pointer inline-flex items-center justify-center transition-colors"
+                          title="ערוך חפץ עוגן בחלון עריכה מורחב"
                         >
-                          <Edit3 className="w-4 h-4" />
+                          <Edit3 className="w-4 h-4 pointer-events-none" />
                         </button>
                         <button
-                          onClick={() => onResetMajorDigit(d.number)}
-                          className="p-1.5 text-slate-500 hover:text-rose-400 cursor-pointer"
-                          title="אפס ספרה זו לברירת מחדל"
+                          type="button"
+                          onClick={() => onResetMajorItem(d.number)}
+                          className="w-8 h-8 p-1.5 rounded-xl text-slate-500 hover:text-rose-400 cursor-pointer inline-flex items-center justify-center"
+                          title="אפס חפץ עוגן לברירת מחדל"
                         >
-                          <Undo2 className="w-3.5 h-3.5" />
+                          <Undo2 className="w-3.5 h-3.5 pointer-events-none" />
                         </button>
                       </div>
                     </div>
 
-                    {isEditing ? (
-                      <div className="space-y-2 text-right">
-                        <div>
-                          <label className="text-xs text-slate-400 font-bold block mb-1">עיצורים:</label>
-                          <input
-                            type="text"
-                            value={editDigitConsonants}
-                            onChange={(e) => setEditDigitConsonants(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                handleSaveDigit(d.number);
-                              }
-                            }}
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-amber-300"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs text-slate-400 font-bold block mb-1">מילת עוגן:</label>
-                          <input
-                            type="text"
-                            value={editDigitWord}
-                            onChange={(e) => setEditDigitWord(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                handleSaveDigit(d.number);
-                              }
-                            }}
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white"
-                          />
-                        </div>
-                        <div>
-                          <label className="text-xs text-slate-400 font-bold block mb-1">דימוי חושי:</label>
-                          <input
-                            type="text"
-                            value={editDigitHint}
-                            onChange={(e) => setEditDigitHint(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault();
-                                handleSaveDigit(d.number);
-                              }
-                            }}
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-300"
-                          />
-                        </div>
-                        <div className="flex justify-end gap-1.5 pt-1">
-                          <button
-                            onClick={() => setEditingDigitNum(null)}
-                            className="text-xs text-slate-400 px-2 py-1"
-                          >
-                            ביטול
-                          </button>
-                          <button
-                            onClick={() => handleSaveDigit(d.number)}
-                            className="text-xs bg-amber-500 text-slate-950 font-bold px-3 py-1 rounded-lg cursor-pointer"
-                          >
-                            שמור
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="space-y-2 text-right">
-                        <div>
-                          <span className="text-xs text-slate-400 font-bold block">עיצורים מקושרים:</span>
-                          <span className="text-sm font-black text-amber-300">{activeConsonants}</span>
-                        </div>
-                        <div>
-                          <span className="text-xs text-slate-400 font-bold block">מילה מנמונית:</span>
+                    <div className="space-y-2 text-right">
+                      <div>
+                        <span className="text-xs text-slate-400 font-bold block">מילת/חפץ עוגן:</span>
+                        <div className="flex flex-col gap-1.5 mt-0.5">
                           <span className="text-base font-bold text-white">{activeWord}</span>
+                          {!digitValidation.isValid && (
+                            <div
+                              title={digitValidation.details || digitValidation.message}
+                              className="w-full flex flex-col gap-1.5 px-2.5 py-2 rounded-xl bg-amber-500/15 border border-amber-500/50 text-amber-300 text-[11px] font-bold leading-snug"
+                            >
+                              <div className="flex items-start gap-1.5">
+                                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                                <span>{digitValidation.message}</span>
+                              </div>
+                              <div className="flex justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => ignoreValidation(logicIgnoreKey)}
+                                  className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-amber-200 border border-amber-500/40 cursor-pointer transition-colors"
+                                >
+                                  התעלם במקרה זה
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                          {hasPaoMismatch && (
+                            <div className="w-full flex flex-col gap-1.5 px-2.5 py-2 rounded-xl bg-sky-500/15 border border-sky-500/50 text-sky-200 text-[11px] font-bold leading-snug">
+                              <div className="flex items-start gap-1.5">
+                                <AlertTriangle className="w-3.5 h-3.5 text-sky-400 shrink-0 mt-0.5" />
+                                <span>
+                                  לתשומת לבך - במודולת PAO הגדרת חפץ אחר עבור מספר זה ("{paoObj}") ; מומלץ לבחור באותה המילה עבור 2 המודולות
+                                </span>
+                              </div>
+                              <div className="flex justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => ignoreValidation(mismatchIgnoreKey)}
+                                  className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-sky-200 border border-sky-500/40 cursor-pointer transition-colors"
+                                >
+                                  התעלם במקרה זה
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
-                        {activeHint && (
-                          <p className="text-xs text-slate-400 bg-slate-900/60 p-2 rounded-xl border border-slate-800">
-                            ⚡ {activeHint}
-                          </p>
-                        )}
                       </div>
-                    )}
+                      {activeHint && (
+                        <p className="text-xs text-slate-400 bg-slate-900/60 p-2 rounded-xl border border-slate-800">
+                          ⚡ {activeHint}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -1407,9 +1340,6 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                 />
               </div>
 
-              {/* דפוס M3 מספר 2: Shared Axis - ציר X (מעבר אופקי בשאלות שליפה)
-                  נבחר עבור מעבר בין שאלות רצופות במבחן השליפה של שיטת Major.
-                  מאפשר חוויית מעבר כרטיסיית Flashcard טבעית קדימה בציר האופקי. */}
               {currentQuizItem && (
                 <div
                   key={`${currentQuizItem.numberStr}-${quizFeedback}`}
@@ -1425,7 +1355,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                     <div className="text-xs text-slate-400">
                       עיצורים מנחים:{' '}
                       <strong className="text-slate-200">
-                        {currentQuizItem.consonants}
+                        {getLiveMajorConsonants(currentQuizItem.number, majorDigits) || currentQuizItem.consonants}
                       </strong>
                     </div>
                   </div>
@@ -1486,7 +1416,6 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                       )}
                     </div>
 
-                    {/* דפוס M3 מספר 4: Harmonic Spring Pop (קפיצה הרמונית בהצלחה) */}
                     {quizFeedback === 'correct' && (
                       <div className="p-4 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 flex flex-col items-center justify-center gap-1.5 m3-spring-pop shadow-md">
                         <div className="flex items-center gap-2">
@@ -1499,7 +1428,6 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                       </div>
                     )}
 
-                    {/* דפוס M3 מספר 4: Damped Harmonic Spring Shake (רטט שגיאה) */}
                     {quizFeedback === 'incorrect' && (
                       <div className="p-4 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-400 flex items-center justify-center gap-2 animate-shake shadow-md">
                         <XCircle className="w-5 h-5" />
@@ -1507,7 +1435,6 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                       </div>
                     )}
 
-                    {/* Always show full association and kinetic scene on correct answer OR when revealing */}
                     {(quizFeedback === 'correct' || revealHint) && (
                       <div className="bg-slate-950/90 border border-amber-500/40 rounded-2xl p-5 text-xs space-y-3 text-right animate-fadeIn shadow-xl shadow-amber-500/5">
                         <div className="flex items-center justify-between border-b border-slate-800 pb-2">
@@ -1520,7 +1447,6 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                               onClick={() => {
                                 if (currentQuizItem) {
                                   setQuizEditWord(currentQuizItem.defaultWord);
-                                  setQuizEditConsonants(currentQuizItem.consonants);
                                   setQuizEditHint(currentQuizItem.imageHint || '');
                                   setIsQuizEditing(!isQuizEditing);
                                 }
@@ -1541,13 +1467,16 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                             <div className="text-xs font-bold text-amber-300">עריכת האסוציאציה למספר {currentQuizItem.numberStr}:</div>
                             <div>
                               <div className="flex items-center justify-between mb-1">
-                                <label className="text-[10px] text-slate-400 font-bold">מילה מנמונית:</label>
+                                <label className="text-[10px] text-slate-400 font-bold">מילת/חפץ עוגן (עצם מוחשי):</label>
                                 <AIFieldGeneratorButton
                                   promptType="major_word"
                                   inputContext={currentQuizItem.number.toString()}
-                                  extraContext={quizEditConsonants}
+                                  extraContext={getLiveMajorConsonants(currentQuizItem.number, majorDigits)}
+                                  paoContext={{ number: currentQuizItem.numberStr, object: quizEditWord }}
+                                  customDigits={majorDigits}
+                                  connectingLetters={connectingLetters}
                                   onGenerated={(val) => setQuizEditWord(val)}
-                                  label="מילה עם AI"
+                                  label="חפץ עם AI"
                                   compact
                                 />
                               </div>
@@ -1571,6 +1500,9 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                                   promptType="major_hint"
                                   inputContext={currentQuizItem.number.toString()}
                                   extraContext={quizEditWord}
+                                  paoContext={{ number: currentQuizItem.numberStr, object: quizEditWord, scene: quizEditHint }}
+                                  customDigits={majorDigits}
+                                  connectingLetters={connectingLetters}
                                   onGenerated={(val) => setQuizEditHint(val)}
                                   label="סצנה עם AI"
                                   compact
@@ -1636,10 +1568,272 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
         </div>
       )}
 
+      {/* Expanded Centered MAJOR Edit Modal (Dialog with Light Dismiss, identical to PAO Edit Modal, without Consonants field) */}
+      {editingNum !== null && (() => {
+        const modalItem = majorItems.find((i) => i.number === editingNum);
+        if (!modalItem) return null;
+        const liveConsonants =
+          getLiveMajorConsonants(modalItem.number, majorDigits) || modalItem.consonants || '';
+        const modalLogicIgnoreKey = buildLogicIgnoreKey('major-word', modalItem.number, editWord);
+        const rawModalWordValidation =
+          editWord && editWord.trim()
+            ? validateHebrewLogic(editWord, modalItem.number, majorDigits, connectingLetters, 'major')
+            : { isValid: true, message: '' };
+        const modalWordValidation = isIgnored(modalLogicIgnoreKey)
+          ? { isValid: true, message: '' }
+          : rawModalWordValidation;
+
+        const modalMatchingPao = paoItems.find((p) => p.number === modalItem.number);
+        const modalPaoObj = modalMatchingPao?.object?.trim() || '';
+        const modalMismatchIgnoreKey = buildLogicIgnoreKey(
+          'major-pao-mismatch',
+          modalItem.number,
+          editWord,
+          modalPaoObj
+        );
+        const modalHasPaoMismatch =
+          Boolean(editWord.trim() && modalPaoObj && editWord.trim() !== modalPaoObj) &&
+          !isIgnored(modalMismatchIgnoreKey);
+
+        return (
+          <div
+            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-fadeIn"
+            dir="rtl"
+            onMouseDown={(e) => {
+              if (e.target === e.currentTarget) {
+                setEditingNum(null);
+              }
+            }}
+          >
+            <div
+              className="bg-slate-900 border-2 border-amber-500/50 rounded-3xl w-full max-w-2xl p-5 sm:p-7 shadow-2xl space-y-5 text-right my-auto relative"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="flex items-start justify-between gap-4 border-b border-slate-800 pb-4">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="font-mono text-2xl sm:text-3xl font-black text-amber-300 bg-amber-500/15 px-3.5 py-1.5 rounded-2xl border border-amber-500/30 shadow-inner">
+                    #{modalItem.numberStr}
+                  </span>
+                  <div>
+                    <h3 className="text-lg sm:text-xl font-black text-white flex items-center gap-2">
+                      <span>עריכת מספר #{modalItem.numberStr} בשיטת Major</span>
+                    </h3>
+                    <div className="flex items-center gap-2 flex-wrap mt-1">
+                      <span className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/25 px-2.5 py-0.5 rounded-lg font-bold">
+                        עיצורי המספר לפי המוח הלוגי: [{liveConsonants}]
+                      </span>
+                      <span className="text-xs text-sky-300 bg-sky-500/10 border border-sky-500/25 px-2.5 py-0.5 rounded-lg font-bold">
+                        אותיות חיבור מותרות: {connectingLetters.join(', ')}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setEditingNum(null)}
+                  className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer shrink-0"
+                  title="סגור חלון (Esc או לחיצה בחוץ)"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Modal Body: Anchor Word/Object + Scene (NO Consonants Field) */}
+              <div className="space-y-4">
+                {/* Anchor Object Word Field */}
+                <div className="bg-slate-950/90 border border-slate-800 rounded-2xl p-4 space-y-2">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <label className="text-sm font-black text-amber-400 flex items-center gap-1.5">
+                      <Package className="w-4 h-4" />
+                      <span>📦 מילת/חפץ עוגן (חפץ או עצם מוחשי בלבד)</span>
+                    </label>
+                    <AIFieldGeneratorButton
+                      promptType="major_word"
+                      inputContext={modalItem.numberStr}
+                      extraContext={liveConsonants}
+                      paoContext={{
+                        number: modalItem.numberStr,
+                        object: editWord,
+                        scene: editHint,
+                      }}
+                      customDigits={majorDigits}
+                      connectingLetters={connectingLetters}
+                      onGenerated={(val) => setEditWord(val)}
+                      label="הצע חפץ מוחשי עם AI"
+                    />
+                  </div>
+                  <p className="text-[11px] text-slate-400">
+                    חפץ או עצם פיזי מוחשי הבנוי מעיצורי המספר ({liveConsonants}) + אותיות החיבור ({connectingLetters.join(', ')}) בלבד.
+                  </p>
+                  <input
+                    type="text"
+                    value={editWord}
+                    onChange={(e) => setEditWord(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSaveItem(modalItem.number);
+                      }
+                    }}
+                    placeholder="הקלד חפץ או עצם מוחשי..."
+                    className={`w-full bg-slate-900 border rounded-xl px-3.5 py-2.5 text-sm text-white font-semibold focus:outline-none ${
+                      !modalWordValidation.isValid || modalHasPaoMismatch
+                        ? 'border-amber-500 focus:border-amber-400'
+                        : 'border-slate-700 focus:border-amber-500'
+                    }`}
+                  />
+                  {!modalWordValidation.isValid && (
+                    <div className="flex flex-col gap-2 text-xs text-amber-300 bg-amber-500/15 border border-amber-500/40 rounded-xl p-2.5 font-bold leading-relaxed">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          <div>{modalWordValidation.message}</div>
+                          {modalWordValidation.details && (
+                            <div className="text-[11px] text-amber-200/80 font-normal mt-0.5">
+                              {modalWordValidation.details}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => ignoreValidation(modalLogicIgnoreKey)}
+                          className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-amber-200 border border-amber-500/40 cursor-pointer transition-colors"
+                        >
+                          התעלם במקרה זה
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {modalHasPaoMismatch && (
+                    <div className="flex flex-col gap-2 text-xs text-sky-200 bg-sky-500/15 border border-sky-500/40 rounded-xl p-2.5 font-bold leading-relaxed">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="w-4 h-4 text-sky-400 shrink-0 mt-0.5" />
+                        <div className="flex-1">
+                          לתשומת לבך - במודולת PAO הגדרת חפץ אחר עבור מספר זה ("{modalPaoObj}") ; מומלץ לבחור באותה המילה עבור 2 המודולות
+                        </div>
+                      </div>
+                      <div className="flex justify-end">
+                        <button
+                          type="button"
+                          onClick={() => ignoreValidation(modalMismatchIgnoreKey)}
+                          className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-sky-200 border border-sky-500/40 cursor-pointer transition-colors"
+                        >
+                          התעלם במקרה זה
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Kinetic Scene Field */}
+                <div className="bg-slate-950/90 border border-slate-800 rounded-2xl p-4 space-y-2">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div>
+                      <label className="text-sm font-black text-amber-300 flex items-center gap-1.5">
+                        <Sparkles className="w-4 h-4 text-amber-400" />
+                        <span>🎬 סצנה קינטית מוקצנת (עקרון SEE - חושים, רגש והגזמה)</span>
+                      </label>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        חבר את החפץ לסצנה רב-חושית מוגזמת, פעילה ויוצאת דופן שתיצרב בזיכרון.
+                      </p>
+                    </div>
+                    <AIFieldGeneratorButton
+                      promptType="major_hint"
+                      inputContext={modalItem.numberStr}
+                      extraContext={editWord}
+                      paoContext={{
+                        number: modalItem.numberStr,
+                        object: editWord,
+                        scene: editHint,
+                      }}
+                      customDigits={majorDigits}
+                      connectingLetters={connectingLetters}
+                      onGenerated={(val) => setEditHint(val)}
+                      label="צור סצנת SEE עם AI"
+                    />
+                  </div>
+                  <textarea
+                    rows={3}
+                    value={editHint}
+                    onChange={(e) => setEditHint(e.target.value)}
+                    placeholder="תאר סצנה מוחשית ומוקצנת עבור החפץ..."
+                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-amber-100 focus:outline-none focus:border-amber-500 resize-none leading-relaxed"
+                  />
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-4 border-t border-slate-800">
+                <div className="flex items-center gap-3">
+                  <label className="inline-flex items-center gap-2 cursor-pointer select-none py-2 px-3 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-700 transition-all">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(modalItem.is_ready_for_practice)}
+                      onChange={() => handleToggleItemReady(modalItem.number, modalItem.is_ready_for_practice)}
+                      className="w-4 h-4 rounded text-emerald-500 focus:ring-emerald-500 cursor-pointer accent-emerald-500"
+                    />
+                    <span className={`text-xs font-bold ${modalItem.is_ready_for_practice ? 'text-emerald-300' : 'text-slate-400'}`}>
+                      מוכן לתרגול במבחן השליפה
+                    </span>
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onResetMajorItem(modalItem.number);
+                      setEditingNum(null);
+                    }}
+                    className="text-xs text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 px-3 py-2 rounded-xl font-bold inline-flex items-center gap-1.5 cursor-pointer transition-colors"
+                  >
+                    <Undo2 className="w-3.5 h-3.5" />
+                    <span>אפס לברירת מחדל</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setEditingNum(null)}
+                    className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-xs sm:text-sm transition-colors cursor-pointer"
+                  >
+                    ביטול (Esc)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSaveItem(modalItem.number)}
+                    className="px-6 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs sm:text-sm shadow-lg shadow-amber-500/25 transition-all cursor-pointer inline-flex items-center gap-1.5"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>שמור שינויים</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Validation Alert Modal */}
       {validationModal && validationModal.isOpen && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4" dir="rtl">
-          <div className="bg-slate-900 border-2 border-amber-500/80 rounded-3xl max-w-md w-full p-6 text-right space-y-4 shadow-2xl animate-in fade-in zoom-in-95">
+        <div
+          className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4"
+          dir="rtl"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              setValidationModal(null);
+            }
+          }}
+        >
+          <div
+            className="bg-slate-900 border-2 border-amber-500/80 rounded-3xl max-w-md w-full p-6 text-right space-y-4 shadow-2xl animate-in fade-in zoom-in-95"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center shrink-0">
                 <AlertTriangle className="w-6 h-6 text-amber-400" />
@@ -1665,9 +1859,9 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                 <button
                   type="button"
                   onClick={validationModal.onConfirmBypass}
-                  className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold px-3 py-2 rounded-xl transition-all cursor-pointer"
+                  className="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold px-3.5 py-2 rounded-xl border border-slate-700 transition-all cursor-pointer"
                 >
-                  שמור בכל זאת כמקרה חריג
+                  התעלם במקרה זה
                 </button>
               )}
               <button

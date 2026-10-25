@@ -1,34 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
-  Hash,
   Sliders,
   Check,
   RotateCcw,
-  Sparkles,
   AlertTriangle,
   CheckCircle2,
-  HelpCircle,
-  Save,
-  Edit3,
-  BookOpen,
   ArrowRight,
   RefreshCw,
+  ShieldAlert,
 } from 'lucide-react';
-import { MajorItem } from '../types/memory';
+import { MajorItem, PAOItem } from '../types/memory';
 import {
   ALL_HEBREW_LETTERS,
   DEFAULT_CONNECTING_LETTERS,
   validateHebrewLogic,
-  extractHebrewLettersOnly,
+  validatePAOPerson,
   normalizeHebrewChar,
   buildLetterToDigitMap,
+  useIgnoredValidations,
+  buildLogicIgnoreKey,
 } from '../lib/hebrewLogicValidator';
-import { AIFieldGeneratorButton } from './AIFieldGeneratorButton';
+import { ConsonantPopoverPicker } from './ConsonantPopoverPicker';
 
 export interface NumberLogicModuleProps {
   majorDigits: MajorItem[];
   connectingLetters: string[];
-  onUpdateMajorDigit: (digit: number, consonants: string, word: string, hint: string) => void;
+  majorItems?: MajorItem[];
+  paoItems?: PAOItem[];
+  onUpdateMajorDigit: (digit: number, consonants: string, word?: string, hint?: string) => void;
   onResetMajorDigit: (digit: number) => void;
   onUpdateConnectingLetters: (letters: string[]) => void;
   onRecalculateMajor00_99FromDigits: (customDigits?: MajorItem[]) => void;
@@ -39,6 +38,8 @@ export interface NumberLogicModuleProps {
 export const NumberLogicModule: React.FC<NumberLogicModuleProps> = ({
   majorDigits,
   connectingLetters,
+  majorItems = [],
+  paoItems = [],
   onUpdateMajorDigit,
   onResetMajorDigit,
   onUpdateConnectingLetters,
@@ -46,11 +47,7 @@ export const NumberLogicModule: React.FC<NumberLogicModuleProps> = ({
   onEarnPoints,
   onNavigateToWorkout,
 }) => {
-  // Digit editing state
-  const [editingDigit, setEditingDigit] = useState<number | null>(null);
-  const [editConsonants, setEditConsonants] = useState('');
-  const [editWord, setEditWord] = useState('');
-  const [editHint, setEditHint] = useState('');
+  const { isIgnored } = useIgnoredValidations();
 
   // Interactive Live Tester state
   const [testNumber, setTestNumber] = useState<string>('0');
@@ -63,20 +60,6 @@ export const NumberLogicModule: React.FC<NumberLogicModuleProps> = ({
   const showNotification = (msg: string) => {
     setSaveSuccessNotice(msg);
     setTimeout(() => setSaveSuccessNotice(null), 3500);
-  };
-
-  const handleStartEditDigit = (d: MajorItem) => {
-    setEditingDigit(d.number);
-    setEditConsonants(d.consonants);
-    setEditWord(d.defaultWord);
-    setEditHint(d.imageHint || '');
-  };
-
-  const handleSaveDigit = (digitNum: number) => {
-    onUpdateMajorDigit(digitNum, editConsonants.trim(), editWord.trim(), editHint.trim());
-    setEditingDigit(null);
-    showNotification(`הגדרות ספרה ${digitNum} נשמרו בהצלחה!`);
-    onEarnPoints?.(10, `עדכון חוקי ספרה ${digitNum}`);
   };
 
   const handleToggleConnectingLetter = (letter: string) => {
@@ -113,6 +96,36 @@ export const NumberLogicModule: React.FC<NumberLogicModuleProps> = ({
   // Build letter-to-digit map for overview
   const letterMap = buildLetterToDigitMap(majorDigits);
 
+  // Real-time system-wide non-destructive validation scan across MAJOR and PAO
+  const systemValidationScan = useMemo(() => {
+    const majorConflicts = majorItems.filter((item) => {
+      if (!item.defaultWord || !item.defaultWord.trim()) return false;
+      const ignoreKey = buildLogicIgnoreKey('major-word', item.number, item.defaultWord);
+      if (isIgnored(ignoreKey)) return false;
+      const res = validateHebrewLogic(item.defaultWord, item.number, majorDigits, connectingLetters, 'major');
+      return !res.isValid;
+    });
+
+    const paoConflicts = paoItems.filter((item) => {
+      const personIgnoreKey = buildLogicIgnoreKey('pao-person', item.number, item.person || '');
+      const objectIgnoreKey = buildLogicIgnoreKey('pao-object', item.number, item.object || '');
+      const personInvalid =
+        item.person && item.person.trim() && !isIgnored(personIgnoreKey)
+          ? !validatePAOPerson(item.person, item.number, majorDigits, connectingLetters).isValid
+          : false;
+      const objectInvalid =
+        item.object && item.object.trim() && !isIgnored(objectIgnoreKey)
+          ? !validateHebrewLogic(item.object, item.number, majorDigits, connectingLetters, 'pao').isValid
+          : false;
+      return personInvalid || objectInvalid;
+    });
+
+    return {
+      majorConflicts,
+      paoConflicts,
+    };
+  }, [majorItems, paoItems, majorDigits, connectingLetters, isIgnored]);
+
   // Live validator analysis
   const parsedTestNum = parseInt(testNumber, 10);
   const liveValidation = !isNaN(parsedTestNum)
@@ -137,14 +150,13 @@ export const NumberLogicModule: React.FC<NumberLogicModuleProps> = ({
           <div className="space-y-2 max-w-3xl">
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/20 border border-amber-500/30 text-amber-300 text-xs font-bold">
               <Sliders className="w-3.5 h-3.5" />
-              <span>מרכז חוקי הזיכרון הרוחבי (Global Logic Rules)</span>
+              <span>המוח המרכזי של המערכת (Numbers Logic Brain & Live Sync)</span>
             </div>
             <h1 className="text-2xl sm:text-3xl font-black text-white tracking-wide">
-              הגדרת לוגיקת המספרים והאותיות
+              הגדרת לוגיקת המספרים והעיצורים
             </h1>
             <p className="text-sm sm:text-base text-slate-300 leading-relaxed">
-              טבלה זו היא המוח המרכזי של האפליקציה: כאן קובעים אילו אותיות מייצגות כל ספרה (0 עד 9), ואילו אותיות מוגדרות כ״אותיות מקשרות״ (ללא ערך מספרי).
-              כל שינוי כאן מוחל אוטומטית על מודולות <strong>שיטת מז׳ור</strong> ו-<strong>PAO</strong>, ומפעיל ולידציה אוטומטית על ערכים שאינם תואמים לחוקים או ערכים כפולים!
+              מודולה זו משמשת כסמכות הבלעדית של המערכת לשיוך עיצורים לספרות (0–9) ואותיות קישור: כל שינוי בעיצורים מסתנכרן בזמן אמת למודולות <strong>MAJOR</strong> ו-<strong>PAO</strong> ומבצע סריקת ולידציה לא-הרסנית על כלל הערכים הקיימים. עריכת מילות/חפצי העוגן מתבצעת ישירות במודולת MAJOR.
             </p>
           </div>
 
@@ -178,6 +190,50 @@ export const NumberLogicModule: React.FC<NumberLogicModuleProps> = ({
             </div>
           </div>
         </div>
+
+        {/* Live System Validation Scan Status Bar */}
+        {(systemValidationScan.majorConflicts.length > 0 ||
+          systemValidationScan.paoConflicts.length > 0) && (
+          <div className="mt-5 bg-amber-950/60 border border-amber-500/50 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-start sm:items-center gap-3">
+              <ShieldAlert className="w-5 h-5 text-amber-400 shrink-0 mt-0.5 sm:mt-0" />
+              <div className="text-xs sm:text-sm text-amber-200">
+                <span className="font-black text-amber-300 ml-1">סריקת ולידציה חיה (Non-Destructive):</span>
+                נמצאו{' '}
+                <strong className="text-white underline">
+                  {systemValidationScan.majorConflicts.length} ערכים ב-MAJOR
+                </strong>{' '}
+                ו-
+                <strong className="text-white underline">
+                  {systemValidationScan.paoConflicts.length} ערכים ב-PAO
+                </strong>{' '}
+                שאינם תואמים לחוקי הלוגיקה הנוכחיים. הערכים נשמרו במלואם ומסומנים בהודעת ולידציה מפורטת לעריכה נוחה.
+              </div>
+            </div>
+            {onNavigateToWorkout && (
+              <div className="flex items-center gap-2 shrink-0">
+                {systemValidationScan.majorConflicts.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => onNavigateToWorkout('major')}
+                    className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-400/50 text-amber-200 text-xs font-bold cursor-pointer"
+                  >
+                    צפה באזהרות Major ({systemValidationScan.majorConflicts.length})
+                  </button>
+                )}
+                {systemValidationScan.paoConflicts.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => onNavigateToWorkout('pao')}
+                    className="px-3 py-1.5 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-400/50 text-indigo-200 text-xs font-bold cursor-pointer"
+                  >
+                    צפה באזהרות PAO ({systemValidationScan.paoConflicts.length})
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* SECTION 1: אותיות מקשרות */}
@@ -278,7 +334,7 @@ export const NumberLogicModule: React.FC<NumberLogicModuleProps> = ({
                     </span>
                   ) : (
                     <span className="text-slate-500">
-                      ללא ספרה
+                      פנויה
                     </span>
                   )}
                 </div>
@@ -288,39 +344,33 @@ export const NumberLogicModule: React.FC<NumberLogicModuleProps> = ({
         </div>
       </div>
 
-      {/* SECTION 2: טבלת קישורי הספרות (0-9) */}
+      {/* SECTION 2: טבלת קישורי הספרות (0-9) לעיצורים בלבד עם בורר עיצורים פופאובר חכם */}
       <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 sm:p-7 space-y-6 shadow-lg">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800">
           <div>
             <div className="flex items-center gap-2">
               <span className="w-3 h-3 rounded-full bg-amber-400" />
               <h2 className="text-lg sm:text-xl font-black text-white">
-                טבלת קישורי הספרות לעיצורים ומילות עוגן (ספרות 0 עד 9)
+                טבלת קישורי הספרות לעיצורים (ספרות 0 עד 9)
               </h2>
             </div>
             <p className="text-xs sm:text-sm text-slate-400 mt-1">
-              לכל ספרה משויכים עיצורים בעלי צליל או צורה דומה, ומילת עוגן ראשית. לחץ על כפתור העריכה בכל כרטיס כדי לשנות עיצורים או מילה.
+              לחץ ישירות על שדה <strong>העיצורים</strong> בכל ספרה לפתיחת חלונית בחירת עיצורים ווריאציות פונטיות (פּ דגושה מול פ רפה, צ מול צ' וכו') מתוך מאגר האותיות הפנויות בלבד. עריכת מילות העוגן עבור ספרות 0–9 מתבצעת במודולת MAJOR.
             </p>
           </div>
 
-          <div className="text-xs font-mono text-slate-500 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
-            ↵ לחיצה על Enter בכל שדה שומרת אותו מיידית
+          <div className="text-xs font-mono text-slate-400 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
+            💡 לחיצה על עיצור נבחר מסירה אותו ומחזירה אותו למאגר הפנוי
           </div>
         </div>
 
-        {/* 10 Digits Grid */}
+        {/* 10 Digits Grid - Consonants Only */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           {majorDigits.map((d) => {
-            const isEditing = editingDigit === d.number;
-
             return (
               <div
                 key={d.number}
-                className={`bg-slate-950 border rounded-2xl p-4 flex flex-col justify-between transition-all ${
-                  isEditing
-                    ? 'border-amber-400 ring-2 ring-amber-400/30 shadow-lg shadow-amber-950/20'
-                    : 'border-slate-800 hover:border-slate-700'
-                }`}
+                className="bg-slate-950 border border-slate-800 hover:border-slate-700 rounded-2xl p-4 flex flex-col justify-between transition-all"
               >
                 <div className="space-y-3">
                   {/* Top Bar */}
@@ -331,153 +381,44 @@ export const NumberLogicModule: React.FC<NumberLogicModuleProps> = ({
 
                     <div className="flex items-center gap-1">
                       <button
+                        type="button"
                         onClick={() => {
-                          if (isEditing) {
-                            setEditingDigit(null);
-                          } else {
-                            handleStartEditDigit(d);
-                          }
+                          onResetMajorDigit(d.number);
+                          showNotification(`עיצורי ספרה ${d.number} אופסו לברירת המחדל`);
                         }}
-                        className="p-1.5 text-slate-400 hover:text-amber-400 cursor-pointer rounded-lg hover:bg-slate-900"
-                        title="ערוך ספרה זו"
-                      >
-                        <Edit3 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => onResetMajorDigit(d.number)}
                         className="p-1.5 text-slate-500 hover:text-rose-400 cursor-pointer rounded-lg hover:bg-slate-900"
-                        title="אפס ספרה לברירת מחדל"
+                        title="אפס עיצורי ספרה זו לברירת מחדל"
                       >
                         <RotateCcw className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
 
-                  {isEditing ? (
-                    <div className="space-y-2.5 text-right pt-1">
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="text-xs text-slate-300 font-bold">עיצורים משויכים:</label>
-                          <AIFieldGeneratorButton
-                            promptType="major_consonants"
-                            inputContext={d.number.toString()}
-                            onGenerated={(val) => setEditConsonants(val)}
-                            label="עיצורים"
-                            compact
-                          />
-                        </div>
-                        <input
-                          type="text"
-                          value={editConsonants}
-                          onChange={(e) => setEditConsonants(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              handleSaveDigit(d.number);
-                            }
-                          }}
-                          placeholder="למשל: ס, ז, ש..."
-                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-amber-300 font-bold focus:outline-none focus:border-amber-400"
-                        />
-                      </div>
-
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="text-xs text-slate-300 font-bold">מילת עוגן:</label>
-                          <AIFieldGeneratorButton
-                            promptType="major_word"
-                            inputContext={d.number.toString()}
-                            extraContext={editConsonants}
-                            onGenerated={(val) => setEditWord(val)}
-                            label="מילה עם AI"
-                            compact
-                          />
-                        </div>
-                        <input
-                          type="text"
-                          value={editWord}
-                          onChange={(e) => setEditWord(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              handleSaveDigit(d.number);
-                            }
-                          }}
-                          placeholder="למשל: סוס..."
-                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-bold focus:outline-none focus:border-amber-400"
-                        />
-                      </div>
-
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label className="text-xs text-slate-300 font-bold">דימוי חושי / סצנה:</label>
-                          <AIFieldGeneratorButton
-                            promptType="major_hint"
-                            inputContext={d.number.toString()}
-                            extraContext={editWord}
-                            onGenerated={(val) => setEditHint(val)}
-                            label="סצנה AI"
-                            compact
-                          />
-                        </div>
-                        <input
-                          type="text"
-                          value={editHint}
-                          onChange={(e) => setEditHint(e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              handleSaveDigit(d.number);
-                            }
-                          }}
-                          placeholder="דימוי חושי קינטי..."
-                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-amber-400"
-                        />
-                      </div>
-
-                      <div className="flex items-center justify-between gap-1 pt-1">
-                        <span className="text-[10px] text-slate-500 font-mono">↵ Enter</span>
-                        <div className="flex gap-1.5">
-                          <button
-                            type="button"
-                            onClick={() => setEditingDigit(null)}
-                            className="text-xs text-slate-400 hover:text-slate-200 px-2 py-1"
-                          >
-                            ביטול
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleSaveDigit(d.number)}
-                            className="text-xs bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-1 rounded-lg cursor-pointer"
-                          >
-                            שמור
-                          </button>
-                        </div>
-                      </div>
+                  <div className="space-y-2 text-right">
+                    <div>
+                      <span className="text-[11px] text-slate-400 font-bold block mb-1.5">
+                        עיצורים משויכים (לחץ להוספה/הסרה מהמאגר הפנוי):
+                      </span>
+                      <ConsonantPopoverPicker
+                        digit={d.number}
+                        value={d.consonants}
+                        majorDigits={majorDigits}
+                        connectingLetters={connectingLetters}
+                        onChange={(newCons) => {
+                          onUpdateMajorDigit(
+                            d.number,
+                            newCons,
+                            d.defaultWord,
+                            d.imageHint || ''
+                          );
+                          showNotification(
+                            `עיצורי ספרה ${d.number} עודכנו ל: ${newCons || 'ללא עיצור'}`
+                          );
+                        }}
+                        compact
+                      />
                     </div>
-                  ) : (
-                    <div className="space-y-2.5 text-right">
-                      <div>
-                        <span className="text-[11px] text-slate-400 font-bold block mb-0.5">עיצורים:</span>
-                        <div className="text-sm font-black text-amber-300 bg-amber-950/20 border border-amber-500/20 rounded-lg px-2 py-1 inline-block">
-                          {d.consonants || '-'}
-                        </div>
-                      </div>
-
-                      <div>
-                        <span className="text-[11px] text-slate-400 font-bold block mb-0.5">מילת עוגן:</span>
-                        <div className="text-base font-bold text-white">
-                          {d.defaultWord || '-'}
-                        </div>
-                      </div>
-
-                      {d.imageHint && (
-                        <p className="text-xs text-slate-400 bg-slate-900/60 p-2 rounded-xl border border-slate-800/80 leading-relaxed">
-                          {d.imageHint}
-                        </p>
-                      )}
-                    </div>
-                  )}
+                  </div>
                 </div>
               </div>
             );
@@ -570,7 +511,6 @@ export const NumberLogicModule: React.FC<NumberLogicModuleProps> = ({
                   { num: '0', word: 'סוס', desc: 'תקין (0)' },
                   { num: '14', word: 'לוויתן', desc: 'תקין ל-14 (ל+ת)' },
                   { num: '14', word: 'ילד', desc: 'תקין ל-14 (ל+ד)' },
-                  { num: '14', word: 'לאונרדו דה וינצ\'י', desc: 'תקין ל-PAO (ל.ד)' },
                 ].map((sample) => (
                   <button
                     key={sample.word + sample.num}
@@ -645,16 +585,16 @@ export const NumberLogicModule: React.FC<NumberLogicModuleProps> = ({
             {/* Explanation box */}
             <div className="bg-slate-950/60 p-4 rounded-2xl border border-slate-800/80 text-xs text-slate-400 space-y-1.5 leading-relaxed">
               <span className="font-bold text-slate-300 block mb-1">
-                💡 כיצד פועל מנוע הולידציה של האפליקציה?
+                💡 כיצד פועל מנוע הולידציה הרוחבי של האפליקציה?
               </span>
               <p>
                 1. <strong>סינון אותיות קישור:</strong> המנוע מתעלם מאותיות הקישור ({connectingLetters.join(', ')}).
               </p>
               <p>
-                2. <strong>פענוח עיצורים לספרות:</strong> כל אות שנשארה מתורגמת לספרה לפי הטבלה שלמעלה.
+                2. <strong>פענוח עיצורים ווריאציות פונטיות לספרות:</strong> כל אות שנשארה מתורגמת לספרה לפי הטבלה שלמעלה (תוך תמיכה בהבחנה בין פּ/פ, בּ/ב, כּ/כ, שׁ/שׂ וגרושות צ/צ', ג/ג', ז/ז').
               </p>
               <p>
-                3. <strong>השוואה מול המספר:</strong> אם מתקבלות ספרות אחרות או אם המילה אינה מתאימה לספרה (כמו ״לוויתן״ מול 0), קופצת התרעת ולידציה המונעת טעויות זיכרון.
+                3. <strong>סריקה לא-הרסנית (Non-Destructive Validation):</strong> בכל שינוי במיפוי, כלל ערכי ה-PAO וה-MAJOR נסרקים בזמן אמת. ערך שמפר את הלוגיקה החדשה אינו נמחק לעולם, אלא מסומן באייקון אזהרה בולט לצורך תיקון מבוקר.
               </p>
             </div>
           </div>
