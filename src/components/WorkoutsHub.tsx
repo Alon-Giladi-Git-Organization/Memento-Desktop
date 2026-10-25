@@ -36,6 +36,7 @@ export interface WorkoutsHubProps {
   academicPoints: AcademicKeyPoint[];
   connectingLetters?: string[];
   onNavigateToLogicTab?: () => void;
+  onNavigateToAcademyTab?: () => void;
   onEarnPoints: (amount: number, reason?: string) => void;
   onUnlockBadge: (badge: string) => void;
   onUpdateMajorDigit: (digit: number, consonants: string, word?: string, hint?: string) => void;
@@ -120,6 +121,7 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
   onLogin,
   connectingLetters,
   onNavigateToLogicTab,
+  onNavigateToAcademyTab,
   onEarnPoints,
   onUnlockBadge,
   onUpdateMajorDigit,
@@ -244,22 +246,48 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
 
   return (
     <div className="w-full max-w-none space-y-8 pb-16">
-      {/* Quick Access to Global Number Logic */}
-      {onNavigateToLogicTab && (
-        <div className="w-full flex items-center justify-between flex-wrap gap-3 bg-amber-500/10 border-2 border-amber-500/30 p-3.5 rounded-2xl shadow-xs">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <span className="text-xl shrink-0">⚙️</span>
-            <div className="min-w-0">
-              <span className="text-xs font-black text-amber-950 block">הגדרת לוגיקת המספרים והאותיות:</span>
-              <span className="text-[11px] text-amber-800 break-words">הגדר קישורי ספרות 0-9 לעיצורים ואותיות מקשרות לכל האפליקציה</span>
+      {/* Quick Access to Beginners Academy & Global Number Logic */}
+      {(onNavigateToAcademyTab || onNavigateToLogicTab) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          {onNavigateToAcademyTab && (
+            <div className="w-full flex items-center justify-between flex-wrap gap-3 bg-emerald-50 border-2 border-emerald-200 p-3.5 rounded-2xl shadow-xs">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="text-xl shrink-0">🎓</span>
+                <div className="min-w-0">
+                  <span className="text-xs font-black text-emerald-950 block">
+                    חדש בשיטות הזיכרון? הכנס לאקדמיית המתחילים!
+                  </span>
+                  <span className="text-[11px] text-emerald-800 break-words">
+                    לימוד אינטראקטיבי מאפס של Major, PAO, ארמונות זיכרון ושמות ופנים (הסבר + הדגמה + מיקרו-תרגול)
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={onNavigateToAcademyTab}
+                className="text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-1.5 rounded-xl transition-all cursor-pointer shadow-xs shrink-0"
+              >
+                התחל ללמוד מאפס ←
+              </button>
             </div>
-          </div>
-          <button
-            onClick={onNavigateToLogicTab}
-            className="text-xs font-black bg-amber-500 hover:bg-amber-400 text-slate-950 px-3.5 py-1.5 rounded-xl transition-all cursor-pointer shadow-xs shrink-0"
-          >
-            פתח עריכת לוגיקה ←
-          </button>
+          )}
+
+          {onNavigateToLogicTab && (
+            <div className="w-full flex items-center justify-between flex-wrap gap-3 bg-amber-500/10 border-2 border-amber-500/30 p-3.5 rounded-2xl shadow-xs">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="text-xl shrink-0">⚙️</span>
+                <div className="min-w-0">
+                  <span className="text-xs font-black text-amber-950 block">הגדרת לוגיקת המספרים והאותיות:</span>
+                  <span className="text-[11px] text-amber-800 break-words">הגדר קישורי ספרות 0-9 לעיצורים ואותיות מקשרות לכל האפליקציה</span>
+                </div>
+              </div>
+              <button
+                onClick={onNavigateToLogicTab}
+                className="text-xs font-black bg-amber-500 hover:bg-amber-400 text-slate-950 px-3.5 py-1.5 rounded-xl transition-all cursor-pointer shadow-xs shrink-0"
+              >
+                פתח עריכת לוגיקה ←
+              </button>
+            </div>
+          )}
         </div>
       )}
 

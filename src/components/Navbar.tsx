@@ -26,6 +26,7 @@ import { User as FirebaseUser } from 'firebase/auth';
 
 export type TabType =
   | 'workouts'
+  | 'academy'
   | 'logic'
   | 'palaces'
   | 'tester'
@@ -78,6 +79,13 @@ export const Navbar: React.FC<NavbarProps> = ({
       label: 'מרכז האימונים',
       icon: <Dumbbell className="w-4 h-4 ml-1.5" />,
       color: 'text-[#58CC02]',
+    },
+    {
+      id: 'academy',
+      label: 'אקדמיית המתחילים',
+      icon: <GraduationCap className="w-4 h-4 ml-1.5" />,
+      color: 'text-[#58CC02]',
+      badge: 'לימוד מאפס',
     },
     {
       id: 'logic',

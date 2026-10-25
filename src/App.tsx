@@ -13,6 +13,7 @@ import { TechniqueSummaryModal } from './components/TechniqueSummaryModal';
 import { GlobalAIMentorWidget } from './components/GlobalAIMentorWidget';
 import { GlobalSearchModal } from './components/GlobalSearchModal';
 import { NumberLogicModule } from './components/NumberLogicModule';
+import { BeginnersAcademyModule } from './components/BeginnersAcademyModule';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<TabType>('workouts');
@@ -201,6 +202,7 @@ export default function App() {
             onEarnPoints={earnPoints}
             onUnlockBadge={unlockBadge}
             onNavigateToLogicTab={() => setCurrentTab('logic')}
+            onNavigateToAcademyTab={() => setCurrentTab('academy')}
             onUpdateMajorDigit={updateMajorDigit}
             onResetMajorDigit={resetMajorDigit}
             onRecalculateMajor00_99FromDigits={recalculateMajor00_99FromDigits}
@@ -245,6 +247,29 @@ export default function App() {
             onDeleteAcademicPoint={deleteAcademicPoint}
             onResetAcademicPoints={resetAcademicPoints}
             onOpenSummary={(techId) => setActiveSummaryTechnique(techId)}
+          />
+        )}
+
+        {currentTab === 'academy' && (
+          <BeginnersAcademyModule
+            majorDigits={majorDigits}
+            connectingLetters={connectingLetters}
+            majorItems={majorItems}
+            paoItems={paoItems}
+            palaces={palaces}
+            peopleCards={peopleCards}
+            onEarnPoints={earnPoints}
+            onUnlockBadge={unlockBadge}
+            onNavigateToPractice={(target) => {
+              if (target === 'palaces') {
+                setCurrentTab('palaces');
+              } else if (target === 'logic') {
+                setCurrentTab('logic');
+              } else {
+                setCurrentTab('workouts');
+                setSelectedWorkoutSubModule(target);
+              }
+            }}
           />
         )}
 

@@ -1395,14 +1395,13 @@ app.post('/api/gemini/tts', async (req: Request, res: Response) => {
     }
 
     const cleanText = text.trim();
-    const promptText = `Speak naturally, expressively, and clearly with warm, human Hebrew pronunciation: ${cleanText}`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-3.8-flash-lite-tts',
       contents: [
         {
           role: 'user',
-          parts: [{ text: promptText }],
+          parts: [{ text: cleanText }],
         },
       ],
       config: {
