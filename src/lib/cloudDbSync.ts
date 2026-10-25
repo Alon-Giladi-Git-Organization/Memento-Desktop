@@ -1173,6 +1173,9 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks, userId?
         const items: BodyPegItem[] = [];
         snap.forEach((d) => {
           const data = d.data();
+          if (!userId && (d.id.includes('_') || (data.userId && data.userId !== 'system_default'))) {
+            return;
+          }
           const rawId = data.rawId || (userId && d.id.startsWith(`${userId}_`) ? d.id.slice(userId.length + 1) : d.id);
           const idx = typeof data.index === 'number' ? data.index : parseInt(rawId, 10);
           const bodyPart = (data.bodyPartHebrew && data.bodyPartHebrew !== 'null') ? data.bodyPartHebrew : '';
@@ -1213,6 +1216,9 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks, userId?
         const items: PegShapeItem[] = [];
         snap.forEach((d) => {
           const data = d.data();
+          if (!userId && (d.id.includes('_') || (data.userId && data.userId !== 'system_default'))) {
+            return;
+          }
           const rawId = data.rawId || (userId && d.id.startsWith(`${userId}_`) ? d.id.slice(userId.length + 1) : d.id);
           const num = typeof data.number === 'number' ? data.number : parseInt(rawId, 10);
           const shapeName = (data.shapeName && data.shapeName !== 'null') ? data.shapeName : '';
@@ -1254,6 +1260,9 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks, userId?
         const items: MemoryPalace[] = [];
         snap.forEach((d) => {
           const data = d.data();
+          if (!userId && (d.id.includes('_') || (data.userId && data.userId !== 'system_default'))) {
+            return;
+          }
           const rawId = data.rawId || (userId && d.id.startsWith(`${userId}_`) ? d.id.slice(userId.length + 1) : d.id);
           items.push({
             id: rawId,
@@ -1288,6 +1297,9 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks, userId?
         const items: PersonalContactAssociation[] = [];
         snap.forEach((d) => {
           const data = d.data();
+          if (!userId && (d.id.includes('_') || (data.userId && data.userId !== 'system_default'))) {
+            return;
+          }
           const rawId = data.rawId || (userId && d.id.startsWith(`${userId}_`) ? d.id.slice(userId.length + 1) : d.id);
           items.push({
             id: rawId,
@@ -1324,6 +1336,9 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks, userId?
         const items: PersonFaceCard[] = [];
         snap.forEach((d) => {
           const data = d.data();
+          if (!userId && (d.id.includes('_') || (data.userId && data.userId !== 'system_default'))) {
+            return;
+          }
           const rawId = data.rawId || (userId && d.id.startsWith(`${userId}_`) ? d.id.slice(userId.length + 1) : d.id);
           items.push({
             id: rawId,
@@ -1360,6 +1375,9 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks, userId?
         const items: AbstractShapeCard[] = [];
         snap.forEach((d) => {
           const data = d.data();
+          if (!userId && (d.id.includes('_') || (data.userId && data.userId !== 'system_default'))) {
+            return;
+          }
           const rawId = data.rawId || (userId && d.id.startsWith(`${userId}_`) ? d.id.slice(userId.length + 1) : d.id);
           items.push({
             id: rawId,
@@ -1395,6 +1413,9 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks, userId?
         const items: AcademicKeyPoint[] = [];
         snap.forEach((d) => {
           const data = d.data();
+          if (!userId && (d.id.includes('_') || (data.userId && data.userId !== 'system_default'))) {
+            return;
+          }
           const rawId = data.rawId || (userId && d.id.startsWith(`${userId}_`) ? d.id.slice(userId.length + 1) : d.id);
           items.push({
             id: rawId,
