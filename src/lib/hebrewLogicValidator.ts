@@ -327,27 +327,46 @@ export function getLiveMajorConsonants(targetNumber: number, majorDigits: MajorI
 }
 
 /**
- * Extracts Hebrew letters from text and normalizes final forms
+ * Strips all parentheses (...) and their contents from a string so that
+ * any annotations or comments inside parentheses are completely ignored by validation.
+ */
+export function stripParentheses(text: string): string {
+  if (!text) return '';
+  let result = text;
+  // Repeatedly strip innermost (...) to handle nested or multiple parenthetical segments
+  let prev = '';
+  while (result !== prev) {
+    prev = result;
+    result = result.replace(/\([^()]*\)/g, ' ');
+  }
+  // Also strip any stray unclosed parenthesis characters
+  return result.replace(/[()]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Extracts Hebrew letters from text and normalizes final forms (ignoring anything inside parentheses)
  */
 export function extractHebrewLettersOnly(text: string): string[] {
-  if (!text) return [];
-  const matches = text.match(/[\u0590-\u05FF]/g) || [];
+  const cleaned = stripParentheses(text);
+  if (!cleaned) return [];
+  const matches = cleaned.match(/[\u0590-\u05FF]/g) || [];
   return matches
     .filter((ch) => ch >= 'א' && ch <= 'ת')
     .map(normalizeHebrewChar);
 }
 
 /**
- * Extracts phonetic tokens from a Hebrew word/phrase, preserving geresh (ג', ז', צ')
- * and explicit niqqud (בּ, כּ, פּ, שׁ, שׂ, תּ) when present, and normalizing final letters.
+ * Extracts phonetic tokens from a Hebrew word/phrase (ignoring anything inside parentheses),
+ * preserving geresh (ג', ז', צ') and explicit niqqud (בּ, כּ, פּ, שׁ, שׂ, תּ) when present, and normalizing final letters.
  */
 export function extractPhoneticTokensFromWord(text: string): Array<{
   rawToken: string;
   baseLetter: string;
   hasExplicitVariant: boolean;
 }> {
-  if (!text) return [];
-  const normalized = text.replace(/[׳`’]/g, "'");
+  const cleaned = stripParentheses(text);
+  if (!cleaned) return [];
+  const normalized = cleaned.replace(/[׳`’]/g, "'");
   const regex = /([א-ת])([\u05BC\u05C1\u05C2]?)([']?)/g;
   const results: Array<{ rawToken: string; baseLetter: string; hasExplicitVariant: boolean }> = [];
   let match: RegExpExecArray | null;
@@ -451,10 +470,11 @@ export interface LogicValidationResult {
  * Validates whether a given Hebrew word or phrase conforms to the number's logic rules.
  *
  * Rules:
- * 1. Connecting letters (אותיות מקשרות) are ignored in phonetic analysis.
- * 2. Non-connecting letters map to digits strictly according to majorDigits (Numbers Logic module).
- * 3. For single digits (0-9): word must contain consonant(s) for that digit, and must NOT contain non-connecting consonants of other digits.
- * 4. For 2-digit numbers (00-99):
+ * 1. Parentheses (...) and their contents are completely ignored.
+ * 2. Connecting letters (אותיות מקשרות) are ignored in phonetic analysis.
+ * 3. Non-connecting letters map to digits strictly according to majorDigits (Numbers Logic module).
+ * 4. For single digits (0-9): word must contain consonant(s) for that digit, and must NOT contain non-connecting consonants of other digits.
+ * 5. For 2-digit numbers (00-99):
  *    - Non-connecting consonants must represent tens then units (e.g. 14 -> [1, 4]).
  */
 export function validateHebrewLogic(
@@ -464,7 +484,7 @@ export function validateHebrewLogic(
   connectingLetters: string[] = DEFAULT_CONNECTING_LETTERS,
   mode: 'major' | 'pao' = 'major'
 ): LogicValidationResult {
-  const trimmed = (text || '').trim();
+  const trimmed = stripParentheses(text || '');
   if (!trimmed) {
     return { isValid: true, message: '' };
   }
@@ -706,7 +726,7 @@ export function validatePAOPerson(
   majorDigits: MajorItem[],
   connectingLetters: string[] = DEFAULT_CONNECTING_LETTERS
 ): LogicValidationResult {
-  const trimmed = (text || '').trim();
+  const trimmed = stripParentheses(text || '');
   if (!trimmed) {
     return { isValid: true, message: '' };
   }
@@ -719,8 +739,8 @@ export function validatePAOPerson(
   const units = targetNumber % 10;
   const expectedDigits = [tens, units];
 
-  // Clean text: strip parenthesis annotations like "(ל.ק.)" or "(ס.ס.)"
-  const clean = trimmed.replace(/\([^)]*\)/g, ' ').replace(/[״"]/g, '').trim();
+  // Clean text: strip quotation marks (parentheses already stripped via stripParentheses)
+  const clean = trimmed.replace(/[״"]/g, '').trim();
 
   // Split into words
   const words = clean.split(/[\s\-–—\.]+/).filter((w) => w.length > 0);

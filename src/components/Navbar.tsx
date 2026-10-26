@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Brain,
   Sparkles,
@@ -15,11 +15,11 @@ import {
   RotateCcw,
   Search,
   Cloud,
-  CloudOff,
   RefreshCw,
   Database,
   Sliders,
-  Hash,
+  Menu,
+  X,
 } from 'lucide-react';
 import { UserProfileData } from '../lib/firebase';
 import { User as FirebaseUser } from 'firebase/auth';
@@ -64,7 +64,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   currentUser,
   isOnline = true,
   isSyncing = false,
-  lastSyncTime,
   syncStatusMessage,
   onLogin,
   onLogout,
@@ -73,239 +72,382 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSyncCloud,
   onSeedCloudTables,
 }) => {
-  const tabs: { id: TabType; label: string; icon: React.ReactNode; color: string; badge?: string }[] = [
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Ordered strictly as requested:
+  // 1. מרכז אימונים (workouts)
+  // 2. לוגיקת מספרים (logic)
+  // 3. אקדמיית מתחילים (academy)
+  // 4. ארמונות זיכרון (palaces)
+  // 5. פנקס אסוציאציות (registry)
+  // 6. מדע ושיטות (theory)
+  // and then the remaining modules
+  const tabs: {
+    id: TabType;
+    label: string;
+    icon: React.ReactNode;
+    color: string;
+    badge?: string;
+  }[] = [
     {
       id: 'workouts',
-      label: 'מרכז האימונים',
-      icon: <Dumbbell className="w-4 h-4 ml-1.5" />,
+      label: 'מרכז אימונים',
+      icon: <Dumbbell className="w-4 h-4 shrink-0" />,
       color: 'text-[#58CC02]',
-    },
-    {
-      id: 'academy',
-      label: 'אקדמיית המתחילים',
-      icon: <GraduationCap className="w-4 h-4 ml-1.5" />,
-      color: 'text-[#58CC02]',
-      badge: 'לימוד מאפס',
     },
     {
       id: 'logic',
       label: 'לוגיקת מספרים',
-      icon: <Sliders className="w-4 h-4 ml-1.5" />,
+      icon: <Sliders className="w-4 h-4 shrink-0" />,
       color: 'text-[#FFC800]',
       badge: '0-9',
     },
     {
+      id: 'academy',
+      label: 'אקדמיית מתחילים',
+      icon: <GraduationCap className="w-4 h-4 shrink-0" />,
+      color: 'text-[#58CC02]',
+      badge: 'לימוד מאפס',
+    },
+    {
       id: 'palaces',
       label: 'ארמונות זיכרון',
-      icon: <Compass className="w-4 h-4 ml-1.5" />,
+      icon: <Compass className="w-4 h-4 shrink-0" />,
       color: 'text-[#1CB0F6]',
       badge: 'Loci',
     },
     {
+      id: 'registry',
+      label: 'פנקס אסוציאציות',
+      icon: <BookOpen className="w-4 h-4 shrink-0" />,
+      color: 'text-[#1CB0F6]',
+      badge: `${savedAssociationsCount}`,
+    },
+    {
+      id: 'theory',
+      label: 'מדע ושיטות',
+      icon: <GraduationCap className="w-4 h-4 shrink-0" />,
+      color: 'text-[#FF4B4B]',
+    },
+    {
       id: 'tester',
       label: 'בוחן ה-AI החכם',
-      icon: <CheckCircle2 className="w-4 h-4 ml-1.5" />,
+      icon: <CheckCircle2 className="w-4 h-4 shrink-0" />,
       color: 'text-[#58CC02]',
       badge: 'Active Recall',
     },
     {
       id: 'feedback',
       label: 'משוב וניתוח AI',
-      icon: <Activity className="w-4 h-4 ml-1.5" />,
+      icon: <Activity className="w-4 h-4 shrink-0" />,
       color: 'text-[#CE82FF]',
       badge: 'חדש',
     },
     {
       id: 'gamification',
       label: 'אתגר יומי ומובילים',
-      icon: <Zap className="w-4 h-4 ml-1.5" />,
+      icon: <Zap className="w-4 h-4 shrink-0" />,
       color: 'text-[#FFC800]',
       badge: `${profile.points} XP`,
     },
     {
-      id: 'registry',
-      label: 'פנקס האסוציאציות',
-      icon: <BookOpen className="w-4 h-4 ml-1.5" />,
-      color: 'text-[#1CB0F6]',
-      badge: `${savedAssociationsCount}`,
-    },
-    {
       id: 'mentor',
       label: 'מנטור הזיכרון',
-      icon: <Sparkles className="w-4 h-4 ml-1.5" />,
+      icon: <Sparkles className="w-4 h-4 shrink-0" />,
       color: 'text-[#CE82FF]',
       badge: 'LIVE',
     },
-    {
-      id: 'theory',
-      label: 'המדע והשיטות',
-      icon: <GraduationCap className="w-4 h-4 ml-1.5" />,
-      color: 'text-[#FF4B4B]',
-    },
   ];
 
-  return (
-    <header className="sticky top-0 z-50 bg-white/95 backdrop-blur-md border-b-2 border-slate-200 shadow-sm w-full max-w-full overflow-hidden">
-      <div className="w-full max-w-none px-3 sm:px-6 lg:px-8 xl:px-12 mx-auto">
-        <div className="flex items-center justify-between h-14 sm:h-16 gap-2 w-full">
-          {/* Logo */}
+  const handleSelectTab = (tabId: TabType) => {
+    onTabChange(tabId);
+    setMobileMenuOpen(false);
+  };
+
+  const sidebarContent = (
+    <div className="flex flex-col h-full justify-between p-4 gap-4 select-none">
+      {/* Top Section: Brand + Search + Stats */}
+      <div className="space-y-3.5">
+        <div className="flex items-center justify-between gap-2 pb-3 border-b-2 border-slate-100">
           <div
-            onClick={() => onTabChange('workouts')}
-            className="flex items-center gap-2 sm:gap-3 cursor-pointer group shrink-0 min-w-0"
+            onClick={() => handleSelectTab('workouts')}
+            className="flex items-center gap-2.5 cursor-pointer group min-w-0"
           >
-            <div className="relative flex items-center justify-center w-9 h-9 sm:w-11 sm:h-11 rounded-xl sm:rounded-2xl bg-[#58CC02] border-b-4 border-[#46a302] shadow-sm group-hover:scale-105 active:translate-y-0.5 transition-all shrink-0 animate-float">
-              <Brain className="w-5 h-5 sm:w-6 sm:h-6 text-white font-black drop-shadow" />
-              <div className="absolute -top-1 -right-1 w-2.5 h-2.5 sm:w-3 sm:h-3 bg-[#FFC800] rounded-full border-2 border-white animate-pulse" />
+            <div className="relative flex items-center justify-center w-10 h-10 rounded-2xl bg-[#58CC02] border-b-4 border-[#46a302] shadow-sm group-hover:scale-105 active:translate-y-0.5 transition-all shrink-0 animate-float">
+              <Brain className="w-5 h-5 text-white font-black drop-shadow" />
+              <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-[#FFC800] rounded-full border-2 border-white animate-pulse" />
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <span className="text-base sm:text-xl font-black text-slate-900 tracking-tight whitespace-nowrap">
-                  ממנטו <span className="text-[#58CC02] hidden xs:inline">Memento</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-base font-black text-slate-900 tracking-tight truncate">
+                  ממנטו <span className="text-[#58CC02]">Memento</span>
                 </span>
-                <span className="text-[10px] sm:text-[11px] font-black uppercase tracking-wider bg-[#FFC800]/25 text-amber-800 border-2 border-[#FFC800]/60 px-1.5 sm:px-2 py-0.5 rounded-lg sm:rounded-xl whitespace-nowrap">
+                <span className="text-[10px] font-black uppercase bg-[#FFC800]/25 text-amber-800 border border-[#FFC800]/60 px-1.5 py-0.5 rounded-lg shrink-0">
                   רמה {profile.level}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500 font-semibold hidden sm:block truncate">
-                אקדמיית מנמוניקה, ארמונות זיכרון ואימונים יומיים
+              <p className="text-[10px] text-slate-500 font-semibold truncate">
+                אקדמיית מנמוניקה וארמונות זיכרון
               </p>
             </div>
           </div>
 
-          {/* Global Search Trigger Bar */}
-          {onOpenSearch && (
-            <button
-              onClick={onOpenSearch}
-              className="flex items-center gap-2 bg-slate-100/90 hover:bg-slate-200/90 border border-slate-300/80 hover:border-amber-500 px-3.5 py-1.5 rounded-2xl text-xs text-slate-600 hover:text-slate-900 transition-all cursor-pointer shadow-inner max-w-xs w-full hidden md:flex justify-between"
-              title="חיפוש כללי בכל האפליקציה (Ctrl + K)"
-            >
-              <div className="flex items-center gap-2">
-                <Search className="w-3.5 h-3.5 text-amber-600" />
-                <span className="truncate font-medium">חיפוש בכל המודולים...</span>
-              </div>
-              <kbd className="hidden lg:inline-block bg-white border border-slate-300 text-[10px] font-mono px-1.5 py-0.5 rounded text-slate-500 shadow-xs">
-                Ctrl + K
-              </kbd>
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(false)}
+            className="lg:hidden p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+            title="סגור תפריט"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
 
-          {/* Gamification Stats & User Auth */}
-          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-            {/* Mobile Search Button */}
-            {onOpenSearch && (
+        {/* Global Search Trigger Bar */}
+        {onOpenSearch && (
+          <button
+            onClick={() => {
+              setMobileMenuOpen(false);
+              onOpenSearch();
+            }}
+            className="w-full flex items-center justify-between gap-2 bg-slate-100/90 hover:bg-slate-200/90 border border-slate-300/80 hover:border-amber-500 px-3 py-2 rounded-2xl text-xs text-slate-600 hover:text-slate-900 transition-all cursor-pointer shadow-inner"
+            title="חיפוש כללי בכל האפליקציה (Ctrl + K)"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <Search className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span className="truncate font-bold">חיפוש בכל המודולים...</span>
+            </div>
+            <kbd className="bg-white border border-slate-300 text-[10px] font-mono px-1.5 py-0.5 rounded text-slate-500 shadow-xs shrink-0">
+              Ctrl+K
+            </kbd>
+          </button>
+        )}
+
+        {/* Gamification Stats (Streak & XP) */}
+        <div className="grid grid-cols-2 gap-2">
+          <div
+            onClick={() => handleSelectTab('gamification')}
+            title="רצף ימי אימון יומי"
+            className="flex items-center justify-center gap-1.5 bg-[#FF9600]/15 border-2 border-[#FF9600]/40 px-2.5 py-1.5 rounded-2xl text-[#c76500] font-black text-xs cursor-pointer hover:bg-[#FF9600]/25 transition-all whitespace-nowrap"
+          >
+            <Flame className="w-4 h-4 fill-[#FF9600] animate-glow shrink-0" />
+            <span>{profile.dailyStreak} ימים</span>
+          </div>
+
+          <div
+            onClick={() => handleSelectTab('gamification')}
+            title="סך נקודות XP"
+            className="flex items-center justify-center gap-1.5 bg-[#FFC800]/20 border-2 border-[#FFC800]/50 px-2.5 py-1.5 rounded-2xl text-amber-900 font-black text-xs cursor-pointer hover:bg-[#FFC800]/30 transition-all whitespace-nowrap"
+          >
+            <Zap className="w-4 h-4 fill-[#FFC800] shrink-0" />
+            <span>{profile.points} XP</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Middle Section: Vertical Modules Navigation */}
+      <nav className="flex-1 overflow-y-auto space-y-1.5 py-1 pr-0.5">
+        <div className="text-[10px] font-black text-slate-400 uppercase tracking-wider px-2 pb-1">
+          מודולות ניווט
+        </div>
+        {tabs.map((tab) => {
+          const isActive = currentTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => handleSelectTab(tab.id)}
+              className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold transition-all duration-150 cursor-pointer text-right ${
+                isActive
+                  ? 'bg-slate-100 text-slate-900 border-2 border-[#58CC02] border-b-4 border-b-[#46a302] shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 border-2 border-transparent'
+              }`}
+            >
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className={isActive ? 'text-[#58CC02]' : tab.color}>{tab.icon}</span>
+                <span className="truncate">{tab.label}</span>
+              </div>
+              {tab.badge && (
+                <span
+                  className={`text-[10px] font-black px-2 py-0.5 rounded-lg shrink-0 ${
+                    isActive
+                      ? 'bg-[#58CC02]/20 text-[#2e6e01] border border-[#58CC02]/40'
+                      : 'bg-slate-200/70 text-slate-600 border border-slate-300'
+                  }`}
+                >
+                  {tab.badge}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* Bottom Section: Cloud Sync & User Auth */}
+      <div className="pt-3 border-t-2 border-slate-100 space-y-2.5">
+        {currentUser && isOnline && (onSyncCloud || onSeedCloudTables) && (
+          <div className="flex items-center gap-1.5">
+            {onSyncCloud && (
               <button
-                onClick={onOpenSearch}
-                className="md:hidden text-slate-600 hover:text-amber-600 p-1.5 sm:p-2 rounded-xl bg-slate-100 border border-slate-300 transition-colors"
-                title="חיפוש כללי"
+                onClick={onSyncCloud}
+                disabled={isSyncing}
+                title="סנכרן עכשיו לענן"
+                className="flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#1CB0F6]/10 hover:bg-[#1CB0F6]/20 text-[#1CB0F6] border border-[#1CB0F6]/30 text-[11px] font-extrabold transition-all cursor-pointer disabled:opacity-50"
               >
-                <Search className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-600" />
+                <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+                <span>{isSyncing ? 'מסנכרן...' : 'סנכרן ענן'}</span>
               </button>
             )}
+            {onSeedCloudTables && (
+              <button
+                onClick={onSeedCloudTables}
+                disabled={isSyncing}
+                title="טען ושמור את כל טבלאות ברירת המחדל לענן"
+                className="p-1.5 rounded-xl bg-[#FF9600]/10 hover:bg-[#FF9600]/20 text-[#FF9600] border border-[#FF9600]/30 transition-all cursor-pointer disabled:opacity-50"
+              >
+                <Database className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        )}
 
-            {/* Streak */}
-            <div
-              onClick={() => onTabChange('gamification')}
-              title="רצף ימי אימון יומי"
-              className="flex items-center gap-1 bg-[#FF9600]/15 border-2 border-[#FF9600]/40 px-2 sm:px-3 py-1 sm:py-1.5 rounded-xl sm:rounded-2xl text-[#c76500] font-black text-[11px] sm:text-xs cursor-pointer hover:bg-[#FF9600]/25 transition-all hover:scale-105 active:scale-95 whitespace-nowrap"
-            >
-              <Flame className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-[#FF9600] animate-glow" />
-              <span>{profile.dailyStreak}</span>
-              <span className="hidden xs:inline"> ימים</span>
-            </div>
+        {syncStatusMessage && (
+          <div className="px-2.5 py-1 rounded-xl bg-[#58CC02]/15 border border-[#58CC02]/40 text-[#2e6e01] text-[11px] font-bold text-center">
+            {syncStatusMessage}
+          </div>
+        )}
 
-            {/* XP Points */}
-            <div
-              onClick={() => onTabChange('gamification')}
-              title="סך נקודות XP"
-              className="flex items-center gap-1 bg-[#FFC800]/20 border-2 border-[#FFC800]/50 px-2 sm:px-3 py-1 sm:py-1.5 rounded-xl sm:rounded-2xl text-amber-900 font-black text-[11px] sm:text-xs cursor-pointer hover:bg-[#FFC800]/30 transition-all hover:scale-105 active:scale-95 whitespace-nowrap"
-            >
-              <Zap className="w-3.5 h-3.5 sm:w-4 sm:h-4 fill-[#FFC800]" />
-              <span>{profile.points} XP</span>
-            </div>
-
-            {/* Auth Button with live pulsing green indicator beside user profile */}
-            {currentUser ? (
-              <div className="flex items-center gap-1 sm:gap-2">
-                <div className="relative inline-flex items-center" title="מחובר ומסונכרן בזמן אמת">
+        <div className="flex items-center justify-between gap-2">
+          {currentUser ? (
+            <div className="flex items-center justify-between gap-2 flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-2xl px-2.5 py-1.5">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="relative inline-flex items-center shrink-0" title="מחובר ומסונכרן בזמן אמת">
                   {currentUser.photoURL ? (
                     <img
                       src={currentUser.photoURL}
                       alt=""
-                      className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl sm:rounded-2xl border-2 border-[#58CC02] object-cover shadow-sm"
+                      className="w-7 h-7 rounded-xl border-2 border-[#58CC02] object-cover shadow-xs"
                     />
                   ) : (
-                    <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl sm:rounded-2xl bg-slate-100 text-[#58CC02] border-2 border-[#58CC02] flex items-center justify-center font-black text-xs sm:text-sm shadow-sm">
+                    <div className="w-7 h-7 rounded-xl bg-slate-100 text-[#58CC02] border-2 border-[#58CC02] flex items-center justify-center font-black text-xs">
                       {profile.displayName?.charAt(0) || 'U'}
                     </div>
                   )}
-                  {/* Beautiful green pulsing indicator right beside profile */}
-                  <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                  <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 border-2 border-white"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500 border border-white"></span>
                   </span>
                 </div>
-                <button
-                  onClick={onLogout}
-                  title="התנתק"
-                  className="text-slate-500 hover:text-rose-600 p-1.5 sm:p-2 rounded-xl hover:bg-slate-100 transition-colors"
-                >
-                  <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                </button>
+                <span className="text-xs font-bold text-slate-700 truncate">
+                  {profile.displayName || currentUser.email}
+                </span>
               </div>
-            ) : (
               <button
-                onClick={onLogin}
-                className="flex items-center gap-1 sm:gap-1.5 btn-duo-green px-2.5 sm:px-3.5 py-1.5 text-xs cursor-pointer whitespace-nowrap"
+                onClick={onLogout}
+                title="התנתק"
+                className="text-slate-500 hover:text-rose-600 p-1 rounded-lg hover:bg-slate-200 transition-colors cursor-pointer shrink-0"
               >
-                <LogIn className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">התחבר</span>
+                <LogOut className="w-4 h-4" />
               </button>
-            )}
-
+            </div>
+          ) : (
             <button
-              onClick={onResetDefaults}
-              title="איפוס נתונים לברירת מחדל"
-              className="text-slate-500 hover:text-slate-800 p-1.5 sm:p-2 rounded-xl hover:bg-slate-100 transition-colors hidden xs:flex"
+              onClick={onLogin}
+              className="flex-1 flex items-center justify-center gap-1.5 btn-duo-green px-3 py-2 text-xs cursor-pointer whitespace-nowrap"
             >
-              <RotateCcw className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <LogIn className="w-3.5 h-3.5" />
+              <span>התחבר לענן</span>
             </button>
-          </div>
-        </div>
+          )}
 
-        {/* Navigation Tabs Bar */}
-        <div className="w-full max-w-full overflow-x-auto py-2 sm:py-2.5 no-scrollbar border-t border-slate-200">
-          <div className="flex items-center gap-1.5 sm:gap-2 w-max">
-            {tabs.map((tab) => {
-              const isActive = currentTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => onTabChange(tab.id)}
-                  className={`flex items-center whitespace-nowrap px-3 sm:px-3.5 py-1.5 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-extrabold transition-all duration-150 cursor-pointer ${
-                    isActive
-                      ? 'bg-slate-100 text-slate-900 border-2 border-[#58CC02] border-b-4 border-b-[#46a302] shadow-xs'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 border-2 border-transparent'
-                  }`}
-                >
-                  <span className={isActive ? 'text-[#58CC02]' : tab.color}>{tab.icon}</span>
-                  <span className="mr-1">{tab.label}</span>
-                  {tab.badge && (
-                    <span
-                      className={`mr-2 text-[10px] font-black px-1.5 sm:px-2 py-0.5 rounded-lg ${
-                        isActive
-                          ? 'bg-[#58CC02]/20 text-[#2e6e01] border border-[#58CC02]/40'
-                          : 'bg-slate-200/70 text-slate-600 border border-slate-300'
-                      }`}
-                    >
-                      {tab.badge}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+          <button
+            onClick={onResetDefaults}
+            title="איפוס נתונים לברירת מחדל"
+            className="text-slate-500 hover:text-slate-800 p-2 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-colors cursor-pointer shrink-0"
+          >
+            <RotateCcw className="w-4 h-4" />
+          </button>
         </div>
       </div>
-    </header>
+    </div>
+  );
+
+  return (
+    <>
+      {/* Desktop Vertical Sidebar */}
+      <aside className="hidden lg:flex lg:flex-col lg:w-68 xl:w-72 shrink-0 bg-white border-l-2 border-slate-200 sticky top-0 h-screen z-40 shadow-xs">
+        {sidebarContent}
+      </aside>
+
+      {/* Mobile Header Bar */}
+      <header className="lg:hidden sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b-2 border-slate-200 px-3 py-2.5 flex items-center justify-between gap-2 w-full">
+        <div className="flex items-center gap-2 min-w-0">
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(true)}
+            className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300 cursor-pointer shrink-0"
+            title="פתח תפריט ניווט"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+          <div
+            onClick={() => handleSelectTab('workouts')}
+            className="flex items-center gap-2 cursor-pointer min-w-0"
+          >
+            <div className="w-8 h-8 rounded-xl bg-[#58CC02] border-b-3 border-[#46a302] flex items-center justify-center shrink-0">
+              <Brain className="w-4 h-4 text-white" />
+            </div>
+            <span className="text-sm font-black text-slate-900 truncate">
+              ממנטו <span className="text-[#58CC02]">Memento</span>
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          {onOpenSearch && (
+            <button
+              onClick={onOpenSearch}
+              className="text-slate-600 hover:text-amber-600 p-2 rounded-xl bg-slate-100 border border-slate-300 transition-colors cursor-pointer"
+              title="חיפוש כללי"
+            >
+              <Search className="w-4 h-4 text-amber-600" />
+            </button>
+          )}
+          <div
+            onClick={() => handleSelectTab('gamification')}
+            className="flex items-center gap-1 bg-[#FF9600]/15 border border-[#FF9600]/40 px-2 py-1 rounded-xl text-[#c76500] font-black text-xs cursor-pointer"
+          >
+            <Flame className="w-3.5 h-3.5 fill-[#FF9600]" />
+            <span>{profile.dailyStreak}</span>
+          </div>
+          <div
+            onClick={() => handleSelectTab('gamification')}
+            className="flex items-center gap-1 bg-[#FFC800]/20 border border-[#FFC800]/50 px-2 py-1 rounded-xl text-amber-900 font-black text-xs cursor-pointer"
+          >
+            <Zap className="w-3.5 h-3.5 fill-[#FFC800]" />
+            <span>{profile.points}</span>
+          </div>
+        </div>
+      </header>
+
+      {/* Mobile Slide-Over Vertical Sidebar Drawer */}
+      {mobileMenuOpen && (
+        <div
+          className="lg:hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex justify-start animate-fadeIn"
+          dir="rtl"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              setMobileMenuOpen(false);
+            }
+          }}
+        >
+          <aside
+            className="w-72 max-w-[85vw] bg-white h-full shadow-2xl border-l-2 border-slate-200 overflow-y-auto"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            {sidebarContent}
+          </aside>
+        </div>
+      )}
+    </>
   );
 };
+

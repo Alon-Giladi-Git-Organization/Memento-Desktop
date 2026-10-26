@@ -155,8 +155,8 @@ export default function App() {
       : 0;
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans selection:bg-amber-500/20 selection:text-amber-900 w-full max-w-full overflow-x-hidden">
-      {/* Navigation Header */}
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col lg:flex-row font-sans selection:bg-amber-500/20 selection:text-amber-900 w-full max-w-full overflow-x-hidden">
+      {/* Vertical Sidebar Navigation (Desktop) & Top Drawer Header (Mobile) */}
       <Navbar
         currentTab={currentTab}
         onTabChange={setCurrentTab}
@@ -177,8 +177,10 @@ export default function App() {
         onSeedCloudTables={seedCloudTables}
       />
 
-      {/* Main Content Area */}
-      <main className="flex-1 w-full max-w-none px-3 sm:px-6 lg:px-8 xl:px-12 pt-4 sm:pt-8 pb-12 overflow-x-hidden">
+      {/* Main Content + Footer Column */}
+      <div className="flex-1 min-w-0 flex flex-col w-full">
+        {/* Main Content Area */}
+        <main className="flex-1 w-full max-w-none px-3 sm:px-6 lg:px-8 xl:px-10 pt-4 sm:pt-8 pb-12 overflow-x-hidden">
         {/* דפוס M3 מספר 3: Fade Through (דהייה והחלפה קונטקסטואלית)
             נבחר עבור הניווט הראשי בין מסכי האפליקציה (Workouts, Palaces, AI Tester, Logic וכו').
             לפי הנחיות Google Material Motion, כאשר עוברים בין יעדים שאין ביניהם קשר ציר או סדרתיות ישירה,
@@ -433,7 +435,7 @@ export default function App() {
 
       {/* Footer */}
       <footer className="border-t border-slate-200 bg-white/90 py-6 text-center text-xs text-slate-500 shadow-xs w-full max-w-full overflow-hidden">
-        <div className="w-full max-w-none px-4 sm:px-6 lg:px-8 xl:px-12 mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 flex-wrap">
+        <div className="w-full max-w-none px-4 sm:px-6 lg:px-8 xl:px-10 mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 flex-wrap">
           <p className="font-medium text-slate-600">
             ממנטו (Memento) • מבוסס על מחקרי נובל 2014, פרופ' אלינור מגווייר (UCL) ותקן אלופי העולם בזיכרון (WMC)
           </p>
@@ -442,6 +444,7 @@ export default function App() {
           </p>
         </div>
       </footer>
+      </div>
     </div>
   );
 }

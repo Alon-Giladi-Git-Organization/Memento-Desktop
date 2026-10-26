@@ -21,6 +21,7 @@ import {
   AlertTriangle,
   X,
   Package,
+  RefreshCw,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { MajorItem, PAOItem } from '../../types/memory';
@@ -63,6 +64,10 @@ interface MajorModuleProps {
       is_ready_for_practice?: boolean;
     }
   ) => void;
+  onUpdatePAOItem?: (
+    number: number,
+    updates: { person?: string; action?: string; object?: string; scene?: string; is_ready_for_practice?: boolean }
+  ) => void;
   onDeleteMajorItem?: (number: number) => void;
   onResetMajorItem: (number: number) => void;
   onOpenSummary?: (techniqueId: string) => void;
@@ -82,6 +87,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
   onRecalculateMajor00_99FromDigits,
   onAddMajorItem,
   onUpdateMajorItem,
+  onUpdatePAOItem,
   onDeleteMajorItem,
   onResetMajorItem,
   onOpenSummary,
@@ -96,6 +102,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
   const [decadeFilter, setDecadeFilter] = useState('all');
   const [onlyReadyFilter, setOnlyReadyFilter] = useState(false);
   const [syncToast, setSyncToast] = useState<string | null>(null);
+  const [openSyncChoiceKey, setOpenSyncChoiceKey] = useState<string | null>(null);
 
   // Ready for practice items calculation (Strict Whitelist Filtering)
   const readyItems = majorItems.filter((item) => Boolean(item.is_ready_for_practice));
@@ -115,7 +122,107 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
     details?: string;
     ignoreKey?: string;
     onConfirmBypass?: () => void;
+    syncConflict?: {
+      number: number;
+      majorVal: string;
+      paoVal: string;
+      onApplyMajorToBoth: () => void;
+      onApplyPaoToBoth: () => void;
+    };
   } | null>(null);
+
+  const handleApplySyncValueToBoth = (
+    itemNum: number,
+    chosenSource: 'major' | 'pao',
+    majorVal: string,
+    paoVal: string,
+    extraMajorUpdates?: { imageHint?: string }
+  ) => {
+    const valToApply = (chosenSource === 'major' ? majorVal : paoVal).trim();
+    if (!valToApply) return;
+
+    const liveCons =
+      getLiveMajorConsonants(itemNum, majorDigits) ||
+      majorItems.find((m) => m.number === itemNum)?.consonants ||
+      '';
+
+    onUpdateMajorItem(itemNum, {
+      defaultWord: valToApply,
+      consonants: liveCons,
+      ...(extraMajorUpdates?.imageHint !== undefined ? { imageHint: extraMajorUpdates.imageHint } : {}),
+    });
+    if (onUpdatePAOItem) {
+      onUpdatePAOItem(itemNum, { object: valToApply });
+    }
+    if (editingNum === itemNum) {
+      setEditWord(valToApply);
+    }
+    setOpenSyncChoiceKey(null);
+    setSyncToast(
+      `סונכרן הערך "${valToApply}" (ממודולת ${chosenSource === 'major' ? 'Major' : 'PAO'}) לשתי המודולות!`
+    );
+    setTimeout(() => setSyncToast(null), 3500);
+  };
+
+  const renderMajorPaoConflictActions = (
+    itemNum: number,
+    majorVal: string,
+    paoVal: string,
+    mismatchIgnoreKey: string,
+    compact = false
+  ) => {
+    const isChoiceOpen = openSyncChoiceKey === mismatchIgnoreKey;
+    return (
+      <div className="flex flex-col gap-1.5 items-end w-full">
+        <div className="flex items-center justify-end gap-1.5 flex-wrap">
+          <button
+            type="button"
+            onClick={() =>
+              setOpenSyncChoiceKey(isChoiceOpen ? null : mismatchIgnoreKey)
+            }
+            className={`${
+              compact ? 'text-[10px] px-2 py-0.5' : 'text-[11px] px-2.5 py-1'
+            } font-bold rounded-lg bg-sky-600 hover:bg-sky-500 text-white border border-sky-400/50 cursor-pointer transition-colors inline-flex items-center gap-1 shadow-xs`}
+          >
+            <RefreshCw className="w-3 h-3" />
+            <span>סנכרן בין המודולות</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => ignoreValidation(mismatchIgnoreKey)}
+            className={`${
+              compact ? 'text-[10px] px-2 py-0.5' : 'text-[11px] px-2.5 py-1'
+            } font-bold rounded-lg bg-slate-900/90 hover:bg-slate-800 text-sky-200 border border-sky-500/40 cursor-pointer transition-colors`}
+          >
+            התעלם במקרה זה
+          </button>
+        </div>
+        {isChoiceOpen && (
+          <div className="w-full bg-slate-950/95 border border-sky-500/50 rounded-xl p-2 flex flex-col gap-1.5 text-right animate-fadeIn">
+            <span className="text-[10px] text-sky-300 font-bold">
+              בחר איזה ערך להחיל על שתי המודולות (Major + PAO):
+            </span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <button
+                type="button"
+                onClick={() => handleApplySyncValueToBoth(itemNum, 'major', majorVal, paoVal)}
+                className="flex-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/40 cursor-pointer transition-colors text-center"
+              >
+                החל Major ("{majorVal}") על שניהם
+              </button>
+              <button
+                type="button"
+                onClick={() => handleApplySyncValueToBoth(itemNum, 'pao', majorVal, paoVal)}
+                className="flex-1 text-[10px] font-bold px-2.5 py-1.5 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 text-teal-200 border border-teal-500/40 cursor-pointer transition-colors text-center"
+              >
+                החל PAO ("{paoVal}") על שניהם
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // Light Dismiss via Escape key for MAJOR Edit Modal & Validation Modal
   useEffect(() => {
@@ -174,6 +281,40 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
           });
           return;
         }
+      }
+
+      // 3. Check conflict between Major word and PAO object (unless ignored)
+      const matchingPao = paoItems.find((p) => p.number === itemNum);
+      const paoObj = matchingPao?.object?.trim() || '';
+      const mismatchIgnoreKey = buildLogicIgnoreKey('major-pao-mismatch', itemNum, wordToSave, paoObj);
+      if (paoObj && wordToSave !== paoObj && !isIgnored(mismatchIgnoreKey)) {
+        setValidationModal({
+          isOpen: true,
+          title: 'התנגשות בין מודולת Major למודולת PAO',
+          message: `לתשומת לבך - במודולת PAO הגדרת חפץ אחר עבור מספר זה ("${paoObj}") ; מומלץ לבחור באותה המילה עבור 2 המודולות`,
+          details: `ערך נוכחי ב-Major: "${wordToSave}" | ערך נוכחי ב-PAO: "${paoObj}". תוכל לסנכרן ולהחיל אחד מהם על שתי המודולות או להתעלם במקרה זה.`,
+          ignoreKey: mismatchIgnoreKey,
+          onConfirmBypass: () => {
+            ignoreValidation(mismatchIgnoreKey);
+            handleSaveItem(itemNum, true);
+          },
+          syncConflict: {
+            number: itemNum,
+            majorVal: wordToSave,
+            paoVal: paoObj,
+            onApplyMajorToBoth: () => {
+              handleApplySyncValueToBoth(itemNum, 'major', wordToSave, paoObj, { imageHint: editHint.trim() });
+              setEditingNum(null);
+              setValidationModal(null);
+            },
+            onApplyPaoToBoth: () => {
+              handleApplySyncValueToBoth(itemNum, 'pao', wordToSave, paoObj, { imageHint: editHint.trim() });
+              setEditingNum(null);
+              setValidationModal(null);
+            },
+          },
+        });
+        return;
       }
     }
 
@@ -875,15 +1016,13 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                                   לתשומת לבך - במודולת PAO הגדרת חפץ אחר עבור מספר זה ("{paoObj}") ; מומלץ לבחור באותה המילה עבור 2 המודולות
                                 </span>
                               </div>
-                              <div className="flex justify-end">
-                                <button
-                                  type="button"
-                                  onClick={() => ignoreValidation(mismatchIgnoreKey)}
-                                  className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-sky-200 border border-sky-500/40 cursor-pointer transition-colors"
-                                >
-                                  התעלם במקרה זה
-                                </button>
-                              </div>
+                              {renderMajorPaoConflictActions(
+                                item.number,
+                                activeWord.trim(),
+                                paoObj,
+                                mismatchIgnoreKey,
+                                true
+                              )}
                             </div>
                           )}
                           {activeHint && (
@@ -1003,15 +1142,13 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                                       לתשומת לבך - במודולת PAO הגדרת חפץ אחר עבור מספר זה ("{paoObj}") ; מומלץ לבחור באותה המילה עבור 2 המודולות
                                     </span>
                                   </div>
-                                  <div className="flex justify-end">
-                                    <button
-                                      type="button"
-                                      onClick={() => ignoreValidation(mismatchIgnoreKey)}
-                                      className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-900 hover:bg-slate-800 text-sky-200 border border-sky-500/40 cursor-pointer"
-                                    >
-                                      התעלם במקרה זה
-                                    </button>
-                                  </div>
+                                  {renderMajorPaoConflictActions(
+                                    item.number,
+                                    activeWord.trim(),
+                                    paoObj,
+                                    mismatchIgnoreKey,
+                                    true
+                                  )}
                                 </div>
                               )}
                             </div>
@@ -1243,15 +1380,13 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                                   לתשומת לבך - במודולת PAO הגדרת חפץ אחר עבור מספר זה ("{paoObj}") ; מומלץ לבחור באותה המילה עבור 2 המודולות
                                 </span>
                               </div>
-                              <div className="flex justify-end">
-                                <button
-                                  type="button"
-                                  onClick={() => ignoreValidation(mismatchIgnoreKey)}
-                                  className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-sky-200 border border-sky-500/40 cursor-pointer transition-colors"
-                                >
-                                  התעלם במקרה זה
-                                </button>
-                              </div>
+                              {renderMajorPaoConflictActions(
+                                d.number,
+                                activeWord.trim(),
+                                paoObj,
+                                mismatchIgnoreKey,
+                                true
+                              )}
                             </div>
                           )}
                         </div>
@@ -1717,15 +1852,13 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                           לתשומת לבך - במודולת PAO הגדרת חפץ אחר עבור מספר זה ("{modalPaoObj}") ; מומלץ לבחור באותה המילה עבור 2 המודולות
                         </div>
                       </div>
-                      <div className="flex justify-end">
-                        <button
-                          type="button"
-                          onClick={() => ignoreValidation(modalMismatchIgnoreKey)}
-                          className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-900 hover:bg-slate-800 text-sky-200 border border-sky-500/40 cursor-pointer transition-colors"
-                        >
-                          התעלם במקרה זה
-                        </button>
-                      </div>
+                      {renderMajorPaoConflictActions(
+                        modalItem.number,
+                        editWord.trim(),
+                        modalPaoObj,
+                        modalMismatchIgnoreKey,
+                        false
+                      )}
                     </div>
                   )}
                 </div>
@@ -1854,7 +1987,32 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
               </div>
             )}
 
-            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-800">
+            {validationModal.syncConflict && (
+              <div className="bg-sky-950/50 border border-sky-500/40 rounded-2xl p-3.5 space-y-2.5 text-right">
+                <span className="text-xs font-black text-sky-300 flex items-center gap-1.5">
+                  <RefreshCw className="w-3.5 h-3.5 text-sky-400" />
+                  <span>סנכרון ערך לשתי המודולות (Major + PAO):</span>
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={validationModal.syncConflict.onApplyMajorToBoth}
+                    className="text-xs font-bold px-3 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/40 transition-all cursor-pointer text-center"
+                  >
+                    החל Major ("{validationModal.syncConflict.majorVal}") על שניהם
+                  </button>
+                  <button
+                    type="button"
+                    onClick={validationModal.syncConflict.onApplyPaoToBoth}
+                    className="text-xs font-bold px-3 py-2 rounded-xl bg-teal-500/20 hover:bg-teal-500/30 text-teal-200 border border-teal-500/40 transition-all cursor-pointer text-center"
+                  >
+                    החל PAO ("{validationModal.syncConflict.paoVal}") על שניהם
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-slate-800 flex-wrap">
               {validationModal.onConfirmBypass && (
                 <button
                   type="button"

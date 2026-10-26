@@ -317,6 +317,17 @@ function formatUserMappingDictionaryPrompt(
 ==========================================================================`;
 }
 
+function stripParenthesesServer(text: string): string {
+  if (!text) return '';
+  let result = text;
+  let prev = '';
+  while (result !== prev) {
+    prev = result;
+    result = result.replace(/\([^()]*\)/g, ' ');
+  }
+  return result.replace(/[()]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
 // Validate that a suggested Person name has initials matching tensDigit and unitsDigit
 function serverValidatePersonInitials(
   name: string,
@@ -324,8 +335,7 @@ function serverValidatePersonInitials(
   unitsDigit: number,
   digitsDict: Record<number, ParsedDigitMapping>
 ): boolean {
-  const clean = (name || '')
-    .replace(/\([^)]*\)/g, ' ')
+  const clean = stripParenthesesServer(name || '')
     .replace(/["'״׳]/g, '')
     .trim();
   const words = clean.split(/[\s\-–—\.]+/).filter((w) => w.length > 0);
@@ -366,8 +376,7 @@ function serverValidateObjectWord(
   connectingLetters: string[],
   isMajorMode: boolean
 ): boolean {
-  const clean = (wordText || '')
-    .replace(/\([^)]*\)/g, ' ')
+  const clean = stripParenthesesServer(wordText || '')
     .replace(/["'״׳]/g, '')
     .trim();
   if (!clean) return false;
