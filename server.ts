@@ -139,82 +139,322 @@ app.post('/api/gemini/evaluate-association', async (req: Request, res: Response)
   }
 });
 
-// API Endpoint: AI Memory Mentor Chat & CRUD Agent
+// Helper to sanitize and format user database for Gemini context injection
+function buildMentorDatabaseContext(rawDb: any, latestUserPrompt: string): {
+  targetedContext: string;
+  fullDatabaseContext: string;
+} {
+  if (!rawDb || typeof rawDb !== 'object') {
+    return {
+      targetedContext: 'לא נשלחו נתוני מסד נתונים בבקשה זו.',
+      fullDatabaseContext: 'מסד נתונים ריק.',
+    };
+  }
+
+  const majorDigits: any[] = Array.isArray(rawDb.majorDigits) ? rawDb.majorDigits : [];
+  const connectingLetters: string[] = Array.isArray(rawDb.connectingLetters) ? rawDb.connectingLetters : [];
+  const majorItems: any[] = Array.isArray(rawDb.majorItems) ? rawDb.majorItems : [];
+  const paoItems: any[] = Array.isArray(rawDb.paoItems) ? rawDb.paoItems : [];
+  const palaces: any[] = Array.isArray(rawDb.palaces) ? rawDb.palaces : [];
+  const peopleCards: any[] = Array.isArray(rawDb.peopleCards) ? rawDb.peopleCards : [];
+  const shapePegs: any[] = Array.isArray(rawDb.shapePegs) ? rawDb.shapePegs : [];
+  const bodyPegs: any[] = Array.isArray(rawDb.bodyPegs) ? rawDb.bodyPegs : [];
+  const academicPoints: any[] = Array.isArray(rawDb.academicPoints) ? rawDb.academicPoints : [];
+  const personalAssociations: any[] = Array.isArray(rawDb.personalAssociations) ? rawDb.personalAssociations : [];
+
+  // 1. Extract numbers (0-99) mentioned in the user's question for immediate high-priority context injection
+  const numberMatches = latestUserPrompt.match(/\b\d{1,2}\b/g) || [];
+  const queriedNumbers = Array.from(
+    new Set(numberMatches.map((n) => parseInt(n, 10)).filter((n) => !isNaN(n) && n >= 0 && n <= 99))
+  );
+
+  const targetedLines: string[] = [];
+  for (const num of queriedNumbers) {
+    const numStr = (num < 10 ? `0${num}` : String(num)).padStart(2, '0');
+    const mItem = majorItems.find((m) => Number(m.number) === num);
+    const pItem = paoItems.find((p) => Number(p.number) === num);
+    const dItem = num <= 9 ? majorDigits.find((d) => Number(d.number) === num) : null;
+    const sPeg = shapePegs.find((s) => Number(s.number) === num);
+    const bPeg = bodyPegs.find((b) => Number(b.index) === num);
+
+    const recordParts: string[] = [`נתוני המשתמש במסד הנתונים עבור המספר ${num} (${numStr}):`];
+    if (mItem) {
+      recordParts.push(
+        `  • שיטת Major (מספר ${numStr}): מילת עוגן = "${mItem.defaultWord || mItem.userWord || ''}", עיצורים = "${mItem.consonants || ''}", רמז תמונה = "${mItem.imageHint || ''}"${mItem.customNotes ? `, הערות = "${mItem.customNotes}"` : ''}`
+      );
+    }
+    if (pItem) {
+      recordParts.push(
+        `  • שיטת PAO (מספר ${numStr}): אדם (Person) = "${pItem.person || ''}", פעולה (Action) = "${pItem.action || ''}", חפץ (Object) = "${pItem.object || ''}", סצנה שלמה = "${pItem.scene || ''}"`
+      );
+    }
+    if (dItem) {
+      recordParts.push(
+        `  • לוגיקת ספרה בודדת (${num}): עיצורים = "${dItem.consonants || ''}", מילת עוגן = "${dItem.defaultWord || ''}"`
+      );
+    }
+    if (sPeg) {
+      recordParts.push(
+        `  • מתלה צורה (${num}): צורה = "${sPeg.shapeName || ''}", חפץ = "${sPeg.defaultObject || ''}"`
+      );
+    }
+    if (bPeg) {
+      recordParts.push(
+        `  • מתלה גוף (שלב ${num}): איבר = "${bPeg.bodyPartHebrew || ''}", חפץ = "${bPeg.defaultObject || ''}"`
+      );
+    }
+    targetedLines.push(recordParts.join('\n'));
+  }
+
+  // 2. Build compact, clean tables of the user's entire database (stripped of base64 images)
+  const digitsTable = majorDigits
+    .map((d) => `${d.number}: עיצורים=[${d.consonants}] מילה="${d.defaultWord || ''}"`)
+    .join(' | ');
+
+  const majorTable = majorItems
+    .map(
+      (m) =>
+        `${m.numberStr || (m.number < 10 ? `0${m.number}` : m.number)}: מילת Major="${m.defaultWord || ''}" (עיצורים: ${m.consonants || ''}${m.imageHint ? `, דימוי: ${m.imageHint}` : ''})`
+    )
+    .join('\n');
+
+  const paoTable = paoItems
+    .map(
+      (p) =>
+        `${p.numberStr || (p.number < 10 ? `0${p.number}` : p.number)}: אדם="${p.person || ''}" | פעולה="${p.action || ''}" | חפץ="${p.object || ''}"${p.scene ? ` | סצנה="${p.scene}"` : ''}`
+    )
+    .join('\n');
+
+  const palacesTable = palaces
+    .map((pal) => {
+      const lociStr = (pal.loci || [])
+        .map(
+          (l: any) =>
+            `  [תחנה ${l.stepNumber}: "${l.title}" בחדר "${l.roomName}" | מיקום: "${l.positionDescription || ''}" | תוכן: "${l.storedContent || ''}" | סצנה: "${l.mnemonicScene || ''}"]`
+        )
+        .join('\n');
+      return `ארמון "${pal.name}" (מזהה: ${pal.id}, תיאור: "${pal.description || ''}", ${pal.loci?.length || 0} תחנות):\n${lociStr}`;
+    })
+    .join('\n\n');
+
+  const peopleTable = peopleCards
+    .map(
+      (c) =>
+        `שם="${c.name}" (תפקיד: "${c.roleOrJob || ''}", עוגן פנים: "${c.morphologicalAnchor || ''}", מילת תחליף: "${c.substituteWord || ''}", סצנה: "${c.mnemonicScene || ''}")`
+    )
+    .join('\n');
+
+  const pegsTable = [
+    'מתלי צורה (Shape Pegs): ' +
+      shapePegs.map((s) => `${s.number}="${s.defaultObject}" (${s.shapeName})`).join(', '),
+    'מתלי גוף (Body Pegs): ' +
+      bodyPegs.map((b) => `${b.index} (${b.bodyPartHebrew})="${b.defaultObject}"`).join(', '),
+  ].join('\n');
+
+  const academicTable = academicPoints
+    .map(
+      (a) =>
+        `מושג="${a.conceptTitle}" (${a.discipline}): מילת מפתח="${a.keyWord}", עוגן="${a.visualAnchor}", סצנה="${a.mnemonicScene}"`
+    )
+    .join('\n');
+
+  const associationsTable = personalAssociations
+    .map(
+      (pa) =>
+        `נושא="${pa.targetSubject}": מידע="${pa.storedNumberOrFact}" -> מנמוניקה="${pa.encodedMnemonic}" (שיטה: ${pa.methodUsed})`
+    )
+    .join('\n');
+
+  const fullDatabaseContext = [
+    `משתמש מחובר: ${rawDb.userName || 'משתמש'} (UID: ${rawDb.userUid || 'local'})`,
+    `אותיות קישור (Connecting Letters): ${connectingLetters.join(', ')}`,
+    `לוגיקת ספרות 0-9:\n${digitsTable}`,
+    `\n=== טבלת Major 00-99 של המשתמש (${majorItems.length} רשומות) ===\n${majorTable}`,
+    `\n=== טבלת PAO 00-99 של המשתמש (${paoItems.length} רשומות) ===\n${paoTable}`,
+    `\n=== ארמונות זיכרון ותחנות של המשתמש (${palaces.length} ארמונות) ===\n${palacesTable || 'אין ארמונות'}`,
+    `\n=== כרטיסי שמות ופנים של המשתמש (${peopleCards.length} כרטיסים) ===\n${peopleTable || 'אין כרטיסים'}`,
+    `\n=== מתלי צורה וגוף של המשתמש ===\n${pegsTable}`,
+    `\n=== מושגים אקדמיים של המשתמש (${academicPoints.length}) ===\n${academicTable || 'אין מושגים'}`,
+    `\n=== פנקס אסוציאציות אישי של המשתמש (${personalAssociations.length}) ===\n${associationsTable || 'אין אסוציאציות'}`,
+  ].join('\n');
+
+  return {
+    targetedContext: targetedLines.join('\n\n'),
+    fullDatabaseContext,
+  };
+}
+
+// API Endpoint: AI Memory Mentor Chat & Full User Database CRUD Agent
 app.post('/api/gemini/mentor-chat', async (req: Request, res: Response) => {
-  try {
-    const { messages, message, history, userProfileSummary, appContext } = req.body;
+  const { messages, message, history, userProfileSummary, appContext, userDatabase } = req.body || {};
+  const dbSnapshot = userDatabase || appContext || {};
 
-    let chatList: Array<{ role: string; content: string }> = [];
+  // Build raw chat list from request
+  let chatList: Array<{ role: string; content: string }> = [];
+  if (Array.isArray(messages) && messages.length > 0) {
+    chatList = messages;
+  } else if (message && typeof message === 'string') {
+    const hist = Array.isArray(history) ? history : [];
+    chatList = [...hist, { role: 'user', content: message }];
+  }
 
-    if (Array.isArray(messages) && messages.length > 0) {
-      chatList = messages;
-    } else if (message && typeof message === 'string') {
-      const hist = Array.isArray(history) ? history : [];
-      chatList = [...hist, { role: 'user', content: message }];
+  if (chatList.length === 0) {
+    chatList = [{ role: 'user', content: String(message || 'שלום! אשמח לעזרה במנמוניקה.') }];
+  }
+
+  // Extract latest user message
+  const latestUserMsgObj = [...chatList].reverse().find((m) => m.role !== 'assistant' && m.role !== 'model');
+  const latestUserText = String(latestUserMsgObj?.content || message || '').trim();
+
+  // Build structured DB context & targeted record lookup
+  const { targetedContext, fullDatabaseContext } = buildMentorDatabaseContext(dbSnapshot, latestUserText);
+
+  // Normalize multi-turn contents for Gemini API:
+  // 1. Must start with role 'user' (strip any leading welcome 'model' messages)
+  // 2. Must strictly alternate 'user' and 'model' (merge consecutive same-role messages)
+  const normalizedContents: Array<{ role: 'user' | 'model'; parts: Array<{ text: string }> }> = [];
+  for (const msg of chatList) {
+    const role: 'user' | 'model' = msg.role === 'assistant' || msg.role === 'model' ? 'model' : 'user';
+    const text = String(msg.content || '').trim();
+    if (!text) continue;
+
+    // Skip leading 'model' turns before the first 'user' turn
+    if (normalizedContents.length === 0 && role === 'model') {
+      continue;
     }
 
-    if (chatList.length === 0) {
-      chatList = [{ role: 'user', content: 'שלום! אשמח לטיפ או עצה במנמוניקה.' }];
+    const prev = normalizedContents[normalizedContents.length - 1];
+    if (prev && prev.role === role) {
+      prev.parts[0].text += `\n\n${text}`;
+    } else {
+      normalizedContents.push({
+        role,
+        parts: [{ text }],
+      });
     }
+  }
 
-    const formattedContents = chatList.map((msg) => ({
-      role: msg.role === 'assistant' || msg.role === 'model' ? 'model' : 'user',
-      parts: [{ text: String(msg.content || '').trim() || '...' }],
-    }));
+  if (normalizedContents.length === 0) {
+    normalizedContents.push({
+      role: 'user',
+      parts: [{ text: latestUserText || 'שלום!' }],
+    });
+  }
 
-    const systemInstruction = `${MEMORY_CHAMPION_SYSTEM_PROMPT}
+  // Inject targeted database records directly into the final user turn so the LLM has immediate context
+  const lastTurn = normalizedContents[normalizedContents.length - 1];
+  if (lastTurn.role === 'user' && targetedContext) {
+    lastTurn.parts[0].text = `${lastTurn.parts[0].text}\n\n[נתונים שנשלפו בזמן אמת ממסד הנתונים האישי של המשתמש עבור שאלה זו:\n${targetedContext}]`;
+  }
+
+  const systemInstruction = `אתה מנטור הזיכרון החכם של אקדמיית ממנטו (Memento).
+יש לך חיבור ישיר וגישה מלאה בזמן אמת למסד הנתונים האישי של המשתמש המחובר.
+
+כללי התנהגות קריטיים:
+1. שליפת נתונים אישיים של המשתמש (READ Queries):
+   - כאשר המשתמש שואל מה המילה שלו ב-Major, מה שלשת ה-PAO שלו, אילו תחנות או ארמונות זיכרון יש לו, או כל שאלה על הנתונים שלו (לדוגמה: "מה מילת ה-Major שלי למספר 99?" או "מה יש לי במספר 14?"):
+   - חובה עליך לבדוק את טבלאות הנתונים של המשתמש המופיעות למטה (ואת הנתונים הממוקדים שהוזרקו לשאלה) ולענות במדויק על פי הערכים השמורים במסד הנתונים של המשתמש בלבד!
+   - לעולם אל תמציא מילה אחרת אם קיימת מילה במסד הנתונים של המשתמש, ולעולם אל תחזיר תשובה גנרית או קבועה. ציין במפורש את הערך המדויק מה-DB של המשתמש (למשל את מילת ה-Major המדויקת שלו, העיצורים, הרמז הוויזואלי או שלשת ה-PAO שלו).
+2. יצירת אסוציאציות ושאלות תאורטיות:
+   - אם המשתמש מבקש להמיר משפט או עובדה לתמונה אסוציאטיבית, צור תמונה ויזואלית חדה, פשוטה וברורה בפריים אחד עם 2-3 עוגנים מרכזיים.
+   - אם המשתמש שואל שאלה מתודולוגית על שיטת ה-Major, PAO, ארמונות זיכרון או שמות ופנים, ענה במקצועיות ובהירות בעברית רהוטה.
+3. פעולות יצירה, עדכון ומחיקה במסד הנתונים (CREATE, UPDATE, DELETE Operations):
+   - רק כאשר המשתמש מבקש במפורש להוסיף (Create), לערוך/לעדכן (Update) או למחוק (Delete) רשומה במסד הנתונים שלו, הסבר לו בעברית מה הפעולה שהכנת וציין שהיא ממתינה לאישורו בחלונית האישור, ובסוף התשובה הוסף שורה בפורמט:
+<<<ACTION:{"operation":"CREATE"|"UPDATE"|"DELETE","type":"ACTION_TYPE","targetLabel":"תיאור קצר של היעד","summary":"הסבר ברור של השינוי לאישור המשתמש","payload":{...}}>>>
+
+סוגי פעולות (ACTION_TYPE) נתמכים לעדכון/יצירה/מחיקה:
+- CREATE_MAJOR / UPDATE_MAJOR: {"number": 14, "defaultWord": "ידית", "imageHint": "...", "customNotes": "..."}
+- DELETE_MAJOR: {"number": 14}
+- CREATE_PAO / UPDATE_PAO: {"number": 14, "person": "...", "action": "...", "object": "...", "scene": "..."}
+- DELETE_PAO: {"number": 14}
+- UPDATE_DIGIT_LOGIC: {"digit": 2, "consonants": "ב"}
+- UPDATE_CONNECTING_LETTERS: {"letters": ["א", "ה", "ו", "י", "ע"]}
+- CREATE_PALACE / ADD_PALACE: {"name": "משרד העבודה", "description": "...", "category": "custom"}
+- UPDATE_PALACE: {"palaceId": "...", "name": "...", "description": "..."}
+- DELETE_PALACE: {"palaceId": "...", "name": "..."}
+- CREATE_LOCUS / ADD_LOCUS: {"palaceId": "...", "title": "דלת כניסה", "roomName": "מבואה", "positionDescription": "...", "storedContent": "...", "mnemonicScene": "..."}
+- UPDATE_LOCUS: {"palaceId": "...", "locusId": "...", "title": "...", "roomName": "...", "positionDescription": "...", "storedContent": "...", "mnemonicScene": "..."}
+- DELETE_LOCUS: {"palaceId": "...", "locusId": "...", "title": "..."}
+- CREATE_PERSON_CARD: {"name": "...", "roleOrContext": "...", "prominentFacialFeature": "...", "namePhoneticAnchor": "...", "mnemonicScene": "..."}
+- UPDATE_PERSON_CARD: {"id": "...", "name": "...", "roleOrContext": "...", "prominentFacialFeature": "...", "namePhoneticAnchor": "...", "mnemonicScene": "..."}
+- DELETE_PERSON_CARD: {"id": "...", "name": "..."}
+- CREATE_SHAPE_PEG / UPDATE_SHAPE_PEG: {"number": 1, "shapeName": "...", "defaultObject": "...", "kineticTip": "..."}
+- DELETE_SHAPE_PEG: {"number": 1}
+- CREATE_BODY_PEG / UPDATE_BODY_PEG: {"step": 1, "bodyPartHebrew": "...", "defaultObject": "...", "kineticTip": "..."}
+- DELETE_BODY_PEG: {"step": 1}
+- CREATE_ACADEMIC / ADD_ACADEMIC: {"courseOrTopic": "...", "conceptName": "...", "coreDefinition": "...", "phoneticAnchor": "...", "visualTranslation": "...", "kineticScene": "..."}
+- UPDATE_ACADEMIC: {"id": "...", "courseOrTopic": "...", "conceptName": "...", "coreDefinition": "...", "phoneticAnchor": "...", "visualTranslation": "...", "kineticScene": "..."}
+- DELETE_ACADEMIC: {"id": "...", "conceptName": "..."}
+- CREATE_ASSOCIATION / ADD_ASSOCIATION: {"targetSubject": "...", "storedNumberOrFact": "...", "encodedMnemonic": "...", "methodUsed": "major"}
+- UPDATE_ASSOCIATION: {"id": "...", "targetSubject": "...", "storedNumberOrFact": "...", "encodedMnemonic": "...", "methodUsed": "major"}
+- DELETE_ASSOCIATION: {"id": "...", "targetSubject": "..."}
 
 נתוני המשתמש והפרופיל:
 ${userProfileSummary || 'משתמש באקדמיית ממנטו (Memento).'}
 
-תמונת מצב בסיס הנתונים הנוכחי של המשתמש:
-${appContext ? JSON.stringify(appContext) : 'מאגר נתונים סטנדרטי.'}
+=== מסד הנתונים האישי המלא של המשתמש בזמן אמת ===
+${fullDatabaseContext}`;
 
-הנחיות חשובות:
-1. ספק תשובות מעשיות, חכמות וממריצות בעברית רהוטה.
-2. אם המשתמש שואל שאלות תאורטיות על טכניקות הזיכרון - הסבר לו בבהירות עם דוגמאות קינטיות ומקור מדעי.
-3. אם המשתמש מבקש פעולת ניהול או עדכון נתונים (CRUD) - כגון: "תוסיף לי ארמון זיכרון חדש", "תשנה לי את המילה של מספר 14", "תוסיף לי איש PAO", "מחק לי את...", או "הוסף עוגן אקדמי" - רשום תשובה ברורה בעברית, ובסוף התשובה הוסף בלוק פעולה מסוג:
-<<<ACTION:{"type":"ACTION_TYPE","payload":{...}}>>>
-סוגי פעולות נתמכים:
-- UPDATE_MAJOR: {"number": 14, "userWord": "ילד", "userImageHint": "..."}
-- UPDATE_PAO: {"number": 14, "userPerson": "...", "userAction": "...", "userObject": "..."}
-- ADD_PALACE: {"name": "דירה בחיפה", "description": "...", "icon": "Home"}
-- ADD_LOCUS: {"palaceId": "...", "title": "דלת כניסה", "roomName": "מבואה", "positionDescription": "...", "mnemonicScene": "..."}
-- ADD_ACADEMIC: {"conceptTitle": "...", "discipline": "...", "sourceSummary": "...", "keyWord": "...", "visualAnchor": "...", "palaceLocusInfo": "...", "mnemonicScene": "..."}
-- ADD_ASSOCIATION: {"category": "...", "sourceKey": "...", "targetValue": "...", "kineticScene": "...", "notes": "..."}`;
+  const aiClient = getGeminiClient();
+  const modelsToTry = ['gemini-3.8-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite'];
+  let rawReply = '';
+  let lastErr: any = null;
 
-    const response = await ai.models.generateContent({
-      model: FAST_TEXT_MODEL,
-      contents: formattedContents,
-      config: {
-        thinkingConfig: FAST_THINKING_CONFIG,
-        systemInstruction,
-        temperature: 0.7,
-      },
-    });
-
-    const rawReply = response.text || '';
-    
-    // Extract any action block if present
-    let actionData: any = null;
-    let cleanReply = rawReply;
-    const actionMatch = rawReply.match(/<<<ACTION:(.*?)>>>/s);
-    if (actionMatch) {
-      try {
-        actionData = JSON.parse(actionMatch[1]);
-        cleanReply = rawReply.replace(/<<<ACTION:(.*?)>>>/s, '').trim();
-      } catch (e) {
-        console.warn('Could not parse agent action JSON:', e);
+  for (const modelName of modelsToTry) {
+    try {
+      const response = await aiClient.models.generateContent({
+        model: modelName,
+        contents: normalizedContents,
+        config: {
+          systemInstruction,
+          temperature: 0.3,
+        },
+      });
+      if (response && response.text) {
+        rawReply = response.text;
+        break;
       }
+    } catch (err: any) {
+      console.warn(`[mentor-chat] Model ${modelName} attempt failed:`, err?.message || err);
+      lastErr = err;
     }
+  }
 
-    return res.json({ reply: cleanReply || 'מצוין! נמשיך לתרגל.', action: actionData });
-  } catch (error: any) {
-    console.error('Error in mentor-chat:', error);
-    return res.status(200).json({
-      reply: 'מנטור הזיכרון כאן! בוא נתרגל יחד. כדי לזכור מידע ביעילות מירבית, הפעל את ההיפוקמפוס: צור תמונה מוגזמת, הוסף תנועה עזה ושבירה קינטית, והצב אותה בתחנה ברורה בארמון הזיכרון שלך.',
+  if (!rawReply) {
+    console.error('[mentor-chat] All Gemini model attempts failed:', lastErr);
+    if (targetedContext) {
+      return res.status(200).json({
+        reply: `להלן הנתונים שנשלפו ישירות ממסד הנתונים האישי שלך:\n\n${targetedContext}`,
+      });
+    }
+    return res.status(500).json({
+      error: lastErr?.message || 'Failed to generate response from Gemini API',
+      reply: `שגיאה בקריאה למנוע ה-AI: ${lastErr?.message || 'שגיאה לא ידועה'}. אנא נסה שוב.`,
     });
   }
+
+  // Extract any action block if present
+  let actionData: any = null;
+  let cleanReply = rawReply;
+  const actionMatch = rawReply.match(/<<<ACTION:(.*?)>>>/s);
+  if (actionMatch) {
+    try {
+      actionData = JSON.parse(actionMatch[1]);
+      cleanReply = rawReply.replace(/<<<ACTION:(.*?)>>>/s, '').trim();
+    } catch (e) {
+      console.warn('Could not parse agent action JSON:', e);
+    }
+  }
+
+  if (actionData && !actionData.operation) {
+    const t = String(actionData.type || '').toUpperCase();
+    if (t.startsWith('DELETE_')) actionData.operation = 'DELETE';
+    else if (t.startsWith('CREATE_') || t.startsWith('ADD_')) actionData.operation = 'CREATE';
+    else if (t.startsWith('READ_')) actionData.operation = 'READ';
+    else actionData.operation = 'UPDATE';
+  }
+
+  return res.json({ reply: cleanReply, action: actionData });
 });
 
 // Normalization and phonetic helpers for Hebrew Major & PAO validation on the server

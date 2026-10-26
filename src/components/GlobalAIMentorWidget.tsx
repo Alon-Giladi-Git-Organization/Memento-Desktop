@@ -6,45 +6,33 @@ import {
   Bot,
   User,
   X,
-  MessageSquare,
-  ChevronUp,
-  ChevronDown,
-  Database,
   CheckCircle2,
-  Wand2,
-  BookOpen,
+  XCircle,
+  Database,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { MentorChatMessage } from '../types/memory';
+import {
+  AIMentorCRUDConfirmationModal,
+  AIMentorCRUDHandlers,
+  AIMentorDatabaseSnapshot,
+  executeAIMentorCRUDAction,
+  fetchAndSanitizeUserDatabaseForMentor,
+  normalizeCRUDAction,
+  PendingCRUDAction,
+} from './AIMentorCRUDModal';
 
-interface GlobalAIMentorWidgetProps {
-  appContext: {
-    majorDigitsCount: number;
-    majorItemsCount: number;
-    paoItemsCount: number;
-    palacesCount: number;
-    academicCount: number;
-    contactsCount: number;
-    recentPalaces?: Array<{ id: string; name: string; lociCount: number }>;
-  };
-  onUpdateMajorItem?: (number: number, updates: { defaultWord?: string; imageHint?: string }) => void;
-  onUpdatePAOItem?: (number: number, updates: { person?: string; action?: string; object?: string; scene?: string }) => void;
-  onAddPalace?: (name: string, description: string, icon: string) => void;
-  onAddLocus?: (palaceId: string, locus: { title: string; roomName: string; positionDescription?: string; mnemonicScene?: string }) => void;
-  onAddAcademicPoint?: (point: any) => void;
-  onAddAssociation?: (assoc: any) => void;
+interface GlobalAIMentorWidgetProps extends AIMentorCRUDHandlers {
+  userDatabase?: AIMentorDatabaseSnapshot;
+  appContext?: Record<string, any>;
   onEarnPoints?: (amount: number, reason?: string) => void;
 }
 
 export const GlobalAIMentorWidget: React.FC<GlobalAIMentorWidgetProps> = ({
+  userDatabase,
   appContext,
-  onUpdateMajorItem,
-  onUpdatePAOItem,
-  onAddPalace,
-  onAddLocus,
-  onAddAcademicPoint,
-  onAddAssociation,
   onEarnPoints,
+  ...crudHandlers
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<MentorChatMessage[]>([
@@ -52,13 +40,17 @@ export const GlobalAIMentorWidget: React.FC<GlobalAIMentorWidgetProps> = ({
       id: 'welcome',
       role: 'assistant',
       content:
-        'שלום! אני מנטור הזיכרון האישי שלך בממנטו. אני כאן לענות על כל שאלה בתיאוריית הזיכרון, לבנות עבורך סצנות קינטיות, ואפילו לנהל ולעדכן ישירות את מאגרי הזיכרון, הארמונות והשלשות שלך. במה אוכל לעזור היום?',
+        'שלום! אני מנטור הזיכרון האישי שלך בממנטו. יש לי גישת קריאה מלאה לכל בסיס הנתונים שלך כדי לענות מיד על כל שאלה, ואני יכול ליצור, לעדכן או למחוק עבורך רשומות ב-Major, ב-PAO, בארמונות הזיכרון ובפנקס האסוציאציות (לאחר אישורך בחלונית האבטחה). במה אוכל לעזור היום?',
       timestamp: Date.now(),
     },
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [lastActionExecuted, setLastActionExecuted] = useState<string | null>(null);
+  const [lastActionExecuted, setLastActionExecuted] = useState<{
+    text: string;
+    isCancelled?: boolean;
+  } | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingCRUDAction | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -72,16 +64,52 @@ export const GlobalAIMentorWidget: React.FC<GlobalAIMentorWidgetProps> = ({
     }
   }, [messages, isOpen]);
 
-  // ESC key to close
+  // ESC key to close drawer only if confirmation modal is not open
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
+      if (e.key === 'Escape' && isOpen && !pendingAction) {
         setIsOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen]);
+  }, [isOpen, pendingAction]);
+
+  const handleApproveAction = () => {
+    if (!pendingAction) return;
+    const statusText = executeAIMentorCRUDAction(pendingAction, crudHandlers, userDatabase);
+    setLastActionExecuted({ text: statusText, isCancelled: false });
+    setPendingAction(null);
+    confetti({ particleCount: 30, spread: 60, origin: { y: 0.8 } });
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `${Date.now()}-approved`,
+        role: 'assistant',
+        content: `✅ אושר ובוצע במסד הנתונים שלך: ${statusText}`,
+        timestamp: Date.now(),
+      },
+    ]);
+    onEarnPoints?.(15, 'אישור פעולת CRUD עם מנטור ה-AI');
+  };
+
+  const handleCancelAction = () => {
+    if (!pendingAction) return;
+    setPendingAction(null);
+    setLastActionExecuted({
+      text: 'הפעולה בוטלה לבקשתך. לא בוצע כל שינוי במסד הנתונים.',
+      isCancelled: true,
+    });
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `${Date.now()}-cancelled`,
+        role: 'assistant',
+        content: '❎ הפעולה בוטלה על ידך. לא בוצע שום שינוי בנתונים שלך.',
+        timestamp: Date.now(),
+      },
+    ]);
+  };
 
   const handleSend = async (textToSend?: string) => {
     const text = textToSend || input;
@@ -104,58 +132,20 @@ export const GlobalAIMentorWidget: React.FC<GlobalAIMentorWidgetProps> = ({
         content: m.content,
       }));
 
+      const cleanUserDb = await fetchAndSanitizeUserDatabaseForMentor(userDatabase);
+
       const res = await fetch('/api/gemini/mentor-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: chatHistory,
+          message: text.trim(),
           appContext,
+          userDatabase: cleanUserDb,
         }),
       });
 
       const data = await res.json();
-
-      let actionNotice = '';
-      if (data.action) {
-        const { type, payload } = data.action;
-        if (type === 'UPDATE_MAJOR' && onUpdateMajorItem && payload.number !== undefined) {
-          onUpdateMajorItem(payload.number, {
-            defaultWord: payload.defaultWord,
-            imageHint: payload.imageHint,
-          });
-          actionNotice = `⚡ עודכנה בהצלחה מילת Major עבור המספר ${payload.number}!`;
-        } else if (type === 'UPDATE_PAO' && onUpdatePAOItem && payload.number !== undefined) {
-          onUpdatePAOItem(payload.number, {
-            person: payload.person,
-            action: payload.action,
-            object: payload.object,
-            scene: payload.scene,
-          });
-          actionNotice = `⚡ עודכנה בהצלחה שלשת PAO עבור המספר ${payload.number}!`;
-        } else if (type === 'ADD_PALACE' && onAddPalace && payload.name) {
-          onAddPalace(payload.name, payload.description || '', payload.icon || 'Home');
-          actionNotice = `⚡ נוצר בהצלחה ארמון זיכרון חדש: "${payload.name}"!`;
-        } else if (type === 'ADD_LOCUS' && onAddLocus && payload.palaceId) {
-          onAddLocus(payload.palaceId, {
-            title: payload.title || 'תחנה חדשה',
-            roomName: payload.roomName || 'חדר ראשי',
-            positionDescription: payload.positionDescription,
-            mnemonicScene: payload.mnemonicScene,
-          });
-          actionNotice = `⚡ נוספה בהצלחה תחנה חדשה בארמון הזיכרון!`;
-        } else if (type === 'ADD_ACADEMIC' && onAddAcademicPoint && payload.conceptTitle) {
-          onAddAcademicPoint(payload);
-          actionNotice = `⚡ נוסף בהצלחה מושג אקדמי למאגר!`;
-        } else if (type === 'ADD_ASSOCIATION' && onAddAssociation && payload.sourceKey) {
-          onAddAssociation(payload);
-          actionNotice = `⚡ נוספה בהצלחה אסוציאציה למאגר האישי!`;
-        }
-
-        if (actionNotice) {
-          setLastActionExecuted(actionNotice);
-          confetti({ particleCount: 30, spread: 60, origin: { y: 0.8 } });
-        }
-      }
 
       const assistantMsg: MentorChatMessage = {
         id: (Date.now() + 1).toString(),
@@ -166,6 +156,17 @@ export const GlobalAIMentorWidget: React.FC<GlobalAIMentorWidgetProps> = ({
 
       setMessages((prev) => [...prev, assistantMsg]);
       onEarnPoints?.(10, 'אינטראקציה עם מנטור ה-AI');
+
+      // Check if an action was proposed
+      const normalized = normalizeCRUDAction(data.action);
+      if (normalized) {
+        if (normalized.operation === 'READ') {
+          // Read operations execute immediately without confirmation modal
+        } else {
+          // Create, Update, Delete operations pause execution and trigger the Confirmation Modal
+          setPendingAction(normalized);
+        }
+      }
     } catch (err) {
       console.error('Error contacting mentor chat:', err);
       setMessages((prev) => [
@@ -183,14 +184,22 @@ export const GlobalAIMentorWidget: React.FC<GlobalAIMentorWidgetProps> = ({
   };
 
   const quickPrompts = [
-    'איך עובד חוק אותיות הקישור (אני עונה)?',
-    'צור לי סצנת PAO קינטית ל-6 ספרות: 142388',
-    'הוסף לי ארמון זיכרון חדש: "משרד העבודה"',
-    'איך לזכור מושג פילוסופי מורכב בארמון?',
+    'מה מילת ה-Major ושלשת ה-PAO שלי למספר 14?',
+    'עדכן לי את מילת ה-Major של מספר 14 ל-"ידית"',
+    'הוסף לי ארמון זיכרון חדש בשם "משרד העבודה"',
+    'אילו ארמונות זיכרון ותחנות שמורים אצלי כרגע?',
   ];
 
   return (
     <>
+      {/* Confirmation Pop-up Modal for Create / Update / Delete */}
+      <AIMentorCRUDConfirmationModal
+        pendingAction={pendingAction}
+        userName={userDatabase?.userName}
+        onApprove={handleApproveAction}
+        onCancel={handleCancelAction}
+      />
+
       {/* Floating Trigger Button */}
       <div className="fixed bottom-5 left-5 z-40">
         <button
@@ -221,125 +230,136 @@ export const GlobalAIMentorWidget: React.FC<GlobalAIMentorWidgetProps> = ({
             className="fixed bottom-16 sm:bottom-20 left-3 right-3 sm:left-6 sm:right-auto z-50 sm:w-[460px] max-w-[calc(100vw-24px)] h-[580px] max-h-[82vh] bg-white border-2 border-slate-200 border-b-6 border-b-slate-300 rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-fadeIn text-slate-900"
             onClick={(e) => e.stopPropagation()}
           >
-          {/* Drawer Header */}
-          <div className="p-4 bg-slate-50 border-b-2 border-slate-200 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-400 to-amber-500 flex items-center justify-center text-slate-950 font-black shadow-sm">
-                <Bot className="w-5 h-5 text-slate-900" />
-              </div>
-              <div>
-                <h3 className="text-sm font-black text-slate-900 flex items-center gap-1.5">
-                  <span>מנטור הזיכרון של ממנטו</span>
-                  <span className="text-[10px] bg-amber-100 text-amber-800 border border-amber-300 px-1.5 py-0.5 rounded-full font-bold">
-                    AI Active
-                  </span>
-                </h3>
-                <p className="text-[11px] text-slate-500 font-medium">
-                  תשובות תאורטיות, סצנות קינטיות ועריכת מסד נתונים (CRUD)
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => setIsOpen(false)}
-              className="p-1.5 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-200 transition-colors cursor-pointer"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-
-          {/* Action Notification Banner */}
-          {lastActionExecuted && (
-            <div className="bg-emerald-50 border-b border-emerald-200 px-4 py-2 flex items-center justify-between text-xs text-emerald-800 font-semibold animate-fadeIn">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>{lastActionExecuted}</span>
+            {/* Drawer Header */}
+            <div className="p-4 bg-slate-50 border-b-2 border-slate-200 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-400 to-amber-500 flex items-center justify-center text-slate-950 font-black shadow-sm">
+                  <Bot className="w-5 h-5 text-slate-900" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-slate-900 flex items-center gap-1.5">
+                    <span>מנטור הזיכרון של ממנטו</span>
+                    <span className="text-[10px] bg-emerald-100 text-emerald-800 border border-emerald-300 px-1.5 py-0.5 rounded-full font-bold flex items-center gap-1">
+                      <Database className="w-2.5 h-2.5" />
+                      <span>גישת DB מלאה</span>
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-500 font-medium">
+                    קריאה מיידית • יצירה, עריכה ומחיקה באישור המשתמש
+                  </p>
+                </div>
               </div>
               <button
-                onClick={() => setLastActionExecuted(null)}
-                className="text-emerald-700 hover:text-emerald-950 text-xs mr-2 font-bold"
+                onClick={() => setIsOpen(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-xl hover:bg-slate-200 transition-colors cursor-pointer"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
-          )}
 
-          {/* Messages Area */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-slate-50/70">
-            {messages.map((m) => {
-              const isUser = m.role === 'user';
-              return (
-                <div
-                  key={m.id}
-                  className={`flex gap-2.5 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}
-                >
-                  <div
-                    className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-xs shadow-2xs ${
-                      isUser
-                        ? 'bg-amber-500 text-white font-bold'
-                        : 'bg-indigo-100 text-indigo-700 border border-indigo-200'
-                    }`}
-                  >
-                    {isUser ? <User className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
-                  </div>
-                  <div
-                    className={`max-w-[82%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed shadow-2xs ${
-                      isUser
-                        ? 'bg-amber-500 text-white rounded-tl-none font-medium'
-                        : 'bg-white border-2 border-slate-200 text-slate-900 rounded-tr-none whitespace-pre-wrap'
-                    }`}
-                  >
-                    {m.content}
-                  </div>
+            {/* Action Notification Banner */}
+            {lastActionExecuted && (
+              <div
+                className={`border-b px-4 py-2 flex items-center justify-between text-xs font-semibold animate-fadeIn ${
+                  lastActionExecuted.isCancelled
+                    ? 'bg-rose-50 border-rose-200 text-rose-800'
+                    : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                }`}
+              >
+                <div className="flex items-center gap-2">
+                  {lastActionExecuted.isCancelled ? (
+                    <XCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                  ) : (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  )}
+                  <span>{lastActionExecuted.text}</span>
                 </div>
-              );
-            })}
-            {isLoading && (
-              <div className="flex gap-2.5 items-center text-xs text-amber-700 font-medium">
-                <Loader2 className="w-4 h-4 animate-spin text-amber-600" />
-                <span>המנטור מנסח תשובה ומנתח את בסיס הנתונים...</span>
+                <button
+                  onClick={() => setLastActionExecuted(null)}
+                  className="text-slate-600 hover:text-slate-950 text-xs mr-2 font-bold cursor-pointer"
+                >
+                  ✕
+                </button>
               </div>
             )}
-            <div ref={messagesEndRef} />
-          </div>
 
-          {/* Quick Prompts */}
-          <div className="px-3 py-2 bg-white border-t border-slate-200 flex gap-1.5 overflow-x-auto no-scrollbar">
-            {quickPrompts.map((q, idx) => (
-              <button
-                key={idx}
-                onClick={() => handleSend(q)}
-                disabled={isLoading}
-                className="text-[10px] whitespace-nowrap bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 hover:border-amber-400 px-2.5 py-1 rounded-lg transition-all cursor-pointer shrink-0 font-medium shadow-2xs"
-              >
-                {q}
-              </button>
-            ))}
-          </div>
+            {/* Messages Area */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-slate-50/70">
+              {messages.map((m) => {
+                const isUser = m.role === 'user';
+                return (
+                  <div
+                    key={m.id}
+                    className={`flex gap-2.5 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}
+                  >
+                    <div
+                      className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-xs shadow-2xs ${
+                        isUser
+                          ? 'bg-amber-500 text-white font-bold'
+                          : 'bg-indigo-100 text-indigo-700 border border-indigo-200'
+                      }`}
+                    >
+                      {isUser ? <User className="w-3.5 h-3.5" /> : <Bot className="w-3.5 h-3.5" />}
+                    </div>
+                    <div
+                      className={`max-w-[82%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed shadow-2xs ${
+                        isUser
+                          ? 'bg-amber-500 text-white rounded-tl-none font-medium'
+                          : 'bg-white border-2 border-slate-200 text-slate-900 rounded-tr-none whitespace-pre-wrap'
+                      }`}
+                    >
+                      {m.content}
+                    </div>
+                  </div>
+                );
+              })}
+              {isLoading && (
+                <div className="flex gap-2.5 items-center text-xs text-amber-700 font-medium">
+                  <Loader2 className="w-4 h-4 animate-spin text-amber-600" />
+                  <span>המנטור קורא את בסיס הנתונים שלך ומנסח תשובה...</span>
+                </div>
+              )}
+              <div ref={messagesEndRef} />
+            </div>
 
-          {/* Input Bar */}
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSend();
-            }}
-            className="p-3 bg-white border-t-2 border-slate-200 flex items-center gap-2"
-          >
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="שאל כל שאלה או בקש להוסיף/לערוך ארמון, שלשה או מילה..."
-              className="flex-1 bg-slate-50 border-2 border-slate-200 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none transition-colors"
-            />
-            <button
-              type="submit"
-              disabled={!input.trim() || isLoading}
-              className="p-2 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-slate-950 font-bold transition-all cursor-pointer shadow-xs active:scale-95"
+            {/* Quick Prompts */}
+            <div className="px-3 py-2 bg-white border-t border-slate-200 flex gap-1.5 overflow-x-auto no-scrollbar">
+              {quickPrompts.map((q, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => handleSend(q)}
+                  disabled={isLoading}
+                  className="text-[10px] whitespace-nowrap bg-slate-50 hover:bg-slate-100 text-slate-700 border border-slate-200 hover:border-amber-400 px-2.5 py-1 rounded-lg transition-all cursor-pointer shrink-0 font-medium shadow-2xs"
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
+
+            {/* Input Bar */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSend();
+              }}
+              className="p-3 bg-white border-t-2 border-slate-200 flex items-center gap-2"
             >
-              <Send className="w-4 h-4 rotate-180" />
-            </button>
-          </form>
-        </div>
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="שאל על הנתונים שלך או בקש להוסיף/לערוך/למחוק..."
+                className="flex-1 bg-slate-50 border-2 border-slate-200 focus:border-amber-500 rounded-xl px-3.5 py-2 text-xs text-slate-900 placeholder-slate-400 focus:outline-none transition-colors"
+              />
+              <button
+                type="submit"
+                disabled={!input.trim() || isLoading}
+                className="p-2 rounded-xl bg-amber-500 hover:bg-amber-600 disabled:opacity-40 text-slate-950 font-bold transition-all cursor-pointer shadow-xs active:scale-95"
+              >
+                <Send className="w-4 h-4 rotate-180" />
+              </button>
+            </form>
+          </div>
         </>
       )}
     </>

@@ -139,6 +139,7 @@ export default function App() {
     updatePersonalAssociation,
     deletePersonalAssociation,
     addMemoryPalace,
+    updatePalace,
     deletePalace,
     addPalaceLocus,
     updatePalaceLocus,
@@ -153,6 +154,79 @@ export default function App() {
     testResults.length > 0
       ? Math.round(testResults.reduce((acc, t) => acc + t.score, 0) / testResults.length)
       : 0;
+
+  const userDatabaseSnapshot = {
+    userUid: currentUser?.uid || profile.uid || 'local-user',
+    userName: profile.displayName || currentUser?.email || 'ספורטאי זיכרון',
+    isAuthenticated: !!currentUser,
+    majorDigits,
+    connectingLetters,
+    majorItems,
+    paoItems,
+    palaces,
+    shapePegs,
+    bodyPegs,
+    peopleCards,
+    abstractShapes,
+    academicPoints,
+    personalAssociations,
+  };
+
+  const mentorCrudHandlers = {
+    onUpdateMajorDigit: updateMajorDigit,
+    onUpdateConnectingLetters: updateConnectingLetters,
+    onAddMajorItem: addMajorItem,
+    onUpdateMajorItem: updateMajorItem,
+    onDeleteMajorItem: deleteMajorItem,
+    onAddPAOItem: addPAOItem,
+    onUpdatePAOItem: updatePAOItem,
+    onDeletePAOItem: deletePAOItem,
+    onAddPalace: (name: string, desc: string, cat?: 'home' | 'familiar_route' | 'custom') =>
+      addMemoryPalace(name, desc, cat || 'custom'),
+    onUpdatePalace: updatePalace,
+    onDeletePalace: deletePalace,
+    onAddLocus: (
+      palaceId: string,
+      loc: {
+        title: string;
+        roomName: string;
+        positionDescription?: string;
+        storedContent?: string;
+        mnemonicScene?: string;
+      }
+    ) =>
+      addPalaceLocus(
+        palaceId,
+        loc.title,
+        loc.roomName,
+        loc.positionDescription || '',
+        loc.storedContent || loc.mnemonicScene || '',
+        loc.mnemonicScene || ''
+      ),
+    onUpdateLocus: updatePalaceLocus,
+    onDeleteLocus: deletePalaceLocus,
+    onAddPersonFaceCard: addPersonFaceCard,
+    onUpdatePersonFaceCard: updatePersonFaceCard,
+    onDeletePersonFaceCard: deletePersonFaceCard,
+    onAddShapePeg: addShapePeg,
+    onUpdateShapePeg: updateShapePeg,
+    onDeleteShapePeg: deleteShapePeg,
+    onAddBodyPeg: addBodyPeg,
+    onUpdateBodyPeg: updateBodyPeg,
+    onDeleteBodyPeg: deleteBodyPeg,
+    onAddAcademicPoint: (pt: any) => addAcademicPoint && addAcademicPoint(pt),
+    onUpdateAcademicPoint: updateAcademicPoint,
+    onDeleteAcademicPoint: deleteAcademicPoint,
+    onAddAssociation: (asc: any) =>
+      addPersonalAssociation(
+        asc.targetSubject || asc.sourceKey || 'נושא חדש',
+        asc.storedNumberOrFact || asc.targetValue || '',
+        asc.encodedMnemonic || asc.mnemonicScene || '',
+        asc.methodUsed || 'major'
+      ),
+    onUpdateAssociation: updatePersonalAssociation,
+    onDeleteAssociation: deletePersonalAssociation,
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col lg:flex-row font-sans selection:bg-amber-500/20 selection:text-amber-900 w-full max-w-full overflow-x-hidden">
@@ -297,6 +371,7 @@ export default function App() {
           <PalacesManager
             palaces={palaces}
             onAddPalace={addMemoryPalace}
+            onUpdatePalace={updatePalace}
             onDeletePalace={deletePalace}
             onAddLocus={addPalaceLocus}
             onUpdateLocus={updatePalaceLocus}
@@ -362,6 +437,8 @@ export default function App() {
             messages={chatMessages}
             onSendMessage={addChatMessage}
             onEarnPoints={earnPoints}
+            userDatabase={userDatabaseSnapshot}
+            {...mentorCrudHandlers}
           />
         )}
 
@@ -371,38 +448,9 @@ export default function App() {
 
       {/* Global AI Mentor Floating Widget */}
       <GlobalAIMentorWidget
-        appContext={{
-          majorDigitsCount: majorDigits.length,
-          majorItemsCount: majorItems.length,
-          paoItemsCount: paoItems.length,
-          palacesCount: palaces.length,
-          academicCount: academicPoints.length,
-          contactsCount: peopleCards.length,
-          recentPalaces: palaces.map((p) => ({ id: p.id, name: p.name, lociCount: p.loci.length })),
-        }}
-        onUpdateMajorItem={(num, updates) => updateMajorItem(num, updates)}
-        onUpdatePAOItem={(num, updates) => updatePAOItem(num, updates)}
-        onAddPalace={(name, desc) => addMemoryPalace(name, desc, 'custom')}
-        onAddLocus={(palaceId, loc) =>
-          addPalaceLocus(
-            palaceId,
-            loc.title,
-            loc.roomName,
-            loc.positionDescription || '',
-            loc.mnemonicScene || '',
-            loc.mnemonicScene || ''
-          )
-        }
-        onAddAcademicPoint={(pt) => addAcademicPoint && addAcademicPoint(pt)}
-        onAddAssociation={(asc) =>
-          addPersonalAssociation(
-            asc.targetSubject || asc.sourceKey || 'נושא חדש',
-            asc.storedNumberOrFact || asc.targetValue || '',
-            asc.encodedMnemonic || asc.mnemonicScene || '',
-            asc.methodUsed || 'major'
-          )
-        }
+        userDatabase={userDatabaseSnapshot}
         onEarnPoints={earnPoints}
+        {...mentorCrudHandlers}
       />
 
       {/* Technique Summary & Practical Examples Modal */}

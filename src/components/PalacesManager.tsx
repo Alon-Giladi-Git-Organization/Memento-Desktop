@@ -23,6 +23,8 @@ import {
   HelpCircle,
   Cloud,
   BookOpen,
+  X,
+  Save,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { MemoryPalace, PalaceLocus } from '../types/memory';
@@ -36,6 +38,7 @@ interface PalacesManagerProps {
     description: string,
     category: 'home' | 'work' | 'campus' | 'outdoor' | 'custom'
   ) => Promise<any>;
+  onUpdatePalace?: (palaceId: string, updates: Partial<MemoryPalace>) => void;
   onDeletePalace: (palaceId: string) => Promise<void>;
   onAddLocus: (
     palaceId: string,
@@ -57,6 +60,7 @@ interface PalacesManagerProps {
 export const PalacesManager: React.FC<PalacesManagerProps> = ({
   palaces,
   onAddPalace,
+  onUpdatePalace,
   onDeletePalace,
   onAddLocus,
   onUpdateLocus,
@@ -87,17 +91,13 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
     'home' | 'work' | 'campus' | 'outdoor' | 'custom'
   >('home');
 
-  // ESC key dismiss for modals
-  React.useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        if (showAddPalaceModal) setShowAddPalaceModal(false);
-        if (isWalkthroughOpen) setIsWalkthroughOpen(false);
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showAddPalaceModal, isWalkthroughOpen]);
+  // Edit Palace Modal
+  const [isEditingPalace, setIsEditingPalace] = useState(false);
+  const [editPalaceName, setEditPalaceName] = useState('');
+  const [editPalaceDesc, setEditPalaceDesc] = useState('');
+  const [editPalaceCategory, setEditPalaceCategory] = useState<
+    'home' | 'work' | 'campus' | 'outdoor' | 'custom'
+  >('home');
 
   // New Locus Form
   const [showAddLocusForm, setShowAddLocusForm] = useState(false);
@@ -108,12 +108,60 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
   const [newLocusScene, setNewLocusScene] = useState('');
   const [isGeneratingScene, setIsGeneratingScene] = useState(false);
 
-  // Editing locus
+  // Editing locus inside wide centered Modal (PAO Light Dismiss pattern)
   const [editingLocusId, setEditingLocusId] = useState<string | null>(null);
+  const [editRoomName, setEditRoomName] = useState('');
+  const [editTitle, setEditTitle] = useState('');
+  const [editPosition, setEditPosition] = useState('');
   const [editContent, setEditContent] = useState('');
   const [editScene, setEditScene] = useState('');
 
+  // ESC key dismiss for modals
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (editingLocusId) {
+          setEditingLocusId(null);
+          return;
+        }
+        if (isEditingPalace) {
+          setIsEditingPalace(false);
+          return;
+        }
+        if (showAddPalaceModal) setShowAddPalaceModal(false);
+        if (isWalkthroughOpen) setIsWalkthroughOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [editingLocusId, isEditingPalace, showAddPalaceModal, isWalkthroughOpen]);
+
   const currentPalace = palaces.find((p) => p.id === selectedPalaceId) || palaces[0];
+
+  const handleOpenEditLocusModal = (locus: PalaceLocus) => {
+    setEditingLocusId(locus.id);
+    setEditRoomName(locus.roomName || '');
+    setEditTitle(locus.title || '');
+    setEditPosition(locus.positionDescription || '');
+    setEditContent(locus.storedContent || '');
+    setEditScene(locus.mnemonicScene || '');
+  };
+
+  const handleCloseEditLocusModal = () => {
+    setEditingLocusId(null);
+  };
+
+  const handleSaveEditLocusModal = () => {
+    if (!currentPalace || !editingLocusId) return;
+    onUpdateLocus(currentPalace.id, editingLocusId, {
+      roomName: editRoomName.trim() || 'חדר כללי',
+      title: editTitle.trim() || 'תחנה בארמון',
+      positionDescription: editPosition.trim() || 'מיקום מרכזי בחדר',
+      storedContent: editContent.trim(),
+      mnemonicScene: editScene.trim(),
+    });
+    setEditingLocusId(null);
+  };
 
   const handleStartWalkthrough = () => {
     if (!currentPalace || currentPalace.loci.length === 0) return;
@@ -323,8 +371,21 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
                   {getCategoryIcon(currentPalace.category)}
                 </div>
                 <div>
-                  <h2 className="text-xl sm:text-2xl font-black text-slate-900 flex items-center gap-2">
-                    {currentPalace.name}
+                  <h2 className="text-xl sm:text-2xl font-black text-slate-900 flex items-center gap-2 flex-wrap">
+                    <span>{currentPalace.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditPalaceName(currentPalace.name);
+                        setEditPalaceDesc(currentPalace.description || '');
+                        setEditPalaceCategory(currentPalace.category || 'home');
+                        setIsEditingPalace(true);
+                      }}
+                      className="p-1.5 rounded-xl bg-slate-100 hover:bg-indigo-50 text-slate-500 hover:text-indigo-600 border border-slate-200 hover:border-indigo-300 transition-colors cursor-pointer"
+                      title="ערוך פרטי ארמון"
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
                     {isAuthenticated && (
                       <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full border border-emerald-300">
                         <Cloud className="w-3 h-3" /> מסונכרן בענן
@@ -374,12 +435,10 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
               {palaces.length > 1 && (
                 <button
                   onClick={() => {
-                    if (window.confirm(`האם למחוק את הארמון "${currentPalace.name}"?`)) {
-                      onDeletePalace(currentPalace.id);
-                      setSelectedPalaceId(palaces.find((p) => p.id !== currentPalace.id)?.id || '');
-                    }
+                    onDeletePalace(currentPalace.id);
+                    setSelectedPalaceId(palaces.find((p) => p.id !== currentPalace.id)?.id || '');
                   }}
-                  className="text-slate-500 hover:text-rose-400 p-2 rounded-xl hover:bg-slate-800/80 transition-colors"
+                  className="text-slate-500 hover:text-rose-400 p-2 rounded-xl hover:bg-slate-800/80 transition-colors cursor-pointer"
                   title="מחק ארמון זה"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -398,7 +457,7 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
                 </div>
                 <button
                   onClick={() => setShowAddLocusForm(false)}
-                  className="text-xs text-slate-400 hover:text-slate-200"
+                  className="text-xs text-slate-400 hover:text-slate-200 cursor-pointer"
                 >
                   ביטול
                 </button>
@@ -486,13 +545,13 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
                   <button
                     type="button"
                     onClick={() => setShowAddLocusForm(false)}
-                    className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-slate-200"
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-slate-200 cursor-pointer"
                   >
                     ביטול
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/30"
+                    className="px-5 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/30 cursor-pointer"
                   >
                     הוסף תחנה
                   </button>
@@ -511,7 +570,7 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
               </p>
               <button
                 onClick={() => setShowAddLocusForm(true)}
-                className="mt-4 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold inline-flex items-center gap-1.5"
+                className="mt-4 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>הוסף תחנה ראשונה</span>
@@ -533,6 +592,7 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
                     {loci.map((locus) => (
                       <div
                         key={locus.id}
+                        id={`locus-${locus.id}`}
                         className="bg-slate-900 border border-slate-800 rounded-xl p-4 flex flex-col justify-between hover:border-slate-700 transition-all group"
                       >
                         <div className="space-y-2">
@@ -540,21 +600,20 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
                             <span className="w-6 h-6 rounded-lg bg-indigo-500/20 text-indigo-300 font-black text-xs flex items-center justify-center border border-indigo-500/40">
                               {locus.stepNumber}
                             </span>
-                            <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <div className="flex items-center gap-1.5">
                               <button
-                                onClick={() => {
-                                  setEditingLocusId(locus.id);
-                                  setEditContent(locus.storedContent || '');
-                                  setEditScene(locus.mnemonicScene || '');
-                                }}
-                                className="p-1 text-slate-400 hover:text-indigo-300 transition-colors"
-                                title="ערוך תוכן תחנה"
+                                type="button"
+                                onClick={() => handleOpenEditLocusModal(locus)}
+                                className="p-1.5 rounded-lg bg-slate-800/80 hover:bg-indigo-500/25 text-slate-300 hover:text-indigo-200 border border-slate-700/80 hover:border-indigo-500/40 transition-all cursor-pointer flex items-center gap-1 text-[11px] font-bold"
+                                title="ערוך תחנה בחלון מורחב"
                               >
                                 <Edit2 className="w-3.5 h-3.5" />
+                                <span className="hidden sm:inline">עריכה</span>
                               </button>
                               <button
+                                type="button"
                                 onClick={() => onDeleteLocus(currentPalace.id, locus.id)}
-                                className="p-1 text-slate-400 hover:text-rose-400 transition-colors"
+                                className="p-1.5 rounded-lg bg-slate-800/80 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 border border-slate-700/80 hover:border-rose-500/30 transition-colors cursor-pointer"
                                 title="מחק תחנה"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -567,106 +626,26 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
                             {locus.positionDescription}
                           </p>
 
-                          {editingLocusId === locus.id ? (
-                            <div className="space-y-2 pt-2 border-t border-slate-800 text-right">
-                              <div>
-                                <label className="text-[9px] text-slate-400 font-bold block mb-0.5">מידע מאוחסן:</label>
-                                <input
-                                  type="text"
-                                  value={editContent}
-                                  onChange={(e) => setEditContent(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                      e.preventDefault();
-                                      onUpdateLocus(currentPalace.id, locus.id, {
-                                        storedContent: editContent,
-                                        mnemonicScene: editScene,
-                                      });
-                                      setEditingLocusId(null);
-                                    }
-                                  }}
-                                  placeholder="תוכן מאוחסן..."
-                                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white"
-                                />
-                              </div>
-                              <div>
-                                <div className="flex items-center justify-between mb-0.5">
-                                  <label className="text-[9px] text-indigo-400 font-bold">סצנה קינטית:</label>
-                                  <AIFieldGeneratorButton
-                                    promptType="palace_scene"
-                                    inputContext={editContent || locus.title}
-                                    extraContext={`תחנה: ${locus.title}, מיקום: ${locus.positionDescription}`}
-                                    onGenerated={(val) => setEditScene(val)}
-                                    label="סצנה עם AI"
-                                    compact
-                                  />
-                                </div>
-                                <textarea
-                                  rows={2}
-                                  value={editScene}
-                                  onChange={(e) => setEditScene(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter' && !e.shiftKey) {
-                                      e.preventDefault();
-                                      onUpdateLocus(currentPalace.id, locus.id, {
-                                        storedContent: editContent,
-                                        mnemonicScene: editScene,
-                                      });
-                                      setEditingLocusId(null);
-                                    }
-                                  }}
-                                  placeholder="סצנה קינטית מנמונית..."
-                                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-white"
-                                />
-                              </div>
-                              <div className="flex items-center justify-between gap-1.5 pt-1">
-                                <span className="text-[9px] text-slate-500 font-mono">↵ Enter לשמירה</span>
-                                <div className="flex gap-1.5">
-                                  <button
-                                    onClick={() => setEditingLocusId(null)}
-                                    className="text-[10px] text-slate-400 px-2 py-1"
-                                  >
-                                    ביטול
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      onUpdateLocus(currentPalace.id, locus.id, {
-                                        storedContent: editContent,
-                                        mnemonicScene: editScene,
-                                      });
-                                      setEditingLocusId(null);
-                                    }}
-                                    className="text-[10px] bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-2.5 py-1 rounded cursor-pointer"
-                                  >
-                                    שמור
-                                  </button>
-                                </div>
-                              </div>
+                          {locus.storedContent ? (
+                            <div className="mt-2 pt-2 border-t border-slate-800/80">
+                              <span className="text-[10px] font-semibold text-emerald-400 block mb-0.5">
+                                מידע מאוחסן:
+                              </span>
+                              <p className="text-xs text-slate-200 font-medium bg-slate-950/70 p-2 rounded-lg border border-slate-800">
+                                {locus.storedContent}
+                              </p>
                             </div>
                           ) : (
-                            <>
-                              {locus.storedContent ? (
-                                <div className="mt-2 pt-2 border-t border-slate-800/80">
-                                  <span className="text-[10px] font-semibold text-emerald-400 block mb-0.5">
-                                    מידע מאוחסן:
-                                  </span>
-                                  <p className="text-xs text-slate-200 font-medium bg-slate-950/70 p-2 rounded-lg border border-slate-800">
-                                    {locus.storedContent}
-                                  </p>
-                                </div>
-                              ) : (
-                                <div className="text-[11px] text-slate-500 italic mt-1">
-                                  תחנה ריקה - מוכנה לקליטת מידע
-                                </div>
-                              )}
+                            <div className="text-[11px] text-slate-500 italic mt-1">
+                              תחנה ריקה - מוכנה לקליטת מידע
+                            </div>
+                          )}
 
-                              {locus.mnemonicScene && (
-                                <div className="mt-1.5 text-[11px] text-amber-300/90 bg-amber-500/10 border border-amber-500/20 p-2 rounded-lg">
-                                  <span className="font-bold text-amber-400">⚡ סצנה: </span>
-                                  {locus.mnemonicScene}
-                                </div>
-                              )}
-                            </>
+                          {locus.mnemonicScene && (
+                            <div className="mt-1.5 text-[11px] text-amber-300/90 bg-amber-500/10 border border-amber-500/20 p-2 rounded-lg">
+                              <span className="font-bold text-amber-400">⚡ סצנה: </span>
+                              {locus.mnemonicScene}
+                            </div>
                           )}
 
                           {/* Ready for Practice Toggle */}
@@ -708,17 +687,373 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
         </div>
       )}
 
+      {/* =====================================================================
+          WIDE CENTERED EDIT LOCUS MODAL (PAO Light Dismiss Pattern)
+         ===================================================================== */}
+      {editingLocusId && currentPalace && (() => {
+        const editingLocus = currentPalace.loci.find((l) => l.id === editingLocusId);
+        if (!editingLocus) return null;
+
+        return (
+          <div
+            className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 md:p-8 animate-fadeIn overflow-y-auto"
+            dir="rtl"
+            onMouseDown={(e) => {
+              // Light Dismiss: Close ONLY if the initial mousedown occurred outside the modal container
+              if (e.target === e.currentTarget) {
+                handleCloseEditLocusModal();
+              }
+            }}
+          >
+            <div
+              className="w-full max-w-5xl max-h-[92vh] overflow-y-auto bg-slate-900 border-2 border-indigo-500/50 rounded-3xl p-5 sm:p-7 text-right space-y-5 shadow-2xl m3-container-transform my-auto"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-2xl sm:text-3xl font-black text-indigo-300 bg-indigo-500/15 px-3.5 py-1.5 rounded-2xl border border-indigo-500/30 shadow-inner">
+                    #{editingLocus.stepNumber}
+                  </span>
+                  <div>
+                    <h3 className="text-base sm:text-xl font-black text-white flex items-center gap-2 flex-wrap">
+                      <span>עריכת תחנת זיכרון (Locus) בארמון</span>
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-xl bg-indigo-500/15 border border-indigo-500/30 text-indigo-300 font-bold text-xs">
+                        <MapPin className="w-3.5 h-3.5" />
+                        <span>{currentPalace.name}</span>
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      ערוך את פרטי החדר, העוגן הפיזי, המידע המאוחסן והסצנה הקינטית • לחץ מחוץ לחלון או{' '}
+                      <kbd className="px-1.5 py-0.5 bg-slate-800 rounded text-[10px] font-mono text-slate-300">
+                        Esc
+                      </kbd>{' '}
+                      לסגירה מהירה
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCloseEditLocusModal}
+                    className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer transition-colors"
+                    title="סגור חלון (Esc)"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* 3 Spatial Anchor Fields in Expanded Horizontal Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* 1. Room Name */}
+                <div className="bg-slate-950/90 border border-indigo-500/30 rounded-2xl p-4 space-y-2 shadow-inner">
+                  <label className="text-xs sm:text-sm text-indigo-300 font-black flex items-center gap-1.5">
+                    <Home className="w-4 h-4 text-indigo-400" />
+                    <span>🏠 חדר / אזור בארמון:</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={editRoomName}
+                    onChange={(e) => setEditRoomName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSaveEditLocusModal();
+                      }
+                    }}
+                    placeholder="למשל: סלון מרכזי, מטבח, חדר שינה..."
+                    className="w-full bg-slate-900 border border-slate-700 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30 rounded-xl px-3.5 py-2.5 text-sm font-bold text-white placeholder-slate-500"
+                  />
+                  <p className="text-[11px] text-slate-400">
+                    החדר או המרחב בארמון שבו ממוקמת תחנה #{editingLocus.stepNumber}.
+                  </p>
+                </div>
+
+                {/* 2. Locus Title (Physical Anchor) */}
+                <div className="bg-slate-950/90 border border-amber-500/30 rounded-2xl p-4 space-y-2 shadow-inner">
+                  <label className="text-xs sm:text-sm text-amber-400 font-black flex items-center gap-1.5">
+                    <MapPin className="w-4 h-4 text-amber-400" />
+                    <span>📍 שם התחנה הפיזית (עוגן מרחבי):</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSaveEditLocusModal();
+                      }
+                    }}
+                    placeholder="למשל: דלת הכניסה, ספת העור, מסך הטלוויזיה..."
+                    className="w-full bg-slate-900 border border-slate-700 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/30 rounded-xl px-3.5 py-2.5 text-sm font-bold text-white placeholder-slate-500"
+                  />
+                  <p className="text-[11px] text-slate-400">
+                    הרהיט או החפץ הקבוע בחדר המשמש כעוגן פיזי.
+                  </p>
+                </div>
+
+                {/* 3. Position Description */}
+                <div className="bg-slate-950/90 border border-teal-500/30 rounded-2xl p-4 space-y-2 shadow-inner">
+                  <label className="text-xs sm:text-sm text-teal-400 font-black flex items-center gap-1.5">
+                    <Compass className="w-4 h-4 text-teal-400" />
+                    <span>🧭 תיאור המיקום (בכיוון השעון):</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={editPosition}
+                    onChange={(e) => setEditPosition(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSaveEditLocusModal();
+                      }
+                    }}
+                    placeholder="למשל: קיר שמאלי בכניסה, פינה מרכזית..."
+                    className="w-full bg-slate-900 border border-slate-700 focus:border-teal-500 focus:ring-1 focus:ring-teal-500/30 rounded-xl px-3.5 py-2.5 text-sm font-bold text-white placeholder-slate-500"
+                  />
+                  <p className="text-[11px] text-slate-400">
+                    הנקודה המדויקת על פני המסלול בכיוון השעון.
+                  </p>
+                </div>
+              </div>
+
+              {/* 4. Stored Information / Target Item */}
+              <div className="bg-slate-950/90 border border-emerald-500/35 rounded-2xl p-4 sm:p-5 space-y-2 shadow-inner">
+                <label className="text-xs sm:text-sm text-emerald-400 font-black flex items-center gap-1.5">
+                  <BookOpen className="w-4 h-4 text-emerald-400" />
+                  <span>📦 המידע או הפריט המאוחסן בתחנה (מה זוכרים כאן?):</span>
+                </label>
+                <input
+                  type="text"
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleSaveEditLocusModal();
+                    }
+                  }}
+                  placeholder="למשל: חוק שימור האנרגיה, סעיף 14 לחוזה, או מילת מפתח..."
+                  className="w-full bg-slate-900 border border-slate-700 focus:border-emerald-500 rounded-xl px-3.5 py-2.5 text-sm font-bold text-white placeholder-slate-500"
+                />
+                <p className="text-[11px] text-slate-400">
+                  העובדה, המושג או הפריט שברצונך לשלוף בעת ההגעה לתחנה זו בסיור המנטלי.
+                </p>
+              </div>
+
+              {/* 5. Full Mnemonic Kinetic Scene */}
+              <div className="bg-slate-950/90 border border-amber-500/35 rounded-2xl p-4 sm:p-5 space-y-2.5 shadow-inner">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <label className="text-xs sm:text-sm text-amber-300 font-black flex items-center gap-1.5">
+                      <Sparkles className="w-4 h-4 text-amber-400" />
+                      <span>⚡ סצנה מנמונית קינטית בתחנה (התנגשות רב-חושית בעוגן הפיזי):</span>
+                    </label>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      צור אינטראקציה אקטיבית ומוגזמת שבה המידע המאוחסן מתנגש, מפעיל או משנה את התחנה הפיזית ({editTitle || editingLocus.title}).
+                    </p>
+                  </div>
+                  <AIFieldGeneratorButton
+                    promptType="palace_scene"
+                    inputContext={editContent || editTitle || editingLocus.title}
+                    extraContext={`תחנה: ${editTitle || editingLocus.title} בחדר: ${editRoomName || editingLocus.roomName}, מיקום: ${editPosition || editingLocus.positionDescription}`}
+                    onGenerated={(val) => setEditScene(val)}
+                    label="צור סצנה עם AI"
+                  />
+                </div>
+                <textarea
+                  rows={3}
+                  value={editScene}
+                  onChange={(e) => setEditScene(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSaveEditLocusModal();
+                    }
+                  }}
+                  placeholder="תאר סצנה חיה, מוקצנת ורב-חושית שבה הפריט מתנגש בתחנה הפיזית..."
+                  className="w-full bg-slate-900 border border-slate-700 focus:border-amber-500 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white placeholder-slate-500 leading-relaxed"
+                />
+              </div>
+
+              {/* Modal Footer Action Buttons */}
+              <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-800">
+                <span className="text-xs text-slate-400">
+                  💡 טיפ: לחץ{' '}
+                  <kbd className="px-1.5 py-0.5 bg-slate-800 rounded font-mono text-[10px] text-slate-300">
+                    Enter
+                  </kbd>{' '}
+                  לשמירה מהירה או{' '}
+                  <kbd className="px-1.5 py-0.5 bg-slate-800 rounded font-mono text-[10px] text-slate-300">
+                    Esc
+                  </kbd>{' '}
+                  לביטול
+                </span>
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={handleCloseEditLocusModal}
+                    className="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 cursor-pointer transition-colors"
+                  >
+                    ביטול
+                  </button>
+                  <button
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleSaveEditLocusModal();
+                    }}
+                    className="px-6 py-2.5 rounded-xl text-xs sm:text-sm font-black bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white cursor-pointer shadow-lg shadow-indigo-600/30 flex items-center gap-2 transition-all"
+                  >
+                    <Save className="w-4 h-4" />
+                    <span>שמור שינויים</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* =====================================================================
+          WIDE CENTERED EDIT PALACE MODAL (PAO Light Dismiss Pattern)
+         ===================================================================== */}
+      {isEditingPalace && currentPalace && (
+        <div
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 md:p-8 animate-fadeIn overflow-y-auto"
+          dir="rtl"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsEditingPalace(false);
+            }
+          }}
+        >
+          <div
+            className="w-full max-w-3xl max-h-[92vh] overflow-y-auto bg-slate-900 border-2 border-indigo-500/50 rounded-3xl p-5 sm:p-7 text-right space-y-5 shadow-2xl m3-container-transform my-auto"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+              <div>
+                <h3 className="text-lg sm:text-xl font-black text-white">
+                  עריכת פרטי ארמון הזיכרון
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  לחץ מחוץ לחלון או על Esc לסגירה מהירה
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditingPalace(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                  שם הארמון:
+                </label>
+                <input
+                  type="text"
+                  value={editPalaceName}
+                  onChange={(e) => setEditPalaceName(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-sm font-bold text-white"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                  סוג המבנה / המסלול:
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {[
+                    { id: 'home', label: 'בית פרטי / דירה', icon: <Home className="w-3.5 h-3.5" /> },
+                    { id: 'campus', label: 'קמפוס / מוסד', icon: <GraduationCap className="w-3.5 h-3.5" /> },
+                    { id: 'outdoor', label: 'מסלול פארק / טבע', icon: <Trees className="w-3.5 h-3.5" /> },
+                    { id: 'work', label: 'משרד / בניין', icon: <Building className="w-3.5 h-3.5" /> },
+                  ].map((cat) => (
+                    <button
+                      key={cat.id}
+                      type="button"
+                      onClick={() => setEditPalaceCategory(cat.id as any)}
+                      className={`flex items-center gap-2 p-2.5 rounded-xl text-xs font-semibold border cursor-pointer ${
+                        editPalaceCategory === cat.id
+                          ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/50'
+                          : 'bg-slate-950 text-slate-400 border-slate-800'
+                      }`}
+                    >
+                      {cat.icon}
+                      <span>{cat.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                  תיאור הארמון והמסלול:
+                </label>
+                <textarea
+                  rows={2}
+                  value={editPalaceDesc}
+                  onChange={(e) => setEditPalaceDesc(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 focus:border-indigo-500 rounded-xl px-3.5 py-2.5 text-sm text-white"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIsEditingPalace(false)}
+                className="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 cursor-pointer"
+              >
+                ביטול
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (onUpdatePalace && editPalaceName.trim()) {
+                    onUpdatePalace(currentPalace.id, {
+                      name: editPalaceName.trim(),
+                      description: editPalaceDesc.trim(),
+                      category: editPalaceCategory,
+                    });
+                  }
+                  setIsEditingPalace(false);
+                }}
+                className="px-6 py-2.5 rounded-xl text-xs sm:text-sm font-black bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer flex items-center gap-2"
+              >
+                <Save className="w-4 h-4" />
+                <span>שמור שינויים</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Interactive Palace Walkthrough & Active Recall Simulator Modal */}
       {isWalkthroughOpen && currentPalace && (
         <div
-          className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn"
-          onClick={() => setIsWalkthroughOpen(false)}
+          className="fixed inset-0 z-40 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsWalkthroughOpen(false);
+            }
+          }}
         >
-          {/* דפוס M3 מספר 1: Container Transform (טרנספורמציית קונטיינר)
-              נבחר עבור מודל סיור הארמון המלא (Interactive Palace Walkthrough).
-              לחיצה על "התחל סיור ותרגול שליפה" מרחיבה את הכפתור/הכרטיס לחלון מודלי מפורט עם עקומת תאוטה מודגשת. */}
           <div
             className="bg-slate-900 border border-slate-800 rounded-3xl max-w-2xl w-full p-6 sm:p-8 shadow-2xl relative space-y-6 m3-container-transform"
+            onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
             {/* Top Bar */}
@@ -763,9 +1098,6 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
                 const locus = currentPalace.loci[walkthroughIndex];
                 if (!locus) return null;
 
-                // דפוס M3 מספר 2: Shared Axis - ציר X
-                // מעבר סדרתי בין תחנות הארמון לאורך ציר הניווט (תחנה 1 -> תחנה 2 -> תחנה 3),
-                // הממחיש לתלמיד את ההתקדמות הפיזית במסלול כיוון השעון של ארמון הזיכרון.
                 return (
                   <div key={walkthroughIndex} className="space-y-6 m3-shared-axis-x-forward">
                     {/* Location Card */}
@@ -858,119 +1190,37 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
                             );
                           })()}
 
-                          {/* Inline Edit or View Stored Content */}
-                          {editingLocusId === locus.id ? (
-                            <div className="bg-slate-900 border border-indigo-500/40 rounded-xl p-4 space-y-3">
-                              <div className="text-xs font-bold text-indigo-300">עריכה ישירה של תחנה זאת בארמון:</div>
-                              <div>
-                                <label className="text-[10px] text-slate-400 font-bold block mb-1">תוכן מאוחסן:</label>
-                                <input
-                                  type="text"
-                                  value={editContent}
-                                  onChange={(e) => setEditContent(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                      e.preventDefault();
-                                      onUpdateLocus(currentPalace.id, locus.id, {
-                                        storedContent: editContent,
-                                        mnemonicScene: editScene,
-                                      });
-                                      setEditingLocusId(null);
-                                    }
-                                  }}
-                                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white"
-                                />
-                              </div>
-                              <div>
-                                <div className="flex items-center justify-between mb-1">
-                                  <label className="text-[10px] text-indigo-400 font-bold">סצנה קינטית:</label>
-                                  <AIFieldGeneratorButton
-                                    promptType="palace_scene"
-                                    inputContext={editContent || locus.title}
-                                    extraContext={`תחנה: ${locus.title}, חדר: ${locus.roomName}`}
-                                    onGenerated={(val) => setEditScene(val)}
-                                    label="סצנה עם AI"
-                                    compact
-                                  />
-                                </div>
-                                <textarea
-                                  rows={2}
-                                  value={editScene}
-                                  onChange={(e) => setEditScene(e.target.value)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter' && !e.shiftKey) {
-                                      e.preventDefault();
-                                      onUpdateLocus(currentPalace.id, locus.id, {
-                                        storedContent: editContent,
-                                        mnemonicScene: editScene,
-                                      });
-                                      setEditingLocusId(null);
-                                    }
-                                  }}
-                                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white"
-                                />
-                              </div>
-                              <div className="flex justify-end gap-2 pt-1">
-                                <button
-                                  type="button"
-                                  onClick={() => setEditingLocusId(null)}
-                                  className="text-xs text-slate-400 px-3 py-1"
-                                >
-                                  ביטול
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    onUpdateLocus(currentPalace.id, locus.id, {
-                                      storedContent: editContent,
-                                      mnemonicScene: editScene,
-                                    });
-                                    setEditingLocusId(null);
-                                  }}
-                                  className="text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-4 py-1 rounded-lg cursor-pointer"
-                                >
-                                  שמור שינויים
-                                </button>
+                          <div className="bg-emerald-950/40 border border-emerald-500/40 rounded-xl p-4 text-right flex items-start justify-between gap-3">
+                            <div>
+                              <span className="text-[11px] font-bold text-emerald-400 block mb-1">
+                                המידע המאוחסן בתחנה:
+                              </span>
+                              <div className="text-base font-extrabold text-white">
+                                {locus.storedContent || 'תחנה ללא תוכן מוגדר עדיין'}
                               </div>
                             </div>
-                          ) : (
-                            <>
-                              <div className="bg-emerald-950/40 border border-emerald-500/40 rounded-xl p-4 text-right flex items-start justify-between gap-3">
-                                <div>
-                                  <span className="text-[11px] font-bold text-emerald-400 block mb-1">
-                                    המידע המאוחסן בתחנה:
-                                  </span>
-                                  <div className="text-base font-extrabold text-white">
-                                    {locus.storedContent || 'תחנה ללא תוכן מוגדר עדיין'}
-                                  </div>
-                                </div>
-                                <button
-                                  onClick={() => {
-                                    setEditingLocusId(locus.id);
-                                    setEditContent(locus.storedContent || '');
-                                    setEditScene(locus.mnemonicScene || '');
-                                  }}
-                                  className="text-xs text-indigo-300 hover:text-white bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/40 px-2.5 py-1 rounded-lg font-bold inline-flex items-center gap-1 cursor-pointer shrink-0"
-                                >
-                                  <Edit2 className="w-3 h-3" />
-                                  <span>ערוך תוכן</span>
-                                </button>
-                              </div>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditLocusModal(locus)}
+                              className="text-xs text-indigo-300 hover:text-white bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/40 px-2.5 py-1 rounded-lg font-bold inline-flex items-center gap-1 cursor-pointer shrink-0"
+                            >
+                              <Edit2 className="w-3 h-3" />
+                              <span>ערוך תוכן</span>
+                            </button>
+                          </div>
 
-                              {locus.mnemonicScene && (
-                                <div className="bg-amber-950/30 border border-amber-500/40 rounded-xl p-3.5 text-right text-xs text-amber-200">
-                                  <span className="font-bold text-amber-400">⚡ הסצנה הקינטית: </span>
-                                  {locus.mnemonicScene}
-                                </div>
-                              )}
+                          {locus.mnemonicScene && (
+                            <div className="bg-amber-950/30 border border-amber-500/40 rounded-xl p-3.5 text-right text-xs text-amber-200">
+                              <span className="font-bold text-amber-400">⚡ הסצנה הקינטית: </span>
+                              {locus.mnemonicScene}
+                            </div>
+                          )}
 
-                              {userRecallGuess && (
-                                <div className="text-right text-xs text-slate-400 bg-slate-900 p-2.5 rounded-lg border border-slate-800">
-                                  <span className="font-medium text-slate-500">מה שכתבת: </span>
-                                  "{userRecallGuess}"
-                                </div>
-                              )}
-                            </>
+                          {userRecallGuess && (
+                            <div className="text-right text-xs text-slate-400 bg-slate-900 p-2.5 rounded-lg border border-slate-800">
+                              <span className="font-medium text-slate-500">מה שכתבת: </span>
+                              "{userRecallGuess}"
+                            </div>
                           )}
 
                           <div className="pt-2">
@@ -1060,22 +1310,25 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
       {/* New Palace Modal */}
       {showAddPalaceModal && (
         <div
-          className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn"
-          onClick={() => setShowAddPalaceModal(false)}
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowAddPalaceModal(false);
+            }
+          }}
         >
-          {/* דפוס M3 מספר 1: Container Transform (טרנספורמציית קונטיינר)
-              התרחבות כפתור "בנה ארמון חדש" לקונטיינר הטופס המלא במרכז המסך */}
           <div
-            className="bg-slate-900 border border-slate-800 rounded-3xl max-w-md w-full p-6 space-y-5 shadow-2xl m3-container-transform"
+            className="bg-slate-900 border-2 border-indigo-500/50 rounded-3xl max-w-2xl w-full p-6 sm:p-7 space-y-5 shadow-2xl m3-container-transform"
+            onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between pb-3 border-b border-slate-800">
               <h3 className="font-extrabold text-white text-lg">בניית ארמון זיכרון חדש</h3>
               <button
                 onClick={() => setShowAddPalaceModal(false)}
-                className="text-xs text-slate-400 hover:text-white"
+                className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer"
               >
-                סגור
+                <X className="w-5 h-5" />
               </button>
             </div>
 
@@ -1139,13 +1392,13 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowAddPalaceModal(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white"
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white cursor-pointer"
                 >
                   ביטול
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/30"
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/30 cursor-pointer"
                 >
                   צור ארמון
                 </button>

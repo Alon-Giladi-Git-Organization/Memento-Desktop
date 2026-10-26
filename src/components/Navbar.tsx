@@ -281,40 +281,8 @@ export const Navbar: React.FC<NavbarProps> = ({
         })}
       </nav>
 
-      {/* Bottom Section: Cloud Sync & User Auth */}
+      {/* Bottom Section: User Auth */}
       <div className="pt-3 border-t-2 border-slate-100 space-y-2.5">
-        {currentUser && isOnline && (onSyncCloud || onSeedCloudTables) && (
-          <div className="flex items-center gap-1.5">
-            {onSyncCloud && (
-              <button
-                onClick={onSyncCloud}
-                disabled={isSyncing}
-                title="סנכרן עכשיו לענן"
-                className="flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-[#1CB0F6]/10 hover:bg-[#1CB0F6]/20 text-[#1CB0F6] border border-[#1CB0F6]/30 text-[11px] font-extrabold transition-all cursor-pointer disabled:opacity-50"
-              >
-                <RefreshCw className={`w-3.5 h-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-                <span>{isSyncing ? 'מסנכרן...' : 'סנכרן ענן'}</span>
-              </button>
-            )}
-            {onSeedCloudTables && (
-              <button
-                onClick={onSeedCloudTables}
-                disabled={isSyncing}
-                title="טען ושמור את כל טבלאות ברירת המחדל לענן"
-                className="p-1.5 rounded-xl bg-[#FF9600]/10 hover:bg-[#FF9600]/20 text-[#FF9600] border border-[#FF9600]/30 transition-all cursor-pointer disabled:opacity-50"
-              >
-                <Database className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-        )}
-
-        {syncStatusMessage && (
-          <div className="px-2.5 py-1 rounded-xl bg-[#58CC02]/15 border border-[#58CC02]/40 text-[#2e6e01] text-[11px] font-bold text-center">
-            {syncStatusMessage}
-          </div>
-        )}
-
         <div className="flex items-center justify-between gap-2">
           {currentUser ? (
             <div className="flex items-center justify-between gap-2 flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-2xl px-2.5 py-1.5">
@@ -357,14 +325,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span>התחבר לענן</span>
             </button>
           )}
-
-          <button
-            onClick={onResetDefaults}
-            title="איפוס נתונים לברירת מחדל"
-            className="text-slate-500 hover:text-slate-800 p-2 rounded-xl bg-slate-100 hover:bg-slate-200 border border-slate-200 transition-colors cursor-pointer shrink-0"
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
         </div>
       </div>
     </div>

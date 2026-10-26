@@ -725,6 +725,18 @@ export function useMemoryStore() {
     return newPalace;
   };
 
+  const updatePalace = (palaceId: string, updates: Partial<MemoryPalace>) => {
+    const now = Date.now();
+    setPalaces((prev) =>
+      prev.map((palace) => {
+        if (palace.id !== palaceId) return palace;
+        const updatedPalace = { ...palace, ...updates, updatedAt: now };
+        saveFirestoreDoc('palaces', palaceId, updatedPalace);
+        return updatedPalace;
+      })
+    );
+  };
+
   const deletePalace = async (palaceId: string) => {
     setPalaces((prev) => prev.filter((p) => p.id !== palaceId));
     deleteFirestoreDoc('palaces', palaceId);
@@ -1953,6 +1965,7 @@ export function useMemoryStore() {
     deletePersonalAssociation,
     togglePersonalAssociationReady,
     addMemoryPalace,
+    updatePalace,
     deletePalace,
     addPalaceLocus,
     updatePalaceLocus,
