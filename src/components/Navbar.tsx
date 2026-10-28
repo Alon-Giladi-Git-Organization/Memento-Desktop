@@ -12,14 +12,15 @@ import {
   Activity,
   LogIn,
   LogOut,
-  RotateCcw,
   Search,
-  Cloud,
-  RefreshCw,
-  Database,
   Sliders,
   Menu,
   X,
+  ChevronDown,
+  ChevronUp,
+  User,
+  Hash,
+  Smile,
 } from 'lucide-react';
 import { UserProfileData } from '../lib/firebase';
 import { User as FirebaseUser } from 'firebase/auth';
@@ -28,7 +29,6 @@ export type TabType =
   | 'workouts'
   | 'academy'
   | 'logic'
-  | 'palaces'
   | 'tester'
   | 'feedback'
   | 'gamification'
@@ -36,9 +36,20 @@ export type TabType =
   | 'mentor'
   | 'theory';
 
+export type WorkoutSubModule = 'pao' | 'major' | 'palaces' | 'names' | 'academic';
+
 interface NavbarProps {
   currentTab: TabType;
   onTabChange: (tab: TabType) => void;
+  selectedWorkoutSubModule?: WorkoutSubModule;
+  onSelectWorkoutSubModule?: (subModule: WorkoutSubModule) => void;
+  workoutCounts?: {
+    pao: number;
+    major: number;
+    palaces: number;
+    names: number;
+    academic: number;
+  };
   savedAssociationsCount: number;
   testCount: number;
   averageScore: number;
@@ -59,29 +70,66 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({
   currentTab,
   onTabChange,
+  selectedWorkoutSubModule = 'pao',
+  onSelectWorkoutSubModule,
+  workoutCounts,
   savedAssociationsCount,
   profile,
   currentUser,
-  isOnline = true,
-  isSyncing = false,
-  syncStatusMessage,
   onLogin,
   onLogout,
-  onResetDefaults,
   onOpenSearch,
-  onSyncCloud,
-  onSeedCloudTables,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  // Persistent expandable sub-menu for "מרכז אימונים":
+  // Remains open while navigating within the Training Center and collapses ONLY upon a second click of the main "מרכז אימונים" button.
+  const [isWorkoutsSubMenuOpen, setIsWorkoutsSubMenuOpen] = useState(true);
 
-  // Ordered strictly as requested:
-  // 1. מרכז אימונים (workouts)
-  // 2. לוגיקת מספרים (logic)
-  // 3. אקדמיית מתחילים (academy)
-  // 4. ארמונות זיכרון (palaces)
-  // 5. פנקס אסוציאציות (registry)
-  // 6. מדע ושיטות (theory)
-  // and then the remaining modules
+  const workoutSubModules: {
+    id: WorkoutSubModule;
+    label: string;
+    icon: React.ReactNode;
+    color: string;
+    badge?: string;
+  }[] = [
+    {
+      id: 'pao',
+      label: 'שיטת PAO',
+      icon: <User className="w-3.5 h-3.5 shrink-0" />,
+      color: 'text-[#1CB0F6]',
+      badge: workoutCounts ? `${workoutCounts.pao}` : '00-99',
+    },
+    {
+      id: 'major',
+      label: 'שיטת Major',
+      icon: <Hash className="w-3.5 h-3.5 shrink-0" />,
+      color: 'text-[#58CC02]',
+      badge: workoutCounts ? `${workoutCounts.major}` : '00-99',
+    },
+    {
+      id: 'palaces',
+      label: 'ארמונות זיכרון',
+      icon: <Compass className="w-3.5 h-3.5 shrink-0" />,
+      color: 'text-[#1CB0F6]',
+      badge: workoutCounts ? `${workoutCounts.palaces}` : 'Loci',
+    },
+    {
+      id: 'names',
+      label: 'שמות ופנים',
+      icon: <Smile className="w-3.5 h-3.5 shrink-0" />,
+      color: 'text-[#FF9600]',
+      badge: workoutCounts ? `${workoutCounts.names}` : undefined,
+    },
+    {
+      id: 'academic',
+      label: 'חומרים אקדמיים',
+      icon: <BookOpen className="w-3.5 h-3.5 shrink-0" />,
+      color: 'text-[#FF4B4B]',
+      badge: workoutCounts ? `${workoutCounts.academic}` : undefined,
+    },
+  ];
+
+  // Primary navigation tabs (with "ארמונות זיכרון" nested inside "מרכז אימונים")
   const tabs: {
     id: TabType;
     label: string;
@@ -108,13 +156,6 @@ export const Navbar: React.FC<NavbarProps> = ({
       icon: <GraduationCap className="w-4 h-4 shrink-0" />,
       color: 'text-[#58CC02]',
       badge: 'לימוד מאפס',
-    },
-    {
-      id: 'palaces',
-      label: 'ארמונות זיכרון',
-      icon: <Compass className="w-4 h-4 shrink-0" />,
-      color: 'text-[#1CB0F6]',
-      badge: 'Loci',
     },
     {
       id: 'registry',
@@ -159,7 +200,29 @@ export const Navbar: React.FC<NavbarProps> = ({
     },
   ];
 
+  const handleMainWorkoutsButtonClick = () => {
+    if (currentTab !== 'workouts') {
+      onTabChange('workouts');
+      setIsWorkoutsSubMenuOpen(true);
+    } else {
+      // Toggle sub-menu ONLY on a click of the main "מרכז אימונים" button
+      setIsWorkoutsSubMenuOpen((prev) => !prev);
+    }
+  };
+
+  const handleSelectWorkoutSubModule = (subId: WorkoutSubModule) => {
+    onTabChange('workouts');
+    onSelectWorkoutSubModule?.(subId);
+    // Keep persistent sub-menu open while navigating within the Training Center
+    setIsWorkoutsSubMenuOpen(true);
+    setMobileMenuOpen(false);
+  };
+
   const handleSelectTab = (tabId: TabType) => {
+    if (tabId === 'workouts') {
+      handleMainWorkoutsButtonClick();
+      return;
+    }
     onTabChange(tabId);
     setMobileMenuOpen(false);
   };
@@ -170,7 +233,11 @@ export const Navbar: React.FC<NavbarProps> = ({
       <div className="space-y-3.5">
         <div className="flex items-center justify-between gap-2 pb-3 border-b-2 border-slate-100">
           <div
-            onClick={() => handleSelectTab('workouts')}
+            onClick={() => {
+              onTabChange('workouts');
+              setIsWorkoutsSubMenuOpen(true);
+              setMobileMenuOpen(false);
+            }}
             className="flex items-center gap-2.5 cursor-pointer group min-w-0"
           >
             <div className="relative flex items-center justify-center w-10 h-10 rounded-2xl bg-[#58CC02] border-b-4 border-[#46a302] shadow-sm group-hover:scale-105 active:translate-y-0.5 transition-all shrink-0 animate-float">
@@ -251,6 +318,76 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
         {tabs.map((tab) => {
           const isActive = currentTab === tab.id;
+
+          if (tab.id === 'workouts') {
+            return (
+              <div key={tab.id} className="space-y-1">
+                <button
+                  type="button"
+                  onClick={handleMainWorkoutsButtonClick}
+                  aria-expanded={isWorkoutsSubMenuOpen}
+                  className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold transition-all duration-150 cursor-pointer text-right ${
+                    isActive
+                      ? 'bg-slate-100 text-slate-900 border-2 border-[#58CC02] border-b-4 border-b-[#46a302] shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100/80 border-2 border-transparent'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className={isActive ? 'text-[#58CC02]' : tab.color}>{tab.icon}</span>
+                    <span className="truncate">{tab.label}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className="text-[10px] font-black px-2 py-0.5 rounded-lg bg-[#58CC02]/15 text-[#2e6e01] border border-[#58CC02]/30">
+                      5 מודולות
+                    </span>
+                    {isWorkoutsSubMenuOpen ? (
+                      <ChevronUp className="w-4 h-4 text-slate-500" />
+                    ) : (
+                      <ChevronDown className="w-4 h-4 text-slate-500" />
+                    )}
+                  </div>
+                </button>
+
+                {/* Persistent Expandable Sub-Menu for Training Center */}
+                {isWorkoutsSubMenuOpen && (
+                  <div className="mr-3 pr-2.5 border-r-2 border-slate-200 space-y-1 py-1 animate-fadeIn">
+                    {workoutSubModules.map((sub) => {
+                      const isSubActive = currentTab === 'workouts' && selectedWorkoutSubModule === sub.id;
+                      return (
+                        <button
+                          key={sub.id}
+                          type="button"
+                          onClick={() => handleSelectWorkoutSubModule(sub.id)}
+                          className={`w-full flex items-center justify-between gap-2 px-2.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer text-right ${
+                            isSubActive
+                              ? 'bg-[#58CC02]/15 text-slate-900 border border-[#58CC02] shadow-2xs font-black'
+                              : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border border-transparent'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className={isSubActive ? 'text-[#58CC02]' : sub.color}>{sub.icon}</span>
+                            <span className="truncate">{sub.label}</span>
+                          </div>
+                          {sub.badge && (
+                            <span
+                              className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md shrink-0 ${
+                                isSubActive
+                                  ? 'bg-[#58CC02] text-white'
+                                  : 'bg-slate-100 text-slate-500 border border-slate-200'
+                              }`}
+                            >
+                              {sub.badge}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
           return (
             <button
               key={tab.id}
@@ -349,7 +486,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Menu className="w-5 h-5" />
           </button>
           <div
-            onClick={() => handleSelectTab('workouts')}
+            onClick={() => {
+              onTabChange('workouts');
+              setIsWorkoutsSubMenuOpen(true);
+            }}
             className="flex items-center gap-2 cursor-pointer min-w-0"
           >
             <div className="w-8 h-8 rounded-xl bg-[#58CC02] border-b-3 border-[#46a302] flex items-center justify-center shrink-0">
@@ -410,4 +550,3 @@ export const Navbar: React.FC<NavbarProps> = ({
     </>
   );
 };
-

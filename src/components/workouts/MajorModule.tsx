@@ -901,8 +901,8 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
           {/* דפוס M3 מספר 3: Fade Through (דהייה והחלפה בין כוורת לרשימה) */}
           <div key={viewMode} className="flex gap-4 items-start m3-fade-through">
             {viewMode === 'grid' ? (
-              /* Main Cards Grid */
-              <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5 max-h-[640px] overflow-y-auto pr-1 scroll-smooth">
+              /* Main Cards Grid - Maximum 3 per row, Wide Horizontal Rectangular Cards matching NamesFacesModule */
+              <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full">
                 {filteredItems.map((item) => {
                   const isEditing = editingNum === item.number;
                   const activeWord = item.defaultWord || '';
@@ -931,12 +931,11 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
 
                   const isHighlighted = highlightedNum === item.number;
 
-                  // דפוס M3 מספר 4: Shape Morphing / Expressive Spring (שינוי צורה וקפיציות בכרטיס Major)
                   return (
                     <div
                       id={`major-item-${item.number}`}
                       key={item.number}
-                      className={`bg-slate-950 border rounded-2xl p-4 transition-all duration-300 flex flex-col justify-between m3-shape-morph ${
+                      className={`bg-slate-950 border rounded-2xl p-4 transition-all duration-300 flex flex-col justify-between space-y-2.5 m3-shape-morph ${
                         isEditing
                           ? 'border-amber-400 ring-2 ring-amber-400/30'
                           : !wordValidation.isValid || hasPaoMismatch
@@ -949,20 +948,21 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                       }`}
                     >
                       <div className="space-y-2.5">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono text-xl font-black text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-lg border border-amber-500/20">
+                        {/* Horizontal Top Row: Number Badge + Consonants + Action Icons */}
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span className="font-mono text-xl font-black text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-lg border border-amber-500/20 shrink-0">
                               {item.numberStr}
                             </span>
                             <span
-                              className="text-xs text-amber-300/80 font-mono font-bold"
+                              className="text-xs text-amber-300/80 font-mono font-bold shrink-0"
                               title="עיצורים מסונכרנים בזמן אמת ממודולת לוגיקת הספרות"
                             >
                               [{activeConsonants}]
                             </span>
                           </div>
 
-                          <div className="flex items-center gap-1">
+                          <div className="flex items-center gap-1 shrink-0">
                             <button
                               type="button"
                               onMouseDown={(e) => e.stopPropagation()}
@@ -984,10 +984,29 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                           </div>
                         </div>
 
-                        <div className="space-y-1.5">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h4 className="text-base font-bold text-white tracking-wide">{activeWord}</h4>
+                        {/* Horizontal Rectangular Info Blocks with Original Dark Colors */}
+                        <div className="space-y-1.5 text-xs">
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                              <span className="text-amber-400 font-bold block text-[10px] mb-0.5">
+                                🏷️ מילה מנמונית (חפץ):
+                              </span>
+                              <span className="text-white font-bold text-sm sm:text-base">{activeWord || '-'}</span>
+                            </div>
+                            <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                              <span className="text-amber-300/80 font-bold block text-[10px] mb-0.5">
+                                🔤 נוסחת עיצורים:
+                              </span>
+                              <span className="text-amber-300 font-mono font-bold text-xs sm:text-sm">{activeConsonants}</span>
+                            </div>
                           </div>
+
+                          {activeHint && (
+                            <p className="text-xs text-slate-300 bg-slate-900/80 p-2.5 rounded-xl border border-slate-800 leading-relaxed">
+                              ⚡ {activeHint}
+                            </p>
+                          )}
+
                           {!wordValidation.isValid && (
                             <div
                               title={wordValidation.details || wordValidation.message}
@@ -1025,11 +1044,6 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                               )}
                             </div>
                           )}
-                          {activeHint && (
-                            <p className="text-xs text-slate-300 bg-slate-900/80 p-2 rounded-xl border border-slate-800 leading-relaxed">
-                              ⚡ {activeHint}
-                            </p>
-                          )}
                         </div>
 
                         {/* Ready for Practice Checkbox */}
@@ -1059,7 +1073,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
               </div>
             ) : (
               /* List View (רשימה נקייה, מרווחת ונוחה לעין) */
-              <div className="flex-1 bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-inner max-h-[640px] overflow-y-auto">
+              <div className="flex-1 bg-slate-950 border border-slate-800 rounded-2xl overflow-x-auto shadow-inner">
                 <table className="w-full text-right border-collapse">
                   <thead className="bg-slate-900/90 sticky top-0 z-10 border-b border-slate-800 text-xs font-bold text-slate-400">
                     <tr>
@@ -1191,7 +1205,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
             )}
 
             {/* Vertical Sticky Side Index for 1-100 */}
-            <div className="hidden lg:flex flex-col gap-1 bg-slate-950 p-2 rounded-2xl border border-slate-800 max-h-[580px] overflow-y-auto no-scrollbar shrink-0 w-16 text-center shadow-inner">
+            <div className="hidden lg:flex flex-col gap-1 bg-slate-950 p-2 rounded-2xl border border-slate-800 sticky top-6 self-start max-h-[calc(100vh-3rem)] overflow-y-auto no-scrollbar shrink-0 w-16 text-center shadow-inner">
               <span className="text-[10px] font-bold text-slate-400 pb-1 border-b border-slate-800">מספר</span>
               {majorItems.map((item) => (
                 <button
@@ -1277,8 +1291,8 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
             </div>
           </div>
 
-          {/* Digits 0-9 Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+          {/* Digits 0-9 Grid - Maximum 3 per row, Wide Horizontal Rectangular Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {majorDigits.map((d) => {
               const majorItem = majorItems.find((m) => m.number === d.number) || d;
               const activeConsonants = d.consonants;
@@ -1307,16 +1321,16 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
               return (
                 <div
                   key={d.number}
-                  className={`bg-slate-950 border rounded-2xl p-4 flex flex-col justify-between transition-all ${
+                  className={`bg-slate-950 border rounded-2xl p-4 m3-shape-morph flex flex-col justify-between space-y-2.5 transition-all ${
                     !digitValidation.isValid || hasPaoMismatch
                       ? 'border-amber-500/70 ring-1 ring-amber-500/30'
                       : 'border-slate-800 hover:border-slate-700'
                   }`}
                 >
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
+                  <div className="space-y-2.5">
+                    <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2">
-                        <span className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 font-mono font-black text-xl flex items-center justify-center">
+                        <span className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 font-mono font-black text-xl flex items-center justify-center shrink-0">
                           {d.number}
                         </span>
                         <span
@@ -1347,54 +1361,64 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                       </div>
                     </div>
 
-                    <div className="space-y-2 text-right">
-                      <div>
-                        <span className="text-xs text-slate-400 font-bold block">מילת/חפץ עוגן:</span>
-                        <div className="flex flex-col gap-1.5 mt-0.5">
-                          <span className="text-base font-bold text-white">{activeWord}</span>
-                          {!digitValidation.isValid && (
-                            <div
-                              title={digitValidation.details || digitValidation.message}
-                              className="w-full flex flex-col gap-1.5 px-2.5 py-2 rounded-xl bg-amber-500/15 border border-amber-500/50 text-amber-300 text-[11px] font-bold leading-snug"
-                            >
-                              <div className="flex items-start gap-1.5">
-                                <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-                                <span>{digitValidation.message}</span>
-                              </div>
-                              <div className="flex justify-end">
-                                <button
-                                  type="button"
-                                  onClick={() => ignoreValidation(logicIgnoreKey)}
-                                  className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-amber-200 border border-amber-500/40 cursor-pointer transition-colors"
-                                >
-                                  התעלם במקרה זה
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                          {hasPaoMismatch && (
-                            <div className="w-full flex flex-col gap-1.5 px-2.5 py-2 rounded-xl bg-sky-500/15 border border-sky-500/50 text-sky-200 text-[11px] font-bold leading-snug">
-                              <div className="flex items-start gap-1.5">
-                                <AlertTriangle className="w-3.5 h-3.5 text-sky-400 shrink-0 mt-0.5" />
-                                <span>
-                                  לתשומת לבך - במודולת PAO הגדרת חפץ אחר עבור מספר זה ("{paoObj}") ; מומלץ לבחור באותה המילה עבור 2 המודולות
-                                </span>
-                              </div>
-                              {renderMajorPaoConflictActions(
-                                d.number,
-                                activeWord.trim(),
-                                paoObj,
-                                mismatchIgnoreKey,
-                                true
-                              )}
-                            </div>
-                          )}
+                    <div className="space-y-1.5 text-xs text-right">
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                          <span className="text-amber-400 font-bold block text-[10px] mb-0.5">
+                            🏷️ מילת/חפץ עוגן:
+                          </span>
+                          <span className="text-white font-bold text-sm">{activeWord || '-'}</span>
+                        </div>
+                        <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                          <span className="text-amber-300/80 font-bold block text-[10px] mb-0.5">
+                            🔤 עיצורי ספרה:
+                          </span>
+                          <span className="text-amber-300 font-mono font-bold text-xs">{activeConsonants}</span>
                         </div>
                       </div>
+
                       {activeHint && (
-                        <p className="text-xs text-slate-400 bg-slate-900/60 p-2 rounded-xl border border-slate-800">
+                        <p className="text-xs text-slate-400 bg-slate-900/60 p-2.5 rounded-xl border border-slate-800">
                           ⚡ {activeHint}
                         </p>
+                      )}
+
+                      {!digitValidation.isValid && (
+                        <div
+                          title={digitValidation.details || digitValidation.message}
+                          className="w-full flex flex-col gap-1.5 px-2.5 py-2 rounded-xl bg-amber-500/15 border border-amber-500/50 text-amber-300 text-[11px] font-bold leading-snug"
+                        >
+                          <div className="flex items-start gap-1.5">
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                            <span>{digitValidation.message}</span>
+                          </div>
+                          <div className="flex justify-end">
+                            <button
+                              type="button"
+                              onClick={() => ignoreValidation(logicIgnoreKey)}
+                              className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-amber-200 border border-amber-500/40 cursor-pointer transition-colors"
+                            >
+                              התעלם במקרה זה
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                      {hasPaoMismatch && (
+                        <div className="w-full flex flex-col gap-1.5 px-2.5 py-2 rounded-xl bg-sky-500/15 border border-sky-500/50 text-sky-200 text-[11px] font-bold leading-snug">
+                          <div className="flex items-start gap-1.5">
+                            <AlertTriangle className="w-3.5 h-3.5 text-sky-400 shrink-0 mt-0.5" />
+                            <span>
+                              לתשומת לבך - במודולת PAO הגדרת חפץ אחר עבור מספר זה ("{paoObj}") ; מומלץ לבחור באותה המילה עבור 2 המודולות
+                            </span>
+                          </div>
+                          {renderMajorPaoConflictActions(
+                            d.number,
+                            activeWord.trim(),
+                            paoObj,
+                            mismatchIgnoreKey,
+                            true
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>

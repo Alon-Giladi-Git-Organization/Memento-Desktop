@@ -32,8 +32,6 @@ interface GlobalSearchModalProps {
   paoItems: PAOItem[];
   peopleCards: PersonFaceCard[];
   palaces: MemoryPalace[];
-  shapePegs: PegShapeItem[];
-  bodyPegs: BodyPegItem[];
   academicPoints?: AcademicKeyPoint[];
   onNavigate: (tab: TabType, subModule?: string, itemId?: string | number) => void;
   onOpenSummary: (techniqueId: string) => void;
@@ -41,7 +39,7 @@ interface GlobalSearchModalProps {
 
 interface SearchResultItem {
   id: string;
-  category: 'major' | 'pao' | 'palace' | 'names' | 'theory' | 'pegs' | 'academic';
+  category: 'major' | 'pao' | 'palace' | 'names' | 'theory' | 'academic';
   categoryLabel: string;
   categoryColor: string;
   categoryIcon: React.ReactNode;
@@ -58,8 +56,6 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
   paoItems,
   peopleCards,
   palaces,
-  shapePegs,
-  bodyPegs,
   academicPoints = [],
   onNavigate,
   onOpenSummary,
@@ -165,7 +161,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
           subtitle: `${palace.loci.length} תחנות | ${palace.description || 'ארמון זיכרון פעיל'}`,
           tag: 'Method of Loci',
           action: () => {
-            onNavigate('palaces', undefined, palace.id);
+            onNavigate('workouts', 'palaces', palace.id);
             onClose();
           },
         });
@@ -193,7 +189,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
             subtitle: locus.mnemonicScene || locus.storedContent || 'ללא סצנה מוגדרת',
             tag: palace.name,
             action: () => {
-              onNavigate('palaces', undefined, palace.id);
+              onNavigate('workouts', 'palaces', palace.id);
               onClose();
             },
           });
@@ -258,63 +254,7 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
       }
     });
 
-    // 6. Pegs
-    shapePegs.forEach((peg) => {
-      if (
-        isHebrewMultiFieldSearchMatch(
-          query,
-          peg.number,
-          peg.shapeName,
-          peg.defaultObject,
-          peg.visualMetaphor,
-          peg.kineticTip
-        )
-      ) {
-        results.push({
-          id: `shape-peg-${peg.number}`,
-          category: 'pegs',
-          categoryLabel: 'יתדות צורה',
-          categoryColor: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
-          categoryIcon: <Dumbbell className="w-3.5 h-3.5 text-amber-400" />,
-          title: `🔢 יתד #${peg.number} - ${peg.shapeName}`,
-          subtitle: `${peg.defaultObject} | ${peg.visualMetaphor}`,
-          tag: 'יתדות',
-          action: () => {
-            onNavigate('workouts', 'pegs', peg.number);
-            onClose();
-          },
-        });
-      }
-    });
-
-    bodyPegs.forEach((peg) => {
-      if (
-        isHebrewMultiFieldSearchMatch(
-          query,
-          peg.index,
-          peg.bodyPartHebrew,
-          peg.defaultObject,
-          peg.kineticTip
-        )
-      ) {
-        results.push({
-          id: `body-peg-${peg.index}`,
-          category: 'pegs',
-          categoryLabel: 'יתדות גוף',
-          categoryColor: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
-          categoryIcon: <Dumbbell className="w-3.5 h-3.5 text-emerald-400" />,
-          title: `🦶 יתד גוף #${peg.index} - ${peg.bodyPartHebrew}`,
-          subtitle: `${peg.defaultObject} | ${peg.kineticTip}`,
-          tag: 'יתדות',
-          action: () => {
-            onNavigate('workouts', 'pegs', peg.index);
-            onClose();
-          },
-        });
-      }
-    });
-
-    // 7. Academic
+    // 6. Academic
     academicPoints.forEach((point) => {
       if (
         isHebrewMultiFieldSearchMatch(
@@ -357,7 +297,6 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
     palace: results.filter((r) => r.category === 'palace').length,
     names: results.filter((r) => r.category === 'names').length,
     theory: results.filter((r) => r.category === 'theory').length,
-    pegs: results.filter((r) => r.category === 'pegs').length,
     academic: results.filter((r) => r.category === 'academic').length,
   };
 
@@ -412,7 +351,6 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
               { id: 'palace', label: `ארמונות (${categoriesCount.palace})` },
               { id: 'names', label: `שמות (${categoriesCount.names})` },
               { id: 'theory', label: `סיכומים (${categoriesCount.theory})` },
-              { id: 'pegs', label: `יתדות (${categoriesCount.pegs})` },
               { id: 'academic', label: `אקדמי (${categoriesCount.academic})` },
             ]
               .filter((c) => c.id === 'all' || (categoriesCount as any)[c.id] > 0)

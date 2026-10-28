@@ -123,7 +123,7 @@ export const NamesFacesModule: React.FC<NamesFacesModuleProps> = ({
       onAddPersonFaceCard({
         name: newName.trim(),
         roleOrJob: newRole.trim() || 'איש מקצוע',
-        avatarUrl: `https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80`,
+        avatarUrl: '',
         avatarSeed,
         morphologicalAnchor: newAnchor.trim() || 'מאפיין בולט בפנים',
         substituteWord: newSubstitute.trim() || newName.trim(),
@@ -463,11 +463,17 @@ export const NamesFacesModule: React.FC<NamesFacesModuleProps> = ({
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <img
-                          src={person.avatarUrl}
-                          alt={person.name}
-                          className="w-11 h-11 rounded-full object-cover border-2 border-amber-400 shadow-2xs"
-                        />
+                        {person.avatarUrl ? (
+                          <img
+                            src={person.avatarUrl}
+                            alt={person.name}
+                            className="w-11 h-11 rounded-full object-cover border-2 border-amber-400 shadow-2xs"
+                          />
+                        ) : (
+                          <div className="w-11 h-11 rounded-full bg-amber-100 border-2 border-amber-400 flex items-center justify-center text-amber-800 font-black text-sm shadow-2xs shrink-0">
+                            {(person.name || 'א').trim().slice(0, 2)}
+                          </div>
+                        )}
                         <div>
                           <h4 className="text-sm font-bold text-slate-900">{person.name}</h4>
                           <span className="text-[11px] text-slate-500 font-medium">{person.roleOrJob}</span>
@@ -785,11 +791,17 @@ export const NamesFacesModule: React.FC<NamesFacesModuleProps> = ({
               </div>
 
               <div className="relative inline-block">
-                <img
-                  src={currentTrainerPerson.avatarUrl}
-                  alt={currentTrainerPerson.name}
-                  className="w-36 h-36 rounded-3xl object-cover mx-auto shadow-md border-4 border-amber-300"
-                />
+                {currentTrainerPerson.avatarUrl ? (
+                  <img
+                    src={currentTrainerPerson.avatarUrl}
+                    alt={currentTrainerPerson.name}
+                    className="w-36 h-36 rounded-3xl object-cover mx-auto shadow-md border-4 border-amber-300"
+                  />
+                ) : (
+                  <div className="w-28 h-28 rounded-3xl bg-amber-100 border-4 border-amber-300 flex items-center justify-center mx-auto shadow-md text-amber-800 font-black text-3xl">
+                    {(currentTrainerPerson.name || 'א').trim().slice(0, 2)}
+                  </div>
+                )}
               </div>
 
               <div>
@@ -912,11 +924,17 @@ export const NamesFacesModule: React.FC<NamesFacesModuleProps> = ({
               {currentQuizPerson && (
                 <div className="w-full max-w-4xl mx-auto space-y-6 text-center">
                   <div className="p-8 rounded-3xl bg-white border-2 border-slate-200 border-b-6 border-b-slate-300 shadow-sm space-y-4">
-                    <img
-                      src={currentQuizPerson.avatarUrl}
-                      alt="איש למבחן"
-                      className="w-28 h-28 rounded-2xl object-cover mx-auto border-2 border-amber-400 shadow-md"
-                    />
+                    {currentQuizPerson.avatarUrl ? (
+                      <img
+                        src={currentQuizPerson.avatarUrl}
+                        alt="איש למבחן"
+                        className="w-28 h-28 rounded-2xl object-cover mx-auto border-2 border-amber-400 shadow-md"
+                      />
+                    ) : (
+                      <div className="w-24 h-24 rounded-2xl bg-amber-100 border-2 border-amber-400 flex items-center justify-center mx-auto shadow-sm text-amber-800 font-black text-2xl">
+                        <Smile className="w-10 h-10 text-amber-600" />
+                      </div>
+                    )}
                     <div>
                       <span className="text-xs font-black text-amber-600 uppercase tracking-widest block">
                         מה שמו של אדם זה?

@@ -1724,8 +1724,8 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                 onToggleReady={(num, curr) => handleTogglePaoReady(num, curr)}
               />
             ) : viewMode === 'grid' ? (
-              /* Main Cards Grid - Responsive Full-Width */
-              <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5 gap-3.5 max-h-[680px] overflow-y-auto pr-1 scroll-smooth w-full">
+              /* Main Cards Grid - Maximum 3 per row, Wide Horizontal Rectangular Cards matching NamesFacesModule */
+              <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full">
                 {filteredItems.map((item) => {
                   const isEditing = editingNum === item.number;
                   const p = item.person;
@@ -1767,7 +1767,6 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                   const hasLogicConflict =
                     !personValidation.isValid || !objectValidation.isValid || hasMajorMismatch;
 
-                  // דפוס M3 מספר 4: Shape Morphing / Expressive Spring (שינוי צורה וקפיציות בכרטיס)
                   return (
                     <div
                       id={`pao-item-${item.number}`}
@@ -1800,11 +1799,11 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                           setIsCompressing(false);
                         }
                       }}
-                      className={`relative bg-slate-950 border rounded-2xl p-4 transition-all duration-300 flex flex-col justify-between overflow-hidden m3-shape-morph ${
+                      className={`relative bg-slate-950 border rounded-2xl p-4 transition-all duration-300 flex flex-col justify-between space-y-2.5 overflow-hidden m3-shape-morph ${
                         dragOverCardNum === item.number
-                          ? 'border-indigo-400 ring-4 ring-indigo-400/40 scale-[1.02] shadow-xl bg-indigo-950/40'
+                          ? 'border-indigo-400 ring-4 ring-indigo-400/40 scale-[1.01] shadow-xl bg-indigo-950/40'
                           : isHighlighted
-                          ? 'border-indigo-400 ring-4 ring-indigo-400/30 scale-[1.02] shadow-xl shadow-indigo-500/20 bg-indigo-950/20'
+                          ? 'border-indigo-400 ring-4 ring-indigo-400/30 scale-[1.01] shadow-xl shadow-indigo-500/20 bg-indigo-950/20'
                           : hasLogicConflict
                           ? 'border-amber-500/65 ring-1 ring-amber-500/25'
                           : isCustom
@@ -1820,117 +1819,141 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                           <span className="text-[10px] text-indigo-200">שלשת PAO #{item.numberStr}</span>
                         </div>
                       )}
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="font-mono text-lg font-black text-indigo-400 bg-indigo-500/10 px-2.5 py-0.5 rounded-lg border border-indigo-500/20 shrink-0">
-                            {item.numberStr}
-                          </span>
-                          <span
-                            title={`ראשי תיבות לפי שיטת Major (מסונכרן בזמן אמת): ${initialsInfo.fullFormula}`}
-                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold text-xs shrink-0"
-                          >
-                            <span className="text-[11px] text-amber-400/70 font-normal">ר"ת:</span>
-                            <span>{initialsInfo.initials}</span>
-                          </span>
 
-                          {/* Image Thumbnail or Quick Upload trigger */}
-                          {item.imageUrl ? (
-                            <div
-                              onClick={() =>
-                                setSelectedPreviewImage({
-                                  url: item.imageUrl!,
-                                  title: `שלשת PAO #${item.numberStr}`,
-                                  subtitle: `${p} • ${a} • ${o}`,
-                                  scene: s,
-                                  numberStr: item.numberStr,
-                                  number: item.number,
-                                })
-                              }
-                              className="relative group cursor-pointer shrink-0"
-                              title="לחץ להגדלה במסך מלא (Light Dismiss)"
+                      <div className="space-y-2.5">
+                        {/* Top Header Row: Number Badge + Initials + Person Title + Actions */}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-mono text-lg font-black text-indigo-400 bg-indigo-500/10 px-2.5 py-0.5 rounded-lg border border-indigo-500/20 shrink-0">
+                              {item.numberStr}
+                            </span>
+                            <span
+                              title={`ראשי תיבות לפי שיטת Major (מסונכרן בזמן אמת): ${initialsInfo.fullFormula}`}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold text-xs shrink-0"
                             >
-                              <img
-                                src={item.imageUrl}
-                                alt={`סצנה ${item.numberStr}`}
-                                className="w-9 h-9 object-cover rounded-lg border border-indigo-500/40 shadow-sm group-hover:scale-105 group-hover:border-indigo-400 transition-all"
-                              />
-                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 rounded-lg flex items-center justify-center transition-opacity">
-                                <Maximize2 className="w-3.5 h-3.5 text-white drop-shadow" />
+                              <span className="text-[11px] text-amber-400/70 font-normal">ר"ת:</span>
+                              <span>{initialsInfo.initials}</span>
+                            </span>
+
+                            {/* Image Thumbnail or Quick Upload trigger */}
+                            {item.imageUrl ? (
+                              <div
+                                onClick={() =>
+                                  setSelectedPreviewImage({
+                                    url: item.imageUrl!,
+                                    title: `שלשת PAO #${item.numberStr}`,
+                                    subtitle: `${p} • ${a} • ${o}`,
+                                    scene: s,
+                                    numberStr: item.numberStr,
+                                    number: item.number,
+                                  })
+                                }
+                                className="relative group cursor-pointer shrink-0"
+                                title="לחץ להגדלה במסך מלא (Light Dismiss)"
+                              >
+                                <img
+                                  src={item.imageUrl}
+                                  alt={`סצנה ${item.numberStr}`}
+                                  className="w-9 h-9 object-cover rounded-lg border border-indigo-500/40 shadow-sm group-hover:scale-105 group-hover:border-indigo-400 transition-all"
+                                />
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 rounded-lg flex items-center justify-center transition-opacity">
+                                  <Maximize2 className="w-3.5 h-3.5 text-white drop-shadow" />
+                                </div>
                               </div>
-                            </div>
-                          ) : (
-                            <button
-                              type="button"
-                              onMouseDown={(e) => e.stopPropagation()}
-                              onClick={() => {
-                                setQuickUploadItem(item);
-                                setQuickUploadUrl('');
-                                setQuickUploadMode('ai');
-                              }}
-                              className="w-8 h-8 p-1.5 rounded-xl text-slate-400 hover:text-indigo-300 hover:bg-slate-900 border border-transparent hover:border-slate-800 transition-all cursor-pointer inline-flex items-center justify-center shrink-0"
-                              title="צרף תמונה לשלשה זו"
-                            >
-                              <ImagePlus className="w-4 h-4 pointer-events-none" />
-                            </button>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0 relative z-20">
-                          {isCustom && (
-                            <button
-                              type="button"
-                              onMouseDown={(e) => e.stopPropagation()}
-                              onClick={() => {
-                                onResetPAOItem(item.number);
-                                if (isEditing) setEditingNum(null);
-                              }}
-                              title="אפס לברירת מחדל"
-                              className="w-8 h-8 p-1.5 rounded-xl text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 cursor-pointer inline-flex items-center justify-center transition-colors"
-                            >
-                              <Undo2 className="w-3.5 h-3.5 pointer-events-none" />
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onMouseDown={(e) => e.stopPropagation()}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setEditingNum(item.number);
-                              setEditPerson(item.person || '');
-                              setEditAction(item.action || '');
-                              setEditObject(item.object || '');
-                              setEditScene(item.scene || '');
-                              setEditImageUrl(item.imageUrl || '');
-                              setEditActionNotice(null);
-                            }}
-                            className="relative z-20 w-9 h-9 p-2 rounded-xl text-slate-300 hover:text-indigo-300 hover:bg-indigo-500/20 border border-transparent hover:border-indigo-500/30 cursor-pointer inline-flex items-center justify-center transition-colors shrink-0"
-                            title="ערוך שלשה בחלון מורחב"
-                          >
-                            <Edit3 className="w-4 h-4 pointer-events-none" />
-                          </button>
-                          {onDeletePAOItem && (
-                            <button
-                              type="button"
-                              onMouseDown={(e) => e.stopPropagation()}
-                              onClick={() => onDeletePAOItem(item.number)}
-                              className="w-8 h-8 p-1.5 rounded-xl text-slate-600 hover:text-rose-400 cursor-pointer inline-flex items-center justify-center"
-                              title="מחק מהמאגר"
-                            >
-                              <Trash2 className="w-4 h-4 pointer-events-none" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onClick={() => {
+                                  setQuickUploadItem(item);
+                                  setQuickUploadUrl('');
+                                  setQuickUploadMode('ai');
+                                }}
+                                className="w-8 h-8 p-1.5 rounded-xl text-slate-400 hover:text-indigo-300 hover:bg-slate-900 border border-transparent hover:border-slate-800 transition-all cursor-pointer inline-flex items-center justify-center shrink-0"
+                                title="צרף תמונה לשלשה זו"
+                              >
+                                <ImagePlus className="w-4 h-4 pointer-events-none" />
+                              </button>
+                            )}
+                          </div>
 
-                      <div className="space-y-1.5 text-xs sm:text-sm">
-                        <div className="text-slate-200 flex items-center gap-1.5 flex-wrap">
-                          <span className="text-amber-400 font-bold">👤 אדם:</span>
-                          <span>{p}</span>
+                          <div className="flex items-center gap-1 shrink-0 relative z-20">
+                            {isCustom && (
+                              <button
+                                type="button"
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onClick={() => {
+                                  onResetPAOItem(item.number);
+                                  if (isEditing) setEditingNum(null);
+                                }}
+                                title="אפס לברירת מחדל"
+                                className="w-8 h-8 p-1.5 rounded-xl text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 cursor-pointer inline-flex items-center justify-center transition-colors"
+                              >
+                                <Undo2 className="w-3.5 h-3.5 pointer-events-none" />
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onMouseDown={(e) => e.stopPropagation()}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setEditingNum(item.number);
+                                setEditPerson(item.person || '');
+                                setEditAction(item.action || '');
+                                setEditObject(item.object || '');
+                                setEditScene(item.scene || '');
+                                setEditImageUrl(item.imageUrl || '');
+                                setEditActionNotice(null);
+                              }}
+                              className="relative z-20 w-9 h-9 p-2 rounded-xl text-slate-300 hover:text-indigo-300 hover:bg-indigo-500/20 border border-transparent hover:border-indigo-500/30 cursor-pointer inline-flex items-center justify-center transition-colors shrink-0"
+                              title="ערוך שלשה בחלון מורחב"
+                            >
+                              <Edit3 className="w-4 h-4 pointer-events-none" />
+                            </button>
+                            {onDeletePAOItem && (
+                              <button
+                                type="button"
+                                onMouseDown={(e) => e.stopPropagation()}
+                                onClick={() => onDeletePAOItem(item.number)}
+                                className="w-8 h-8 p-1.5 rounded-xl text-slate-600 hover:text-rose-400 cursor-pointer inline-flex items-center justify-center"
+                                title="מחק מהמאגר"
+                              >
+                                <Trash2 className="w-4 h-4 pointer-events-none" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Horizontal Rectangular Field Boxes with Original Dark Colors */}
+                        <div className="space-y-2 text-xs sm:text-sm">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                              <span className="text-amber-400 font-bold block text-[11px] mb-0.5">
+                                👤 אדם:
+                              </span>
+                              <span className="text-slate-100 font-semibold leading-snug block">{p}</span>
+                            </div>
+
+                            <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                              <span className="text-purple-400 font-bold block text-[11px] mb-0.5">
+                                ⚡ פעולה:
+                              </span>
+                              <span className="text-slate-100 font-semibold leading-snug block">{a}</span>
+                            </div>
+
+                            <div className="bg-slate-900/80 p-2.5 rounded-xl border border-slate-800">
+                              <span className="text-teal-400 font-bold block text-[11px] mb-0.5">
+                                📦 חפץ:
+                              </span>
+                              <span className="text-slate-100 font-semibold leading-snug block">{o}</span>
+                            </div>
+                          </div>
+
                           {!personValidation.isValid && (
                             <div
                               title={personValidation.details || personValidation.message}
-                              className="w-full mt-1 flex flex-col gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 text-[11px] font-bold leading-snug"
+                              className="w-full flex flex-col gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 text-[11px] font-bold leading-snug"
                             >
                               <div className="flex items-start gap-1.5">
                                 <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
@@ -1947,18 +1970,11 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                               </div>
                             </div>
                           )}
-                        </div>
-                        <div className="text-slate-200">
-                          <span className="text-purple-400 font-bold ml-1.5">⚡ פעולה:</span>
-                          {a}
-                        </div>
-                        <div className="text-slate-200 flex items-center gap-1.5 flex-wrap">
-                          <span className="text-teal-400 font-bold">📦 חפץ:</span>
-                          <span>{o}</span>
+
                           {!objectValidation.isValid && (
                             <div
                               title={objectValidation.details || objectValidation.message}
-                              className="w-full mt-1 flex flex-col gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 text-[11px] font-bold leading-snug"
+                              className="w-full flex flex-col gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/15 border border-amber-500/40 text-amber-300 text-[11px] font-bold leading-snug"
                             >
                               <div className="flex items-start gap-1.5">
                                 <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
@@ -1975,8 +1991,9 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                               </div>
                             </div>
                           )}
+
                           {hasMajorMismatch && (
-                            <div className="w-full mt-1 flex flex-col gap-1.5 px-2.5 py-1.5 rounded-lg bg-sky-500/15 border border-sky-500/40 text-sky-200 text-[11px] font-bold leading-snug">
+                            <div className="w-full flex flex-col gap-1.5 px-2.5 py-1.5 rounded-lg bg-sky-500/15 border border-sky-500/40 text-sky-200 text-[11px] font-bold leading-snug">
                               <div className="flex items-start gap-1.5">
                                 <AlertTriangle className="w-3.5 h-3.5 text-sky-400 shrink-0 mt-0.5" />
                                 <span>
@@ -1992,44 +2009,43 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                               )}
                             </div>
                           )}
+
+                          {s ? (
+                            <div className="text-xs text-amber-200/90 bg-amber-500/10 border border-amber-500/20 rounded-xl p-2.5 leading-relaxed">
+                              <span className="font-bold text-amber-400 block text-xs mb-0.5">🎬 סצנה שלמה:</span>
+                              "{s}"
+                            </div>
+                          ) : null}
                         </div>
 
-                        {s ? (
-                          <div className="text-xs text-amber-200/90 bg-amber-500/10 border border-amber-500/20 rounded-xl p-2.5 mt-2 leading-relaxed">
-                            <span className="font-bold text-amber-400 block text-xs mb-0.5">🎬 סצנה שלמה:</span>
-                            "{s}"
-                          </div>
-                        ) : null}
-                      </div>
-
-                      {/* Ready for Practice Checkbox */}
-                      <div className="pt-2 mt-2 border-t border-slate-800/80 flex items-center justify-between">
-                        <label className="inline-flex items-center gap-1.5 cursor-pointer select-none py-1 px-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 transition-all">
-                          <input
-                            type="checkbox"
-                            checked={Boolean(item.is_ready_for_practice)}
-                            onChange={() => handleTogglePaoReady(item.number, item.is_ready_for_practice)}
-                            className="w-4 h-4 rounded text-indigo-500 focus:ring-indigo-500 cursor-pointer accent-indigo-500"
-                          />
-                          <span className={`text-xs font-bold ${item.is_ready_for_practice ? 'text-indigo-300' : 'text-slate-400'}`}>
-                            מוכן לתרגול
-                          </span>
-                        </label>
-                        {item.is_ready_for_practice && (
-                          <span className="text-xs bg-indigo-500/20 text-indigo-300 font-bold px-2 py-0.5 rounded-full border border-indigo-500/30 flex items-center gap-1">
-                            <Check className="w-3.5 h-3.5 text-indigo-400" />
-                            <span>מוכן</span>
-                          </span>
-                        )}
+                        {/* Ready for Practice Checkbox */}
+                        <div className="pt-2 mt-1 border-t border-slate-800/80 flex items-center justify-between">
+                          <label className="inline-flex items-center gap-1.5 cursor-pointer select-none py-1 px-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 transition-all">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(item.is_ready_for_practice)}
+                              onChange={() => handleTogglePaoReady(item.number, item.is_ready_for_practice)}
+                              className="w-4 h-4 rounded text-indigo-500 focus:ring-indigo-500 cursor-pointer accent-indigo-500"
+                            />
+                            <span className={`text-xs font-bold ${item.is_ready_for_practice ? 'text-indigo-300' : 'text-slate-400'}`}>
+                              מוכן לתרגול
+                            </span>
+                          </label>
+                          {item.is_ready_for_practice && (
+                            <span className="text-xs bg-indigo-500/20 text-indigo-300 font-bold px-2 py-0.5 rounded-full border border-indigo-500/30 flex items-center gap-1">
+                              <Check className="w-3.5 h-3.5 text-indigo-400" />
+                              <span>מוכן</span>
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
               </div>
             ) : (
               /* Main List View */
-              <div className="flex-1 overflow-x-auto max-h-[620px] overflow-y-auto rounded-2xl border border-slate-800 bg-slate-950/90 shadow-inner scroll-smooth">
+              <div className="flex-1 overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950/90 shadow-inner">
                 <table className="w-full text-right text-xs sm:text-sm">
                   <thead className="bg-slate-900/90 text-slate-300 text-xs font-bold sticky top-0 z-10 border-b border-slate-800">
                     <tr>
@@ -2310,7 +2326,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
 
             {/* Vertical Sticky Side Index for PAO (00-99) */}
             {viewMode !== 'gallery' && (
-              <div className="hidden lg:flex flex-col gap-1 bg-slate-950 p-2 rounded-2xl border border-slate-800 max-h-[580px] overflow-y-auto no-scrollbar shrink-0 w-16 text-center shadow-inner">
+              <div className="hidden lg:flex flex-col gap-1 bg-slate-950 p-2 rounded-2xl border border-slate-800 sticky top-6 self-start max-h-[calc(100vh-3rem)] overflow-y-auto no-scrollbar shrink-0 w-16 text-center shadow-inner">
                 <span className="text-[9px] font-bold text-slate-400 pb-1 border-b border-slate-800">שלשה</span>
                 {paoItems.map((item) => (
                   <button

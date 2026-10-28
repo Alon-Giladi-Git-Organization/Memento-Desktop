@@ -1,472 +1,958 @@
-import { isHebrewFuzzyMatch, normalizeHebrewText } from './fuzzyMatch';
+import { isHebrewFuzzyMatch } from './fuzzyMatch';
 
-/**
- * Hebrew Number Words Dictionary (0 to 99)
- * Used to translate spoken Hebrew numbers (e.g. "ארבעים וחמש" -> 45) into integers.
- */
-const HEBREW_UNITS: Record<string, number> = {
-  אפס: 0,
-  אחת: 1,
-  אחד: 1,
-  שתים: 2,
-  שתיים: 2,
-  שניים: 2,
-  שנים: 2,
-  שלוש: 3,
-  שלושה: 3,
-  ארבע: 4,
-  ארבעה: 4,
-  חמש: 5,
-  חמישה: 5,
-  שש: 6,
-  שישה: 6,
-  שבע: 7,
-  שבעה: 7,
-  שמונה: 8,
-  שמונהה: 8,
-  תשע: 9,
-  תשעה: 9,
-  עשר: 10,
-  עשרה: 10,
-};
+export type VoiceTriggerAction = 'next' | 'repeat' | 'stop' | 'hint';
 
-const HEBREW_TEENS: Record<string, number> = {
-  אחתעשרה: 11,
-  'אחת עשרה': 11,
-  'אחד עשר': 11,
-  שתיםעשרה: 12,
-  שתייםעשרה: 12,
-  'שתים עשרה': 12,
-  'שתיים עשרה': 12,
-  'שנים עשר': 12,
-  שלושעשרה: 13,
-  'שלוש עשרה': 13,
-  'שלושה עשר': 13,
-  ארבעעשרה: 14,
-  'ארבע עשרה': 14,
-  'ארבעה עשר': 14,
-  חמשעשרה: 15,
-  'חמש עשרה': 15,
-  'חמישה עשר': 15,
-  ששעשרה: 16,
-  'שש עשרה': 16,
-  'שישה עשר': 16,
-  שבעעשרה: 17,
-  'שבע עשרה': 17,
-  'שבעה עשר': 17,
-  שמונהעשרה: 18,
-  'שמונה עשרה': 18,
-  'שמונה עשר': 18,
-  תשעעשרה: 19,
-  'תשע עשרה': 19,
-  'תשעה עשר': 19,
-};
-
-const HEBREW_TENS: Record<string, number> = {
-  עשרים: 20,
-  שלושים: 30,
-  ארבעים: 40,
-  חמישים: 50,
-  שישים: 60,
-  שבעים: 70,
-  שמונים: 80,
-  תשעים: 90,
-};
-
-/**
- * Parses a spoken Hebrew string to find an integer from 0 to 99.
- */
-export function convertHebrewSpokenNumber(input: string): number | null {
-  if (!input) return null;
-  const clean = input.trim();
-
-  // 1. Direct digit match in text (e.g. "45", "04", "שבע 45")
-  const digitMatch = clean.match(/\b\d{1,2}\b/);
-  if (digitMatch) {
-    const num = parseInt(digitMatch[0], 10);
-    if (!isNaN(num) && num >= 0 && num <= 99) return num;
-  }
-
-  // Normalize Hebrew
-  const words = clean
-    .replace(/[^\u0590-\u05FF\s]/g, '')
-    .trim()
-    .split(/\s+/);
-
-  if (words.length === 0) return null;
-
-  // Single word lookup
-  const single = words.join(' ');
-  if (HEBREW_UNITS[single] !== undefined) return HEBREW_UNITS[single];
-  if (HEBREW_TEENS[single] !== undefined) return HEBREW_TEENS[single];
-  if (HEBREW_TENS[single] !== undefined) return HEBREW_TENS[single];
-
-  // Compound tens + units (e.g. "ארבעים וחמש" or "ארבעים חמש" or "חמישים ואחת")
-  for (let i = 0; i < words.length; i++) {
-    const w = words[i];
-    if (HEBREW_TENS[w] !== undefined) {
-      const tensVal = HEBREW_TENS[w];
-      const nextWord = words[i + 1];
-      if (nextWord) {
-        const strippedNext = nextWord.startsWith('ו') ? nextWord.slice(1) : nextWord;
-        if (HEBREW_UNITS[strippedNext] !== undefined) {
-          return tensVal + HEBREW_UNITS[strippedNext];
-        }
-      }
-      return tensVal;
-    }
-  }
-
-  // Reverse compound: "חמש וארבעים"
-  for (let i = 0; i < words.length; i++) {
-    const w = words[i];
-    if (HEBREW_UNITS[w] !== undefined) {
-      const unitsVal = HEBREW_UNITS[w];
-      const nextWord = words[i + 1];
-      if (nextWord) {
-        const strippedNext = nextWord.startsWith('ו') ? nextWord.slice(1) : nextWord;
-        if (HEBREW_TENS[strippedNext] !== undefined) {
-          return HEBREW_TENS[strippedNext] + unitsVal;
-        }
-      }
-    }
-  }
-
-  return null;
+export interface VoiceRecognitionCallbacks {
+  onInterimResult?: (transcript: string) => void;
+  onFinalResult?: (transcript: string) => void;
+  onTriggerCommand?: (action: VoiceTriggerAction, rawTranscript: string) => void;
+  onError?: (errorCode: string, humanMessage: string) => void;
+  onEnd?: () => void;
+  onStart?: () => void;
 }
 
-/**
- * Voice Service providing Text-to-Speech (TTS) and Speech-to-Text (STT) in Hebrew
- */
+export interface SemanticRecallEvalResult {
+  isCorrect: boolean;
+  score: number;
+  verdictTitle: string;
+  explanation: string;
+  memoryTip?: string;
+  matchedValue?: string;
+}
+
+// Optional spoken commands if the user explicitly says them, though no trigger words are required to stop or submit
+const TRIGGER_MAP: Record<VoiceTriggerAction, string[]> = {
+  next: ['הבא', 'שאלה הבאה', 'דלג', 'עבור הלאה'],
+  repeat: ['חזור על השאלה', 'שוב פעם'],
+  stop: ['עצור אימון', 'סיים אימון', 'הפסק אימון'],
+  hint: ['תן רמז', 'בקש רמז'],
+};
+
 class VoiceService {
-  private currentUtterance: SpeechSynthesisUtterance | null = null;
-  private currentAudioElement: HTMLAudioElement | null = null;
-  private currentRecognition: any = null;
-  private isSpeakingState = false;
-  private cachedHebrewVoice: SpeechSynthesisVoice | null = null;
+  private synthesis: SpeechSynthesis | null = null;
+  private recognition: any = null;
+  private isListeningState: boolean = false;
+  private isStartingListening: boolean = false;
+  private activeSessionId: number = 0;
+  private activeMediaStream: MediaStream | null = null;
+  private silenceTimer: ReturnType<typeof setTimeout> | null = null;
+  private postSpeechTimer: ReturnType<typeof setTimeout> | null = null;
+  private restartTimer: ReturnType<typeof setTimeout> | null = null;
+  private hebrewVoice: SpeechSynthesisVoice | null = null;
+  private activeAudioElement: HTMLAudioElement | null = null;
+  private ttsAbortController: AbortController | null = null;
+  private currentAccumulatedTranscript: string = '';
+  private currentInterimTranscript: string = '';
+  private currentCallbacks: VoiceRecognitionCallbacks | null = null;
+  private micPermissionGrantedInSession: boolean = false;
 
   constructor() {
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      window.speechSynthesis.onvoiceschanged = () => {
-        this.loadHebrewVoice();
-      };
-      this.loadHebrewVoice();
-    }
-  }
-
-  private loadHebrewVoice(): SpeechSynthesisVoice | null {
-    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null;
-    const voices = window.speechSynthesis.getVoices();
-    // Prioritize Google Hebrew Voice or high quality natural voices if available
-    const hebrewVoices = voices.filter(
-      (v) => v.lang === 'he-IL' || v.lang === 'he_IL' || v.lang.startsWith('he')
-    );
-
-    const googleHebrew = hebrewVoices.find((v) => v.name.toLowerCase().includes('google') || v.name.toLowerCase().includes('natural'));
-    this.cachedHebrewVoice = googleHebrew || hebrewVoices[0] || null;
-    return this.cachedHebrewVoice;
-  }
-
-  /**
-   * Speaks Hebrew text via advanced Gemini AI TTS model (gemini-3.8-flash-lite-tts),
-   * falling back smoothly to browser speech synthesis if offline or delayed.
-   */
-  async speakHebrew(text: string, rate = 0.95): Promise<void> {
-    if (typeof window === 'undefined') return Promise.resolve();
-
-    // Cancel any previous speech immediately
-    this.stopSpeaking();
-
-    // Try AI Speech Model (Gemini Flash Lite TTS) first
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4500);
-
-      const res = await fetch('/api/gemini/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
-        signal: controller.signal,
-      });
-      clearTimeout(timeoutId);
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.audioBase64) {
-          return new Promise<void>((resolve) => {
-            const audioSrc = `data:${data.mimeType || 'audio/wav'};base64,${data.audioBase64}`;
-            const audio = new Audio(audioSrc);
-            this.currentAudioElement = audio;
-            this.isSpeakingState = true;
-
-            let finished = false;
-            const finish = () => {
-              if (!finished) {
-                finished = true;
-                this.isSpeakingState = false;
-                this.currentAudioElement = null;
-                resolve();
-              }
-            };
-
-            audio.onended = () => finish();
-            audio.onerror = () => finish();
-            setTimeout(finish, 15000); // safety fallback
-
-            audio.play().catch(() => finish());
-          });
+    if (typeof window !== 'undefined') {
+      if ('speechSynthesis' in window) {
+        this.synthesis = window.speechSynthesis;
+        this.loadVoices();
+        if (window.speechSynthesis.onvoiceschanged !== undefined) {
+          window.speechSynthesis.onvoiceschanged = () => this.loadVoices();
         }
       }
-    } catch {
-      // Fall through to browser speech synthesis fallback
+    }
+  }
+
+  private loadVoices() {
+    if (!this.synthesis) return;
+    const voices = this.synthesis.getVoices();
+    const heVoices = voices.filter(
+      (v) =>
+        v.lang.toLowerCase().includes('he') ||
+        v.lang.toLowerCase().includes('iw') ||
+        v.name.toLowerCase().includes('hebrew') ||
+        v.name.includes('עברית')
+    );
+
+    if (heVoices.length > 0) {
+      const preferred =
+        heVoices.find(
+          (v) =>
+            v.name.toLowerCase().includes('natural') ||
+            v.name.toLowerCase().includes('google') ||
+            v.name.toLowerCase().includes('avri') ||
+            v.name.toLowerCase().includes('hila') ||
+            v.name.toLowerCase().includes('carmit') ||
+            v.name.toLowerCase().includes('online')
+        ) || heVoices[0];
+
+      this.hebrewVoice = preferred;
+    }
+  }
+
+  private stopActiveMediaStream() {
+    if (this.activeMediaStream) {
+      try {
+        this.activeMediaStream.getTracks().forEach((track) => track.stop());
+      } catch {
+        // ignore
+      }
+      this.activeMediaStream = null;
+    }
+  }
+
+  private clearAllRecognitionTimers() {
+    if (this.silenceTimer) {
+      clearTimeout(this.silenceTimer);
+      this.silenceTimer = null;
+    }
+    if (this.postSpeechTimer) {
+      clearTimeout(this.postSpeechTimer);
+      this.postSpeechTimer = null;
+    }
+    if (this.restartTimer) {
+      clearTimeout(this.restartTimer);
+      this.restartTimer = null;
+    }
+  }
+
+  private detachAndDestroyRecognition() {
+    if (this.recognition) {
+      const oldRec = this.recognition;
+      this.recognition = null;
+      try {
+        oldRec.onstart = null;
+        oldRec.onresult = null;
+        oldRec.onerror = null;
+        oldRec.onend = null;
+        oldRec.abort();
+      } catch {
+        try {
+          oldRec.stop();
+        } catch {
+          // ignore
+        }
+      }
+    }
+  }
+
+  public isSupported(): { tts: boolean; stt: boolean } {
+    if (typeof window === 'undefined') return { tts: false, stt: false };
+    const tts = 'speechSynthesis' in window || typeof Audio !== 'undefined';
+    const SpeechRec =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const stt = Boolean(SpeechRec);
+    return { tts, stt };
+  }
+
+  public hasMicPermission(): boolean {
+    return this.micPermissionGrantedInSession;
+  }
+
+  public markMicPermissionGranted(): void {
+    this.micPermissionGrantedInSession = true;
+  }
+
+  public async requestMicrophonePermission(): Promise<{
+    granted: boolean;
+    errorMessage?: string;
+  }> {
+    if (typeof window === 'undefined') {
+      return { granted: true };
     }
 
-    // Fallback: Browser Web Speech API
-    if (!('speechSynthesis' in window)) {
-      return Promise.resolve();
+    // Enforce Audio Collision Prevention: stop any active listening before requesting microphone permission
+    if (this.isListeningState || this.isStartingListening || this.recognition) {
+      this.stopListening({ silent: true });
+    }
+
+    // 1. Trigger native browser microphone permission popup via getUserMedia directly in the user click gesture
+    if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+          },
+        });
+        this.activeMediaStream = stream;
+        this.stopActiveMediaStream();
+        this.micPermissionGrantedInSession = true;
+        return { granted: true };
+      } catch (err: any) {
+        this.stopActiveMediaStream();
+        const name = err?.name || '';
+        if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+          return {
+            granted: false,
+            errorMessage: 'לא נמצא מיקרופון מחובר למכשיר זה.',
+          };
+        }
+        // Fall through to SpeechRecognition permission prompt
+      }
+    }
+
+    // 2. Fallback: Trigger browser SpeechRecognition permission prompt directly
+    const SpeechRec =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRec) {
+      this.micPermissionGrantedInSession = true;
+      return { granted: true };
     }
 
     return new Promise((resolve) => {
-      try {
-        const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'he-IL';
-        utterance.rate = rate;
-        utterance.pitch = 1.0;
+      let settled = false;
+      const probe = new SpeechRec();
+      probe.lang = 'he-IL';
+      probe.continuous = false;
+      probe.interimResults = false;
 
-        const voice = this.cachedHebrewVoice || this.loadHebrewVoice();
-        if (voice) {
-          utterance.voice = voice;
+      const finish = (result: { granted: boolean; errorMessage?: string }) => {
+        if (settled) return;
+        settled = true;
+        if (result.granted) {
+          this.micPermissionGrantedInSession = true;
         }
+        try {
+          probe.onstart = null;
+          probe.onerror = null;
+          probe.onend = null;
+          probe.abort();
+        } catch {
+          // ignore
+        }
+        resolve(result);
+      };
 
-        this.isSpeakingState = true;
-        this.currentUtterance = utterance;
+      const timeoutId = setTimeout(() => {
+        finish({ granted: true });
+      }, 1800);
 
-        let isFinished = false;
-        const finish = () => {
-          if (!isFinished) {
-            isFinished = true;
-            this.isSpeakingState = false;
-            this.currentUtterance = null;
-            resolve();
-          }
-        };
+      probe.onstart = () => {
+        clearTimeout(timeoutId);
+        finish({ granted: true });
+      };
 
-        utterance.onend = () => finish();
-        utterance.onerror = (e) => {
-          console.warn('Speech synthesis note:', e);
-          finish();
-        };
+      probe.onerror = (event: any) => {
+        clearTimeout(timeoutId);
+        const code = event?.error || '';
+        if (code === 'audio-capture') {
+          finish({
+            granted: false,
+            errorMessage: 'לא נמצא מיקרופון פעיל במכשיר.',
+          });
+        } else {
+          // Allow the session to proceed and request microphone when recognition starts
+          finish({ granted: true });
+        }
+      };
 
-        // Safety fallback timer: max 12 seconds
-        const safetyTimer = setTimeout(() => {
-          finish();
-        }, 12000);
+      probe.onend = () => {
+        clearTimeout(timeoutId);
+        finish({ granted: true });
+      };
 
-        utterance.addEventListener('end', () => clearTimeout(safetyTimer));
-
-        window.speechSynthesis.speak(utterance);
-      } catch (err) {
-        console.error('Error starting speech synthesis:', err);
-        this.isSpeakingState = false;
-        resolve();
+      try {
+        probe.start();
+      } catch {
+        clearTimeout(timeoutId);
+        finish({ granted: true });
       }
     });
   }
 
   /**
-   * Stops current speech synthesis and audio playback immediately
+   * Speaks Hebrew text using Gemini AI TTS with instant fallback to browser SpeechSynthesis.
+   * Enforces Audio Collision Prevention by stopping any active microphone recording before speaking.
    */
-  stopSpeaking(): void {
-    if (this.currentAudioElement) {
-      try {
-        this.currentAudioElement.pause();
-        this.currentAudioElement.currentTime = 0;
-      } catch {}
-      this.currentAudioElement = null;
+  public speakHebrew(
+    text: string,
+    options?: {
+      rate?: number;
+      pitch?: number;
+      onStart?: () => void;
+      onEnd?: () => void;
+      onError?: () => void;
+      preferFastLocal?: boolean;
     }
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      try {
-        window.speechSynthesis.cancel();
-      } catch {}
-      this.isSpeakingState = false;
-      this.currentUtterance = null;
-    }
-    this.isSpeakingState = false;
-  }
+  ): Promise<void> {
+    return new Promise(async (resolve) => {
+      if (typeof window === 'undefined') {
+        options?.onEnd?.();
+        resolve();
+        return;
+      }
 
-  isSpeaking(): boolean {
-    return this.isSpeakingState;
-  }
+      // Audio Collision Prevention: Never allow TTS and microphone recording simultaneously
+      if (this.isListeningState || this.isStartingListening || this.recognition) {
+        this.stopListening({ silent: true });
+      }
 
-  /**
-   * Checks if browser speech recognition (Google STT) is supported
-   */
-  isRecognitionSupported(): boolean {
-    if (typeof window === 'undefined') return false;
-    return Boolean((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
-  }
+      this.stopSpeaking();
 
-  /**
-   * Starts listening to user speech via Google Speech-to-Text API in Hebrew
-   */
-  startListening(options: {
-    onResult: (transcript: string, isFinal: boolean) => void;
-    onError?: (error: string) => void;
-    onEnd?: () => void;
-    silenceTimeoutMs?: number;
-  }): () => void {
-    if (!this.isRecognitionSupported()) {
-      options.onError?.('זיהוי דיבור אינו נתמך בדפדפן זה. מומלץ להשתמש ב-Google Chrome.');
-      options.onEnd?.();
-      return () => {};
-    }
+      const sanitizedText = (text || '')
+        .replace(/speak in a [a-z\s]+ voice:?/gi, '')
+        .replace(/read aloud:?/gi, '')
+        .trim();
 
-    // Make sure we stop any active speech before listening to prevent audio loop!
-    this.stopSpeaking();
-    this.stopListening();
+      if (!sanitizedText) {
+        options?.onEnd?.();
+        resolve();
+        return;
+      }
 
-    const SpeechRec = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    const recognition = new SpeechRec();
+      const useCloudTts = !options?.preferFastLocal;
 
-    recognition.lang = 'he-IL';
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.maxAlternatives = 3;
-
-    this.currentRecognition = recognition;
-
-    let hasReceivedResult = false;
-    let silenceTimer: any = null;
-
-    const resetSilenceTimer = () => {
-      if (silenceTimer) clearTimeout(silenceTimer);
-      const timeout = options.silenceTimeoutMs || 7500;
-      silenceTimer = setTimeout(() => {
+      if (useCloudTts) {
         try {
-          recognition.stop();
-        } catch {}
-      }, timeout);
-    };
+          this.ttsAbortController = new AbortController();
+          const timeoutId = setTimeout(() => {
+            this.ttsAbortController?.abort();
+          }, 5500);
 
-    resetSilenceTimer();
+          const res = await fetch('/api/gemini/tts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: sanitizedText, voiceName: 'Kore' }),
+            signal: this.ttsAbortController.signal,
+          });
+          clearTimeout(timeoutId);
 
-    recognition.onresult = (event: any) => {
-      hasReceivedResult = true;
-      resetSilenceTimer();
+          if (res.ok) {
+            const data = await res.json();
+            if (data?.audioBase64) {
+              const mime = data.mimeType || 'audio/wav';
+              const audioSrc = `data:${mime};base64,${data.audioBase64}`;
+              const audio = new Audio(audioSrc);
+              this.activeAudioElement = audio;
+              if (options?.rate) {
+                audio.playbackRate = Math.max(0.75, Math.min(1.5, options.rate));
+              }
 
-      let transcript = '';
-      let isFinal = false;
+              audio.onplay = () => {
+                options?.onStart?.();
+              };
 
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        transcript += event.results[i][0].transcript;
-        if (event.results[i].isFinal) {
-          isFinal = true;
+              audio.onended = () => {
+                this.activeAudioElement = null;
+                options?.onEnd?.();
+                resolve();
+              };
+
+              audio.onerror = () => {
+                this.activeAudioElement = null;
+                this.speakWithBrowserSynthesis(sanitizedText, options, resolve);
+              };
+
+              await audio.play();
+              return;
+            }
+          }
+        } catch {
+          // Fall back seamlessly to local browser synthesis
         }
       }
 
-      options.onResult(transcript.trim(), isFinal);
-    };
+      this.speakWithBrowserSynthesis(sanitizedText, options, resolve);
+    });
+  }
 
-    recognition.onerror = (event: any) => {
-      if (silenceTimer) clearTimeout(silenceTimer);
-      if (event.error === 'no-speech') {
-        if (!hasReceivedResult) {
-          options.onError?.('לא זוהה דיבור');
+  private speakWithBrowserSynthesis(
+    text: string,
+    options:
+      | {
+          rate?: number;
+          pitch?: number;
+          onStart?: () => void;
+          onEnd?: () => void;
+          onError?: () => void;
         }
-      } else if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-        options.onError?.('הרשאת מיקרופון נדחתה. יש לאשר גישה למיקרופון בהגדרות הדפדפן.');
-      } else {
-        options.onError?.(event.error || 'שגיאה בקליטת הקול');
-      }
+      | undefined,
+    resolve: () => void
+  ) {
+    if (!this.synthesis) {
+      options?.onEnd?.();
+      resolve();
+      return;
+    }
+
+    try {
+      this.synthesis.cancel();
+    } catch {
+      // ignore
+    }
+
+    const cleanSpeechText = text.replace(/[#*_~`•]/g, ' ').replace(/\s+/g, ' ').trim();
+    const utterance = new SpeechSynthesisUtterance(cleanSpeechText);
+    utterance.lang = 'he-IL';
+    utterance.rate = options?.rate ?? 1.0;
+    utterance.pitch = options?.pitch ?? 1.0;
+
+    if (!this.hebrewVoice) {
+      this.loadVoices();
+    }
+    if (this.hebrewVoice) {
+      utterance.voice = this.hebrewVoice;
+    }
+
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      options?.onEnd?.();
+      resolve();
     };
 
-    recognition.onend = () => {
-      if (silenceTimer) clearTimeout(silenceTimer);
-      this.currentRecognition = null;
-      options.onEnd?.();
+    const safetyMs = Math.max(4500, cleanSpeechText.length * 140);
+    const safetyTimer = setTimeout(finish, safetyMs);
+
+    utterance.onstart = () => {
+      options?.onStart?.();
+    };
+
+    utterance.onend = () => {
+      clearTimeout(safetyTimer);
+      finish();
+    };
+
+    utterance.onerror = () => {
+      clearTimeout(safetyTimer);
+      options?.onError?.();
+      finish();
     };
 
     try {
-      recognition.start();
-    } catch (err) {
-      console.warn('Recognition start issue:', err);
-      options.onError?.('שגיאה בהפעלת המיקרופון');
-      options.onEnd?.();
+      this.synthesis.speak(utterance);
+    } catch {
+      clearTimeout(safetyTimer);
+      finish();
     }
-
-    return () => {
-      if (silenceTimer) clearTimeout(silenceTimer);
-      try {
-        recognition.stop();
-      } catch {}
-      this.currentRecognition = null;
-    };
   }
 
-  stopListening(): void {
-    if (this.currentRecognition) {
+  public stopSpeaking() {
+    if (this.ttsAbortController) {
       try {
-        this.currentRecognition.stop();
-      } catch {}
-      this.currentRecognition = null;
+        this.ttsAbortController.abort();
+      } catch {
+        // ignore
+      }
+      this.ttsAbortController = null;
     }
+    if (this.activeAudioElement) {
+      try {
+        this.activeAudioElement.pause();
+        this.activeAudioElement.currentTime = 0;
+      } catch {
+        // ignore
+      }
+      this.activeAudioElement = null;
+    }
+    if (this.synthesis) {
+      try {
+        this.synthesis.cancel();
+      } catch {
+        // ignore
+      }
+    }
+  }
+
+  public detectTriggerCommand(transcript: string): VoiceTriggerAction | null {
+    const clean = transcript
+      .trim()
+      .replace(/[.,!?״"']/g, '')
+      .replace(/\s+/g, ' ');
+    if (!clean) return null;
+
+    // Only match if the entire utterance is a short command (<= 3 words) so free-flowing answers are never interrupted
+    const wordCount = clean.split(' ').length;
+    if (wordCount > 3) return null;
+
+    for (const [action, phrases] of Object.entries(TRIGGER_MAP) as [
+      VoiceTriggerAction,
+      string[],
+    ][]) {
+      for (const phrase of phrases) {
+        if (clean === phrase) {
+          return action;
+        }
+      }
+    }
+    return null;
   }
 
   /**
-   * Intelligently evaluates whether the spoken user answer matches the target question
+   * Starts a single-instance microphone listening session.
+   *
+   * AUDIO COLLISION PREVENTION:
+   * - Enforces that ONLY ONE microphone recording/listening session can be active at any given time.
+   * - Any existing microphone session or TTS playback is immediately terminated before opening the mic.
+   *
+   * HANDS-FREE UNLIMITED THINKING TIME:
+   * - When `unlimitedThinkingTime` is true (default), the user has unlimited time to think before speaking.
+   *   If browser SpeechRecognition times out with silence before any speech is uttered, it transparently
+   *   re-opens within the same locked session.
+   * - Once the user begins speaking in natural free-flowing language, speech is accumulated continuously.
+   *   After the user finishes speaking and pauses naturally (`postSpeechSilenceMs`, default 2400ms),
+   *   the complete response is automatically submitted without needing any trigger words.
    */
-  evaluateAnswer(
-    spokenText: string,
-    expectedNumber: number,
-    expectedPao: { person: string; action: string; object: string; scene?: string },
-    questionType: 'number' | 'person' | 'action' | 'object' | 'triplet'
-  ): { isCorrect: boolean; detectedTarget: string } {
-    const cleanSpoken = normalizeHebrewText(spokenText);
-    if (!cleanSpoken) return { isCorrect: false, detectedTarget: '' };
+  public startListening(
+    callbacks: VoiceRecognitionCallbacks,
+    options?: {
+      continuous?: boolean;
+      silenceTimeoutMs?: number;
+      unlimitedThinkingTime?: boolean;
+      postSpeechSilenceMs?: number;
+    }
+  ) {
+    if (typeof window === 'undefined') return;
+    const SpeechRec =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
-    // 1. If question asked for the Number
-    if (questionType === 'number') {
-      const spokenNum = convertHebrewSpokenNumber(spokenText);
-      const isCorrect = spokenNum === expectedNumber;
-      return { isCorrect, detectedTarget: spokenNum !== null ? String(spokenNum) : spokenText };
+    if (!SpeechRec) {
+      callbacks.onError?.(
+        'not-supported',
+        'הדפדפן שלך אינו תומך בזיהוי דיבור קולי. מומלץ להשתמש בדפדפן Google Chrome.'
+      );
+      return;
     }
 
-    // 2. If question asked for Person
-    if (questionType === 'person') {
-      const isCorrect = isHebrewFuzzyMatch(cleanSpoken, expectedPao.person);
-      return { isCorrect, detectedTarget: expectedPao.person };
+    // STRICT AUDIO COLLISION PREVENTION:
+    // Immediately abort any existing microphone session or active TTS before starting a new one.
+    this.stopSpeaking();
+    this.stopListening({ silent: true });
+
+    this.activeSessionId += 1;
+    const sessionId = this.activeSessionId;
+
+    this.isStartingListening = true;
+    this.isListeningState = true;
+    this.currentAccumulatedTranscript = '';
+    this.currentInterimTranscript = '';
+    this.currentCallbacks = callbacks;
+
+    const unlimitedThinking = options?.unlimitedThinkingTime ?? true;
+    const postSpeechSilenceMs = options?.postSpeechSilenceMs ?? 2400;
+    const initialSilenceTimeoutMs = options?.silenceTimeoutMs ?? 0;
+
+    let hasNotifiedStart = false;
+    let isSessionFinalized = false;
+
+    const finalizeAndDeliver = () => {
+      if (isSessionFinalized || sessionId !== this.activeSessionId) return;
+      const fullText = [this.currentAccumulatedTranscript, this.currentInterimTranscript]
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (!fullText) return;
+
+      isSessionFinalized = true;
+      this.stopListening({ silent: true });
+
+      const trigger = this.detectTriggerCommand(fullText);
+      if (trigger && callbacks.onTriggerCommand) {
+        callbacks.onTriggerCommand(trigger, fullText);
+      } else {
+        callbacks.onFinalResult?.(fullText);
+      }
+      callbacks.onEnd?.();
+    };
+
+    const schedulePostSpeechCompletion = () => {
+      if (this.postSpeechTimer) {
+        clearTimeout(this.postSpeechTimer);
+      }
+      this.postSpeechTimer = setTimeout(() => {
+        if (sessionId !== this.activeSessionId || isSessionFinalized) return;
+        finalizeAndDeliver();
+      }, postSpeechSilenceMs);
+    };
+
+    const launchRecognitionInstance = () => {
+      if (sessionId !== this.activeSessionId || isSessionFinalized) return;
+
+      // Ensure any previous recognition object is detached before creating the single active instance
+      this.detachAndDestroyRecognition();
+
+      const rec = new SpeechRec();
+      this.recognition = rec;
+      rec.lang = 'he-IL';
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.maxAlternatives = 3;
+
+      rec.onstart = () => {
+        if (sessionId !== this.activeSessionId) {
+          try {
+            rec.abort();
+          } catch {
+            // ignore
+          }
+          return;
+        }
+        this.isStartingListening = false;
+        this.isListeningState = true;
+        if (!hasNotifiedStart) {
+          hasNotifiedStart = true;
+          callbacks.onStart?.();
+        }
+      };
+
+      rec.onresult = (event: any) => {
+        if (sessionId !== this.activeSessionId || isSessionFinalized) return;
+
+        let newFinalChunk = '';
+        let interimChunk = '';
+
+        for (let i = event.resultIndex; i < event.results.length; ++i) {
+          const res = event.results[i];
+          const text = (res[0]?.transcript || '').trim();
+          if (res.isFinal) {
+            if (text) {
+              newFinalChunk += (newFinalChunk ? ' ' : '') + text;
+            }
+          } else {
+            if (text) {
+              interimChunk += (interimChunk ? ' ' : '') + text;
+            }
+          }
+        }
+
+        if (newFinalChunk) {
+          this.currentAccumulatedTranscript = [
+            this.currentAccumulatedTranscript,
+            newFinalChunk,
+          ]
+            .filter(Boolean)
+            .join(' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+        }
+        this.currentInterimTranscript = interimChunk;
+
+        const combinedLive = [this.currentAccumulatedTranscript, this.currentInterimTranscript]
+          .filter(Boolean)
+          .join(' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+        if (combinedLive) {
+          callbacks.onInterimResult?.(combinedLive);
+          // User has started speaking -> reset the natural post-speech completion timer
+          schedulePostSpeechCompletion();
+        }
+      };
+
+      rec.onerror = (event: any) => {
+        if (sessionId !== this.activeSessionId || isSessionFinalized) return;
+        const code = event?.error || 'unknown';
+
+        if (code === 'aborted') {
+          return;
+        }
+
+        if (code === 'no-speech') {
+          const hasSpoken =
+            this.currentAccumulatedTranscript.trim().length > 0 ||
+            this.currentInterimTranscript.trim().length > 0;
+
+          if (hasSpoken) {
+            finalizeAndDeliver();
+            return;
+          }
+
+          if (unlimitedThinking) {
+            // User is still thinking -> keep session open by letting onend transparently restart
+            return;
+          }
+
+          callbacks.onError?.(
+            'no-speech',
+            'לא זוהה דיבור במיקרופון. ודא שהמיקרופון פעיל ונסה לדבר שוב.'
+          );
+          return;
+        }
+
+        let msg = 'שגיאה בזיהוי קולי.';
+        if (code === 'not-allowed' || code === 'service-not-allowed') {
+          this.micPermissionGrantedInSession = false;
+          msg = 'נדרש אישור גישה למיקרופון להפעלת מבחן השליפה הקולי.';
+          this.stopListening({ silent: true });
+          callbacks.onError?.(code, msg);
+          callbacks.onEnd?.();
+          return;
+        } else if (code === 'audio-capture') {
+          msg = 'לא נמצא מיקרופון תקין במכשיר.';
+          this.stopListening({ silent: true });
+          callbacks.onError?.(code, msg);
+          callbacks.onEnd?.();
+          return;
+        } else if (code === 'network') {
+          msg = 'שגיאת רשת בשירות הזיהוי הקולי.';
+        }
+
+        callbacks.onError?.(code, msg);
+      };
+
+      rec.onend = () => {
+        if (sessionId !== this.activeSessionId || isSessionFinalized) return;
+
+        const hasSpoken =
+          this.currentAccumulatedTranscript.trim().length > 0 ||
+          this.currentInterimTranscript.trim().length > 0;
+
+        if (hasSpoken) {
+          // User spoke and recognition ended -> deliver their full answer immediately
+          finalizeAndDeliver();
+          return;
+        }
+
+        if (unlimitedThinking && this.isListeningState) {
+          // User has not spoken yet and is still thinking -> transparently reopen recognition
+          // within the same single session lock so thinking time is unlimited.
+          this.restartTimer = setTimeout(() => {
+            if (sessionId === this.activeSessionId && this.isListeningState && !isSessionFinalized) {
+              launchRecognitionInstance();
+            }
+          }, 120);
+          return;
+        }
+
+        this.isListeningState = false;
+        this.isStartingListening = false;
+        callbacks.onEnd?.();
+      };
+
+      try {
+        rec.start();
+      } catch {
+        // Retry once after brief delay if browser speech engine was busy closing previous handle
+        this.restartTimer = setTimeout(() => {
+          if (sessionId === this.activeSessionId && this.isListeningState && !isSessionFinalized) {
+            try {
+              rec.start();
+            } catch {
+              this.isListeningState = false;
+              this.isStartingListening = false;
+              callbacks.onEnd?.();
+            }
+          }
+        }, 180);
+      }
+    };
+
+    if (!unlimitedThinking && initialSilenceTimeoutMs > 0) {
+      this.silenceTimer = setTimeout(() => {
+        if (sessionId === this.activeSessionId && this.isListeningState) {
+          this.stopListening();
+        }
+      }, initialSilenceTimeoutMs);
     }
 
-    // 3. If question asked for Action
-    if (questionType === 'action') {
-      const isCorrect = isHebrewFuzzyMatch(cleanSpoken, expectedPao.action);
-      return { isCorrect, detectedTarget: expectedPao.action };
+    launchRecognitionInstance();
+  }
+
+  /**
+   * Manually completes the current listening session immediately and submits any accumulated speech.
+   */
+  public completeListeningNow() {
+    if (!this.isListeningState && !this.recognition) return;
+    const fullText = [this.currentAccumulatedTranscript, this.currentInterimTranscript]
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    const cb = this.currentCallbacks;
+    this.stopListening({ silent: true });
+
+    if (cb) {
+      if (fullText) {
+        cb.onFinalResult?.(fullText);
+      }
+      cb.onEnd?.();
+    }
+  }
+
+  public stopListening(options?: { silent?: boolean }) {
+    this.activeSessionId += 1;
+    this.isListeningState = false;
+    this.isStartingListening = false;
+    this.clearAllRecognitionTimers();
+    this.detachAndDestroyRecognition();
+    this.stopActiveMediaStream();
+    if (!options?.silent && this.currentCallbacks?.onEnd) {
+      const cb = this.currentCallbacks;
+      this.currentCallbacks = null;
+      cb.onEnd?.();
+    } else {
+      this.currentCallbacks = null;
+    }
+  }
+
+  public getIsListening(): boolean {
+    return this.isListeningState || this.isStartingListening;
+  }
+
+  /**
+   * Sends the user's transcribed response to Gemini on the backend (/api/gemini/evaluate-recall)
+   * for conceptual semantic evaluation against the target answer in the database.
+   */
+  public async evaluateAnswerWithGemini(params: {
+    question: string;
+    userResponse: string;
+    targetAnswer: string;
+    targetTriplet?: string;
+    targetScene?: string;
+    acceptableAlternatives?: string[];
+    context?: string;
+  }): Promise<SemanticRecallEvalResult> {
+    const cleanUser = (params.userResponse || '').trim();
+    if (!cleanUser) {
+      return {
+        isCorrect: false,
+        score: 0,
+        verdictTitle: 'לא נקלטה תשובה',
+        explanation: `התשובה הנכונה היא: ${params.targetAnswer}`,
+      };
     }
 
-    // 4. If question asked for Object
-    if (questionType === 'object') {
-      const isCorrect = isHebrewFuzzyMatch(cleanSpoken, expectedPao.object);
-      return { isCorrect, detectedTarget: expectedPao.object };
+    // Fast path: if local fuzzy match already confirms an exact or near-exact match, return immediately
+    const localFastCheck = this.evaluateAnswer(
+      cleanUser,
+      [
+        params.targetAnswer,
+        ...(params.acceptableAlternatives || []),
+        ...(params.targetScene ? [params.targetScene] : []),
+      ].filter(Boolean)
+    );
+    if (localFastCheck.isCorrect) {
+      return {
+        isCorrect: true,
+        score: 100,
+        verdictTitle: 'תשובה מדויקת!',
+        explanation: 'התשובה תואמת במדויק למסד הנתונים.',
+        matchedValue: localFastCheck.matchedTarget,
+      };
     }
 
-    // 5. If question asked for the full Triplet (e.g. "מה השלשה של 45?")
-    // The user may speak all 3, or at least 2 components, or the scene
-    const pMatch = isHebrewFuzzyMatch(cleanSpoken, expectedPao.person);
-    const aMatch = isHebrewFuzzyMatch(cleanSpoken, expectedPao.action);
-    const oMatch = isHebrewFuzzyMatch(cleanSpoken, expectedPao.object);
+    try {
+      const res = await fetch('/api/gemini/evaluate-recall', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question: params.question,
+          targetAssociation: params.targetAnswer,
+          targetTriplet: params.targetTriplet || '',
+          targetScene: params.targetScene || '',
+          userResponse: cleanUser,
+          context: params.context || 'מבחן שליפה קולי Hands-Free',
+        }),
+      });
 
-    let matchCount = 0;
-    if (pMatch) matchCount++;
-    if (aMatch) matchCount++;
-    if (oMatch) matchCount++;
-
-    // User spoke at least 2 components or scene contains spoken keywords
-    const isCorrect = matchCount >= 2 || (matchCount >= 1 && (expectedPao.person.length > 3 || expectedPao.object.length > 3));
+      if (res.ok) {
+        const data = await res.json();
+        return {
+          isCorrect: Boolean(data.isCorrect),
+          score: typeof data.score === 'number' ? data.score : data.isCorrect ? 95 : 25,
+          verdictTitle: data.verdictTitle || (data.isCorrect ? 'תשובה נכונה!' : 'תשובה לא מדויקת'),
+          explanation:
+            data.explanation ||
+            (data.isCorrect
+              ? 'המשמעות תואמת לתשובת היעד במסד הנתונים.'
+              : `התשובה הנכונה היא: ${params.targetAnswer}`),
+          memoryTip: data.memoryTip,
+          matchedValue: params.targetAnswer,
+        };
+      }
+    } catch (err) {
+      console.warn('Gemini semantic evaluation fallback to local match:', err);
+    }
 
     return {
-      isCorrect,
-      detectedTarget: `${expectedPao.person}, ${expectedPao.action}, ${expectedPao.object}`,
+      isCorrect: localFastCheck.isCorrect,
+      score: localFastCheck.isCorrect ? 90 : 20,
+      verdictTitle: localFastCheck.isCorrect ? 'תשובה נכונה!' : 'תשובה לא מדויקת',
+      explanation: localFastCheck.isCorrect
+        ? 'נמצאה התאמה לתשובת היעד.'
+        : `התשובה הנכונה היא: ${params.targetAnswer}`,
+      matchedValue: localFastCheck.matchedTarget,
     };
+  }
+
+  /**
+   * Evaluates a spoken Hebrew response against one or more expected target strings locally.
+   */
+  public evaluateAnswer(
+    spokenTranscript: string,
+    expectedTargets: string[]
+  ): { isCorrect: boolean; matchedTarget?: string } {
+    const cleanSpoken = spokenTranscript
+      .trim()
+      .replace(/[.,!?״"']/g, '')
+      .replace(/\s+/g, ' ');
+
+    if (!cleanSpoken) return { isCorrect: false };
+
+    const digitMap: Record<string, string[]> = {
+      '0': ['אפס'],
+      '1': ['אחד', 'אחת'],
+      '2': ['שתיים', 'שניים', 'שתי', 'שני'],
+      '3': ['שלוש', 'שלושה'],
+      '4': ['ארבע', 'ארבעה'],
+      '5': ['חמש', 'חמישה'],
+      '6': ['שש', 'שישה'],
+      '7': ['שבע', 'שבעה'],
+      '8': ['שמונה'],
+      '9': ['תשע', 'תשעה'],
+      '00': ['אפס אפס', 'מאה'],
+    };
+
+    for (const rawTarget of expectedTargets) {
+      if (!rawTarget) continue;
+      const cleanTarget = rawTarget
+        .trim()
+        .replace(/\([^)]*\)/g, '')
+        .replace(/[.,!?״"']/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (!cleanTarget) continue;
+
+      if (isHebrewFuzzyMatch(cleanSpoken, cleanTarget)) {
+        return { isCorrect: true, matchedTarget: rawTarget };
+      }
+
+      if (
+        cleanSpoken.length >= 2 &&
+        (cleanSpoken.includes(cleanTarget) || cleanTarget.includes(cleanSpoken))
+      ) {
+        return { isCorrect: true, matchedTarget: rawTarget };
+      }
+
+      const targetTokens = cleanTarget.split(/[\s\-/]+/).filter((t) => t.length >= 2);
+      const spokenTokens = cleanSpoken.split(/[\s\-/]+/).filter((t) => t.length >= 2);
+
+      if (targetTokens.length > 1) {
+        const matchedTokensCount = targetTokens.filter((tt) =>
+          spokenTokens.some((st) => isHebrewFuzzyMatch(st, tt))
+        ).length;
+        if (matchedTokensCount >= 1 && spokenTokens.length >= 1) {
+          if (
+            matchedTokensCount === targetTokens.length ||
+            isHebrewFuzzyMatch(spokenTokens[0], targetTokens[0])
+          ) {
+            return { isCorrect: true, matchedTarget: rawTarget };
+          }
+        }
+      }
+
+      if (digitMap[cleanTarget]) {
+        if (digitMap[cleanTarget].some((word) => cleanSpoken.includes(word))) {
+          return { isCorrect: true, matchedTarget: rawTarget };
+        }
+      }
+    }
+
+    return { isCorrect: false };
   }
 }
 

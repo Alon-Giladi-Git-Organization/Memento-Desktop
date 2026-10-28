@@ -3,25 +3,25 @@ import {
   Hash,
   User,
   Smile,
-  Layers,
-  Sparkles,
+  Compass,
   BookOpen,
 } from 'lucide-react';
 import {
   MajorItem,
   PAOItem,
-  PegShapeItem,
-  BodyPegItem,
   PersonFaceCard,
   AbstractShapeCard,
   AcademicKeyPoint,
+  MemoryPalace,
+  PalaceLocus,
 } from '../types/memory';
 import { MajorModule } from './workouts/MajorModule';
 import { PAOModule } from './workouts/PAOModule';
 import { NamesFacesModule } from './workouts/NamesFacesModule';
-import { PegsModule } from './workouts/PegsModule';
-import { ShapesModule } from './workouts/ShapesModule';
 import { AcademicModule } from './workouts/AcademicModule';
+import { PalacesManager } from './PalacesManager';
+
+export type WorkoutCategory = 'pao' | 'major' | 'palaces' | 'names' | 'academic';
 
 export interface WorkoutsHubProps {
   selectedSubModule?: WorkoutCategory;
@@ -29,8 +29,7 @@ export interface WorkoutsHubProps {
   majorDigits: MajorItem[];
   majorItems: MajorItem[];
   paoItems: PAOItem[];
-  shapePegs: PegShapeItem[];
-  bodyPegs: BodyPegItem[];
+  palaces: MemoryPalace[];
   peopleCards: PersonFaceCard[];
   abstractShapes: AbstractShapeCard[];
   academicPoints: AcademicKeyPoint[];
@@ -60,7 +59,7 @@ export interface WorkoutsHubProps {
   onAddPAOItem?: (item: PAOItem) => void;
   onUpdatePAOItem: (
     number: number,
-    updates: { person?: string; action?: string; object?: string; scene?: string; is_ready_for_practice?: boolean }
+    updates: { person?: string; action?: string; object?: string; scene?: string; imageUrl?: string; is_ready_for_practice?: boolean }
   ) => void;
   onDeletePAOItem?: (number: number) => void;
   onResetPAOItem: (number: number) => void;
@@ -68,24 +67,20 @@ export interface WorkoutsHubProps {
   onSetAllPAOReady?: (ready: boolean, numbers?: number[]) => void;
   onSyncMajorAndPAOObjects?: (direction: 'majorToPao' | 'paoToMajor') => void;
   onRestoreOriginalPAO?: () => Promise<any>;
-  onAddShapePeg?: (item: PegShapeItem) => void;
-  onUpdateShapePeg: (
-    number: number,
-    updates: { defaultObject?: string; shapeName?: string; kineticTip?: string; is_ready_for_practice?: boolean }
+  onAddPalace: (name: string, description: string, category?: 'home' | 'familiar_route' | 'custom') => void;
+  onUpdatePalace?: (palaceId: string, updates: { name?: string; description?: string }) => void;
+  onDeletePalace: (id: string) => void;
+  onAddLocus: (
+    palaceId: string,
+    title: string,
+    roomName: string,
+    positionDescription: string,
+    storedContent: string,
+    mnemonicScene: string
   ) => void;
-  onDeleteShapePeg?: (number: number) => void;
-  onResetShapePeg: (number: number) => void;
-  onToggleShapePegReady?: (number: number, explicitState?: boolean) => void;
-  onSetAllShapePegsReady?: (ready: boolean) => void;
-  onAddBodyPeg?: (item: BodyPegItem) => void;
-  onUpdateBodyPeg: (
-    index: number,
-    updates: { defaultObject?: string; bodyPartHebrew?: string; kineticTip?: string; is_ready_for_practice?: boolean }
-  ) => void;
-  onDeleteBodyPeg?: (index: number) => void;
-  onResetBodyPeg: (index: number) => void;
-  onToggleBodyPegReady?: (index: number, explicitState?: boolean) => void;
-  onSetAllBodyPegsReady?: (ready: boolean) => void;
+  onUpdateLocus: (palaceId: string, locusId: string, updates: Partial<PalaceLocus>) => void;
+  onDeleteLocus: (palaceId: string, locusId: string) => void;
+  onSetAllLociReady?: (palaceId: string, ready: boolean) => void;
   onAddPersonFaceCard?: (person: Omit<PersonFaceCard, 'id'>) => void;
   onUpdatePersonFaceCard?: (id: string, updates: Partial<PersonFaceCard>) => void;
   onDeletePersonFaceCard?: (id: string) => void;
@@ -105,16 +100,13 @@ export interface WorkoutsHubProps {
   onLogin?: () => void;
 }
 
-type WorkoutCategory = 'major' | 'pao' | 'names' | 'pegs' | 'academic';
-
 export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
   selectedSubModule,
   onSubModuleChange,
   majorDigits,
   majorItems,
   paoItems,
-  shapePegs,
-  bodyPegs,
+  palaces,
   peopleCards,
   academicPoints,
   currentUser,
@@ -141,18 +133,13 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
   onSetAllPAOReady,
   onSyncMajorAndPAOObjects,
   onRestoreOriginalPAO,
-  onAddShapePeg,
-  onUpdateShapePeg,
-  onDeleteShapePeg,
-  onResetShapePeg,
-  onToggleShapePegReady,
-  onSetAllShapePegsReady,
-  onAddBodyPeg,
-  onUpdateBodyPeg,
-  onDeleteBodyPeg,
-  onResetBodyPeg,
-  onToggleBodyPegReady,
-  onSetAllBodyPegsReady,
+  onAddPalace,
+  onUpdatePalace,
+  onDeletePalace,
+  onAddLocus,
+  onUpdateLocus,
+  onDeleteLocus,
+  onSetAllLociReady,
   onAddPersonFaceCard,
   onUpdatePersonFaceCard,
   onDeletePersonFaceCard,
@@ -170,7 +157,7 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
   const [slideDirection, setSlideDirection] = useState<'forward' | 'backward'>('forward');
   const prevModuleRef = React.useRef<WorkoutCategory>(activeModule);
 
-  const moduleOrder: WorkoutCategory[] = ['pao', 'major', 'names', 'pegs', 'academic'];
+  const moduleOrder: WorkoutCategory[] = ['pao', 'major', 'palaces', 'names', 'academic'];
 
   React.useEffect(() => {
     if (selectedSubModule && selectedSubModule !== activeModule) {
@@ -213,24 +200,24 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
       count: majorItems.length,
     },
     {
+      id: 'palaces' as const,
+      title: '3. ארמונות זיכרון',
+      subtitle: 'שיטת המקומות (Loci)',
+      icon: Compass,
+      color: '#1CB0F6',
+      bgActive: 'bg-[#1CB0F6]/10 border-[#1CB0F6] border-b-4 border-b-[#1899d6] text-slate-900 shadow-sm',
+      badgeBg: 'bg-[#1CB0F6]/20 text-[#0d7bb0]',
+      count: palaces.length,
+    },
+    {
       id: 'names' as const,
-      title: '3. שמות ופנים',
+      title: '4. שמות ופנים',
       subtitle: 'עוגנים מורפולוגיים',
       icon: Smile,
       color: '#FF9600',
       bgActive: 'bg-[#FF9600]/10 border-[#FF9600] border-b-4 border-b-[#e07e00] text-slate-900 shadow-sm',
       badgeBg: 'bg-[#FF9600]/20 text-[#b35900]',
       count: peopleCards.length,
-    },
-    {
-      id: 'pegs' as const,
-      title: '4. מתלי צורה וגוף',
-      subtitle: 'Peg Systems',
-      icon: Layers,
-      color: '#FFC800',
-      bgActive: 'bg-[#FFC800]/15 border-[#FFC800] border-b-4 border-b-[#d9a700] text-slate-900 shadow-sm',
-      badgeBg: 'bg-[#FFC800]/30 text-[#8c6500]',
-      count: shapePegs.length + bodyPegs.length,
     },
     {
       id: 'academic' as const,
@@ -297,9 +284,6 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
           const Icon = m.icon;
           const isActive = activeModule === m.id;
 
-          // דפוס M3 מספר 4: Shape Morphing / Expressive Spring (שינוי צורה וקפיציות במיקרו-אינטראקציה)
-          // כפתורי המודולות מגיבים בריחוף עם שינוי רדיוס פינות וקפיציות פיזיקלית (M3 spring curves),
-          // ומעניקים פידבק קינטי מודרני בעת בחירה.
           return (
             <button
               key={m.id}
@@ -341,10 +325,7 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
         })}
       </div>
 
-      {/* דפוס M3 מספר 2: Shared Axis - ציר X (מעבר אופקי סדרתי)
-          נבחר עבור החלפת תתי-האימונים (PAO -> Major -> Names -> Pegs -> Academic)
-          לפי Google Material Motion, מעבר בין טאבים בעלי סדר לימודי מוגדר נע לאורך ציר ה-X,
-          ומעניק לתלמיד תחושת התקדמות טבעית ויציבות מרחבית. */}
+      {/* דפוס M3 מספר 2: Shared Axis - ציר X (מעבר אופקי סדרתי) */}
       <div
         key={activeModule}
         className={`w-full ${
@@ -375,79 +356,74 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
           />
         )}
 
-      {activeModule === 'pao' && (
-        <PAOModule
-          paoItems={paoItems}
-          majorItems={majorItems}
-          majorDigits={majorDigits}
-          connectingLetters={connectingLetters}
-          onEarnPoints={onEarnPoints}
-          onUnlockBadge={onUnlockBadge}
-          onAddPAOItem={onAddPAOItem}
-          onUpdatePAOItem={onUpdatePAOItem}
-          onUpdateMajorItem={onUpdateMajorItem}
-          onDeletePAOItem={onDeletePAOItem}
-          onResetPAOItem={onResetPAOItem}
-          onTogglePAOReady={onTogglePAOReady}
-          onSetAllPAOReady={onSetAllPAOReady}
-          onOpenSummary={onOpenSummary}
-          onNavigateToLogicTab={onNavigateToLogicTab}
-          onSyncMajorAndPAOObjects={onSyncMajorAndPAOObjects}
-          onRestoreOriginalPAO={onRestoreOriginalPAO}
-          currentUser={currentUser}
-          onLogin={onLogin}
-        />
-      )}
+        {activeModule === 'pao' && (
+          <PAOModule
+            paoItems={paoItems}
+            majorItems={majorItems}
+            majorDigits={majorDigits}
+            connectingLetters={connectingLetters}
+            onEarnPoints={onEarnPoints}
+            onUnlockBadge={onUnlockBadge}
+            onAddPAOItem={onAddPAOItem}
+            onUpdatePAOItem={onUpdatePAOItem}
+            onUpdateMajorItem={onUpdateMajorItem}
+            onDeletePAOItem={onDeletePAOItem}
+            onResetPAOItem={onResetPAOItem}
+            onTogglePAOReady={onTogglePAOReady}
+            onSetAllPAOReady={onSetAllPAOReady}
+            onOpenSummary={onOpenSummary}
+            onNavigateToLogicTab={onNavigateToLogicTab}
+            onSyncMajorAndPAOObjects={onSyncMajorAndPAOObjects}
+            onRestoreOriginalPAO={onRestoreOriginalPAO}
+            currentUser={currentUser}
+            onLogin={onLogin}
+          />
+        )}
 
-      {activeModule === 'names' && (
-        <NamesFacesModule
-          peopleCards={peopleCards}
-          onEarnPoints={onEarnPoints}
-          onUnlockBadge={onUnlockBadge}
-          onAddPersonFaceCard={onAddPersonFaceCard}
-          onUpdatePersonFaceCard={onUpdatePersonFaceCard}
-          onDeletePersonFaceCard={onDeletePersonFaceCard}
-          onResetPersonFaceCards={onResetPersonFaceCards}
-          onTogglePersonReady={onTogglePersonReady}
-          onSetAllPeopleReady={onSetAllPeopleReady}
-          onOpenSummary={onOpenSummary}
-        />
-      )}
+        {activeModule === 'palaces' && (
+          <PalacesManager
+            palaces={palaces}
+            onAddPalace={onAddPalace}
+            onUpdatePalace={onUpdatePalace}
+            onDeletePalace={onDeletePalace}
+            onAddLocus={onAddLocus}
+            onUpdateLocus={onUpdateLocus}
+            onDeleteLocus={onDeleteLocus}
+            onSetAllLociReady={onSetAllLociReady}
+            onEarnPoints={onEarnPoints}
+            onUnlockBadge={onUnlockBadge}
+            isAuthenticated={!!currentUser}
+            onOpenSummary={onOpenSummary}
+          />
+        )}
 
-      {activeModule === 'pegs' && (
-        <PegsModule
-          shapePegs={shapePegs}
-          bodyPegs={bodyPegs}
-          onEarnPoints={onEarnPoints}
-          onUnlockBadge={onUnlockBadge}
-          onAddShapePeg={onAddShapePeg}
-          onUpdateShapePeg={onUpdateShapePeg}
-          onDeleteShapePeg={onDeleteShapePeg}
-          onResetShapePeg={onResetShapePeg}
-          onToggleShapePegReady={onToggleShapePegReady}
-          onSetAllShapePegsReady={onSetAllShapePegsReady}
-          onAddBodyPeg={onAddBodyPeg}
-          onUpdateBodyPeg={onUpdateBodyPeg}
-          onDeleteBodyPeg={onDeleteBodyPeg}
-          onResetBodyPeg={onResetBodyPeg}
-          onToggleBodyPegReady={onToggleBodyPegReady}
-          onSetAllBodyPegsReady={onSetAllBodyPegsReady}
-          onOpenSummary={onOpenSummary}
-        />
-      )}
+        {activeModule === 'names' && (
+          <NamesFacesModule
+            peopleCards={peopleCards}
+            onEarnPoints={onEarnPoints}
+            onUnlockBadge={onUnlockBadge}
+            onAddPersonFaceCard={onAddPersonFaceCard}
+            onUpdatePersonFaceCard={onUpdatePersonFaceCard}
+            onDeletePersonFaceCard={onDeletePersonFaceCard}
+            onResetPersonFaceCards={onResetPersonFaceCards}
+            onTogglePersonReady={onTogglePersonReady}
+            onSetAllPeopleReady={onSetAllPeopleReady}
+            onOpenSummary={onOpenSummary}
+          />
+        )}
 
-      {activeModule === 'academic' && (
-        <AcademicModule
-          academicPoints={academicPoints}
-          onEarnPoints={onEarnPoints}
-          onUnlockBadge={onUnlockBadge}
-          onAddAcademicPoint={onAddAcademicPoint}
-          onUpdateAcademicPoint={onUpdateAcademicPoint}
-          onDeleteAcademicPoint={onDeleteAcademicPoint}
-          onResetAcademicPoints={onResetAcademicPoints}
-          onOpenSummary={onOpenSummary}
-        />
-      )}
+        {activeModule === 'academic' && (
+          <AcademicModule
+            academicPoints={academicPoints}
+            onEarnPoints={onEarnPoints}
+            onUnlockBadge={onUnlockBadge}
+            onAddAcademicPoint={onAddAcademicPoint}
+            onUpdateAcademicPoint={onUpdateAcademicPoint}
+            onDeleteAcademicPoint={onDeleteAcademicPoint}
+            onResetAcademicPoints={onResetAcademicPoints}
+            onOpenSummary={onOpenSummary}
+          />
+        )}
       </div>
     </div>
   );

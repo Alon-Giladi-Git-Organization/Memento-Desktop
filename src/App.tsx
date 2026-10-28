@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useMemoryStore } from './hooks/useMemoryStore';
-import { Navbar, TabType } from './components/Navbar';
+import { Navbar, TabType, WorkoutSubModule } from './components/Navbar';
 import { WorkoutsHub } from './components/WorkoutsHub';
-import { PalacesManager } from './components/PalacesManager';
 import { SmartAITester } from './components/SmartAITester';
 import { AIFeedbackDashboard } from './components/AIFeedbackDashboard';
 import { GamificationHub } from './components/GamificationHub';
@@ -17,9 +16,7 @@ import { BeginnersAcademyModule } from './components/BeginnersAcademyModule';
 
 export default function App() {
   const [currentTab, setCurrentTab] = useState<TabType>('workouts');
-  const [selectedWorkoutSubModule, setSelectedWorkoutSubModule] = useState<
-    'major' | 'pao' | 'names' | 'pegs' | 'academic' | undefined
-  >('pao');
+  const [selectedWorkoutSubModule, setSelectedWorkoutSubModule] = useState<WorkoutSubModule>('pao');
   const [activeSummaryTechnique, setActiveSummaryTechnique] = useState<string | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
@@ -38,7 +35,7 @@ export default function App() {
   const handleSearchNavigate = (tab: TabType, subModule?: string, itemId?: string | number) => {
     setCurrentTab(tab);
     if (tab === 'workouts' && subModule) {
-      setSelectedWorkoutSubModule(subModule as any);
+      setSelectedWorkoutSubModule(subModule as WorkoutSubModule);
     }
     if (itemId !== undefined) {
       setTimeout(() => {
@@ -47,9 +44,7 @@ export default function App() {
           document.getElementById(`pao-item-${itemId}`) ||
           document.getElementById(`locus-${itemId}`) ||
           document.getElementById(`palace-card-${itemId}`) ||
-          document.getElementById(`person-card-${itemId}`) ||
-          document.getElementById(`shape-peg-${itemId}`) ||
-          document.getElementById(`body-peg-${itemId}`);
+          document.getElementById(`person-card-${itemId}`);
         if (el) {
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
@@ -112,15 +107,9 @@ export default function App() {
     addShapePeg,
     updateShapePeg,
     deleteShapePeg,
-    resetShapePeg,
-    toggleShapePegReady,
-    setAllShapePegsReady,
     addBodyPeg,
     updateBodyPeg,
     deleteBodyPeg,
-    resetBodyPeg,
-    toggleBodyPegReady,
-    setAllBodyPegsReady,
     addPersonFaceCard,
     updatePersonFaceCard,
     deletePersonFaceCard,
@@ -234,6 +223,18 @@ export default function App() {
       <Navbar
         currentTab={currentTab}
         onTabChange={setCurrentTab}
+        selectedWorkoutSubModule={selectedWorkoutSubModule}
+        onSelectWorkoutSubModule={(sub) => {
+          setSelectedWorkoutSubModule(sub);
+          setCurrentTab('workouts');
+        }}
+        workoutCounts={{
+          pao: paoItems.length,
+          major: majorItems.length,
+          palaces: palaces.length,
+          names: peopleCards.length,
+          academic: academicPoints.length,
+        }}
         savedAssociationsCount={personalAssociations.length}
         testCount={testResults.length}
         averageScore={averageScore}
@@ -255,243 +256,212 @@ export default function App() {
       <div className="flex-1 min-w-0 flex flex-col w-full">
         {/* Main Content Area */}
         <main className="flex-1 w-full max-w-none px-3 sm:px-6 lg:px-8 xl:px-10 pt-4 sm:pt-8 pb-12 overflow-x-hidden">
-        {/* דפוס M3 מספר 3: Fade Through (דהייה והחלפה קונטקסטואלית)
-            נבחר עבור הניווט הראשי בין מסכי האפליקציה (Workouts, Palaces, AI Tester, Logic וכו').
-            לפי הנחיות Google Material Motion, כאשר עוברים בין יעדים שאין ביניהם קשר ציר או סדרתיות ישירה,
-            האלמנט היוצא דוהה החוצה והנכנס מבצע Scale מ-0.96 ל-1.0 עם דהייה רכה, ללא Layout Thrashing. */}
-        <div key={currentTab} className="w-full m3-fade-through">
-          {currentTab === 'workouts' && (
-          <WorkoutsHub
-            selectedSubModule={selectedWorkoutSubModule}
-            onSubModuleChange={setSelectedWorkoutSubModule}
-            currentUser={currentUser}
-            onLogin={loginWithGoogle}
-            majorDigits={majorDigits}
-            connectingLetters={connectingLetters}
-            majorItems={majorItems}
-            paoItems={paoItems}
-            shapePegs={shapePegs}
-            bodyPegs={bodyPegs}
-            peopleCards={peopleCards}
-            abstractShapes={abstractShapes}
-            academicPoints={academicPoints}
-            onEarnPoints={earnPoints}
-            onUnlockBadge={unlockBadge}
-            onNavigateToLogicTab={() => setCurrentTab('logic')}
-            onNavigateToAcademyTab={() => setCurrentTab('academy')}
-            onUpdateMajorDigit={updateMajorDigit}
-            onResetMajorDigit={resetMajorDigit}
-            onRecalculateMajor00_99FromDigits={recalculateMajor00_99FromDigits}
-            onAddMajorItem={addMajorItem}
-            onUpdateMajorItem={updateMajorItem}
-            onDeleteMajorItem={deleteMajorItem}
-            onResetMajorItem={resetMajorItem}
-            onToggleMajorReady={toggleMajorReady}
-            onSetAllMajorReady={setAllMajorReady}
-            onAddPAOItem={addPAOItem}
-            onUpdatePAOItem={updatePAOItem}
-            onDeletePAOItem={deletePAOItem}
-            onResetPAOItem={resetPAOItem}
-            onTogglePAOReady={togglePAOReady}
-            onSetAllPAOReady={setAllPAOReady}
-            onSyncMajorAndPAOObjects={syncMajorAndPAOObjects}
-            onRestoreOriginalPAO={restoreOriginalPAO}
-            onAddShapePeg={addShapePeg}
-            onUpdateShapePeg={updateShapePeg}
-            onDeleteShapePeg={deleteShapePeg}
-            onResetShapePeg={resetShapePeg}
-            onToggleShapePegReady={toggleShapePegReady}
-            onSetAllShapePegsReady={setAllShapePegsReady}
-            onAddBodyPeg={addBodyPeg}
-            onUpdateBodyPeg={updateBodyPeg}
-            onDeleteBodyPeg={deleteBodyPeg}
-            onResetBodyPeg={resetBodyPeg}
-            onToggleBodyPegReady={toggleBodyPegReady}
-            onSetAllBodyPegsReady={setAllBodyPegsReady}
-            onAddPersonFaceCard={addPersonFaceCard}
-            onUpdatePersonFaceCard={updatePersonFaceCard}
-            onDeletePersonFaceCard={deletePersonFaceCard}
-            onResetPersonFaceCards={resetPersonFaceCards}
-            onTogglePersonReady={togglePersonReady}
-            onSetAllPeopleReady={setAllPeopleReady}
-            onAddAbstractShape={addAbstractShape}
-            onUpdateAbstractShape={updateAbstractShape}
-            onDeleteAbstractShape={deleteAbstractShape}
-            onResetAbstractShapes={resetAbstractShapes}
-            onAddAcademicPoint={addAcademicPoint}
-            onUpdateAcademicPoint={updateAcademicPoint}
-            onDeleteAcademicPoint={deleteAcademicPoint}
-            onResetAcademicPoints={resetAcademicPoints}
-            onOpenSummary={(techId) => setActiveSummaryTechnique(techId)}
-          />
-        )}
+          <div key={currentTab} className="w-full m3-fade-through">
+            {currentTab === 'workouts' && (
+              <WorkoutsHub
+                selectedSubModule={selectedWorkoutSubModule}
+                onSubModuleChange={setSelectedWorkoutSubModule}
+                currentUser={currentUser}
+                onLogin={loginWithGoogle}
+                majorDigits={majorDigits}
+                connectingLetters={connectingLetters}
+                majorItems={majorItems}
+                paoItems={paoItems}
+                palaces={palaces}
+                peopleCards={peopleCards}
+                abstractShapes={abstractShapes}
+                academicPoints={academicPoints}
+                onEarnPoints={earnPoints}
+                onUnlockBadge={unlockBadge}
+                onNavigateToLogicTab={() => setCurrentTab('logic')}
+                onNavigateToAcademyTab={() => setCurrentTab('academy')}
+                onUpdateMajorDigit={updateMajorDigit}
+                onResetMajorDigit={resetMajorDigit}
+                onRecalculateMajor00_99FromDigits={recalculateMajor00_99FromDigits}
+                onAddMajorItem={addMajorItem}
+                onUpdateMajorItem={updateMajorItem}
+                onDeleteMajorItem={deleteMajorItem}
+                onResetMajorItem={resetMajorItem}
+                onToggleMajorReady={toggleMajorReady}
+                onSetAllMajorReady={setAllMajorReady}
+                onAddPAOItem={addPAOItem}
+                onUpdatePAOItem={updatePAOItem}
+                onDeletePAOItem={deletePAOItem}
+                onResetPAOItem={resetPAOItem}
+                onTogglePAOReady={togglePAOReady}
+                onSetAllPAOReady={setAllPAOReady}
+                onSyncMajorAndPAOObjects={syncMajorAndPAOObjects}
+                onRestoreOriginalPAO={restoreOriginalPAO}
+                onAddPalace={addMemoryPalace}
+                onUpdatePalace={updatePalace}
+                onDeletePalace={deletePalace}
+                onAddLocus={addPalaceLocus}
+                onUpdateLocus={updatePalaceLocus}
+                onDeleteLocus={deletePalaceLocus}
+                onSetAllLociReady={setAllPalaceLociReady}
+                onAddPersonFaceCard={addPersonFaceCard}
+                onUpdatePersonFaceCard={updatePersonFaceCard}
+                onDeletePersonFaceCard={deletePersonFaceCard}
+                onResetPersonFaceCards={resetPersonFaceCards}
+                onTogglePersonReady={togglePersonReady}
+                onSetAllPeopleReady={setAllPeopleReady}
+                onAddAbstractShape={addAbstractShape}
+                onUpdateAbstractShape={updateAbstractShape}
+                onDeleteAbstractShape={deleteAbstractShape}
+                onResetAbstractShapes={resetAbstractShapes}
+                onAddAcademicPoint={addAcademicPoint}
+                onUpdateAcademicPoint={updateAcademicPoint}
+                onDeleteAcademicPoint={deleteAcademicPoint}
+                onResetAcademicPoints={resetAcademicPoints}
+                onOpenSummary={(techId) => setActiveSummaryTechnique(techId)}
+              />
+            )}
 
-        {currentTab === 'academy' && (
-          <BeginnersAcademyModule
-            majorDigits={majorDigits}
-            connectingLetters={connectingLetters}
-            majorItems={majorItems}
-            paoItems={paoItems}
-            palaces={palaces}
-            peopleCards={peopleCards}
-            onEarnPoints={earnPoints}
-            onUnlockBadge={unlockBadge}
-            onNavigateToPractice={(target) => {
-              if (target === 'palaces') {
-                setCurrentTab('palaces');
-              } else if (target === 'logic') {
-                setCurrentTab('logic');
-              } else {
-                setCurrentTab('workouts');
-                setSelectedWorkoutSubModule(target);
-              }
-            }}
-          />
-        )}
+            {currentTab === 'academy' && (
+              <BeginnersAcademyModule
+                majorDigits={majorDigits}
+                connectingLetters={connectingLetters}
+                majorItems={majorItems}
+                paoItems={paoItems}
+                palaces={palaces}
+                peopleCards={peopleCards}
+                onEarnPoints={earnPoints}
+                onUnlockBadge={unlockBadge}
+                onNavigateToPractice={(target) => {
+                  if (target === 'logic') {
+                    setCurrentTab('logic');
+                  } else {
+                    setCurrentTab('workouts');
+                    setSelectedWorkoutSubModule(target as WorkoutSubModule);
+                  }
+                }}
+              />
+            )}
 
-        {currentTab === 'logic' && (
-          <NumberLogicModule
-            majorDigits={majorDigits}
-            connectingLetters={connectingLetters}
-            majorItems={majorItems}
-            paoItems={paoItems}
-            onUpdateMajorDigit={updateMajorDigit}
-            onResetMajorDigit={resetMajorDigit}
-            onUpdateConnectingLetters={updateConnectingLetters}
-            onRecalculateMajor00_99FromDigits={recalculateMajor00_99FromDigits}
-            onEarnPoints={earnPoints}
-            onNavigateToWorkout={(cat) => {
-              setCurrentTab('workouts');
-              setSelectedWorkoutSubModule(cat);
-            }}
-          />
-        )}
+            {currentTab === 'logic' && (
+              <NumberLogicModule
+                majorDigits={majorDigits}
+                connectingLetters={connectingLetters}
+                majorItems={majorItems}
+                paoItems={paoItems}
+                onUpdateMajorDigit={updateMajorDigit}
+                onResetMajorDigit={resetMajorDigit}
+                onUpdateConnectingLetters={updateConnectingLetters}
+                onRecalculateMajor00_99FromDigits={recalculateMajor00_99FromDigits}
+                onEarnPoints={earnPoints}
+                onNavigateToWorkout={(cat) => {
+                  setCurrentTab('workouts');
+                  setSelectedWorkoutSubModule(cat);
+                }}
+              />
+            )}
 
-        {currentTab === 'palaces' && (
-          <PalacesManager
-            palaces={palaces}
-            onAddPalace={addMemoryPalace}
-            onUpdatePalace={updatePalace}
-            onDeletePalace={deletePalace}
-            onAddLocus={addPalaceLocus}
-            onUpdateLocus={updatePalaceLocus}
-            onDeleteLocus={deletePalaceLocus}
-            onSetAllLociReady={setAllPalaceLociReady}
-            onEarnPoints={earnPoints}
-            onUnlockBadge={unlockBadge}
-            isAuthenticated={!!currentUser}
-            onOpenSummary={(techId) => setActiveSummaryTechnique(techId)}
-          />
-        )}
+            {currentTab === 'tester' && (
+              <SmartAITester
+                majorItems={majorItems}
+                paoItems={paoItems}
+                peopleCards={peopleCards}
+                personalAssociations={personalAssociations}
+                palaces={palaces}
+                testResults={testResults}
+                onSaveTestResult={addTestResult}
+              />
+            )}
 
-        {currentTab === 'tester' && (
-          <SmartAITester
-            majorItems={majorItems}
-            paoItems={paoItems}
-            peopleCards={peopleCards}
-            personalAssociations={personalAssociations}
-            palaces={palaces}
-            testResults={testResults}
-            onSaveTestResult={addTestResult}
-          />
-        )}
+            {currentTab === 'feedback' && (
+              <AIFeedbackDashboard
+                feedbackReports={feedbackReports}
+                isAnalyzing={isAnalyzingFeedback}
+                onGenerateAnalysis={generateFeedbackAnalysis}
+                testResults={testResults}
+                profile={profile}
+                onEarnPoints={earnPoints}
+              />
+            )}
 
-        {currentTab === 'feedback' && (
-          <AIFeedbackDashboard
-            feedbackReports={feedbackReports}
-            isAnalyzing={isAnalyzingFeedback}
-            onGenerateAnalysis={generateFeedbackAnalysis}
-            testResults={testResults}
-            profile={profile}
-            onEarnPoints={earnPoints}
-          />
-        )}
+            {currentTab === 'gamification' && (
+              <GamificationHub
+                currentUser={currentUser}
+                profile={profile}
+                leaderboard={leaderboard}
+                dailyChallenge={dailyChallenge}
+                onLogin={loginWithGoogle}
+                onLogout={logout}
+                onCompleteDailyChallenge={completeDailyChallenge}
+                onEarnPoints={earnPoints}
+                onUnlockBadge={unlockBadge}
+              />
+            )}
 
-        {currentTab === 'gamification' && (
-          <GamificationHub
-            currentUser={currentUser}
-            profile={profile}
-            leaderboard={leaderboard}
-            dailyChallenge={dailyChallenge}
-            onLogin={loginWithGoogle}
-            onLogout={logout}
-            onCompleteDailyChallenge={completeDailyChallenge}
-            onEarnPoints={earnPoints}
-            onUnlockBadge={unlockBadge}
-          />
-        )}
+            {currentTab === 'registry' && (
+              <AssociationRegistry
+                associations={personalAssociations}
+                onAddAssociation={addPersonalAssociation}
+                onUpdateAssociation={updatePersonalAssociation}
+                onDeleteAssociation={deletePersonalAssociation}
+                onEarnPoints={earnPoints}
+                isAuthenticated={!!currentUser}
+              />
+            )}
 
-        {currentTab === 'registry' && (
-          <AssociationRegistry
-            associations={personalAssociations}
-            onAddAssociation={addPersonalAssociation}
-            onUpdateAssociation={updatePersonalAssociation}
-            onDeleteAssociation={deletePersonalAssociation}
-            onEarnPoints={earnPoints}
-            isAuthenticated={!!currentUser}
-          />
-        )}
+            {currentTab === 'mentor' && (
+              <AIMentorChat
+                messages={chatMessages}
+                onSendMessage={addChatMessage}
+                onEarnPoints={earnPoints}
+                userDatabase={userDatabaseSnapshot}
+                {...mentorCrudHandlers}
+              />
+            )}
 
-        {currentTab === 'mentor' && (
-          <AIMentorChat
-            messages={chatMessages}
-            onSendMessage={addChatMessage}
-            onEarnPoints={earnPoints}
-            userDatabase={userDatabaseSnapshot}
-            {...mentorCrudHandlers}
-          />
-        )}
+            {currentTab === 'theory' && <TheorySection />}
+          </div>
+        </main>
 
-        {currentTab === 'theory' && <TheorySection />}
-        </div>
-      </main>
+        {/* Global AI Mentor Floating Widget */}
+        <GlobalAIMentorWidget
+          userDatabase={userDatabaseSnapshot}
+          onEarnPoints={earnPoints}
+          {...mentorCrudHandlers}
+        />
 
-      {/* Global AI Mentor Floating Widget */}
-      <GlobalAIMentorWidget
-        userDatabase={userDatabaseSnapshot}
-        onEarnPoints={earnPoints}
-        {...mentorCrudHandlers}
-      />
+        {/* Technique Summary & Practical Examples Modal */}
+        <TechniqueSummaryModal
+          techniqueId={activeSummaryTechnique}
+          isOpen={!!activeSummaryTechnique}
+          onClose={() => setActiveSummaryTechnique(null)}
+          onNavigateToTheory={() => {
+            setActiveSummaryTechnique(null);
+            setCurrentTab('theory');
+          }}
+        />
 
-      {/* Technique Summary & Practical Examples Modal */}
-      <TechniqueSummaryModal
-        techniqueId={activeSummaryTechnique}
-        isOpen={!!activeSummaryTechnique}
-        onClose={() => setActiveSummaryTechnique(null)}
-        onNavigateToTheory={() => {
-          setActiveSummaryTechnique(null);
-          setCurrentTab('theory');
-        }}
-      />
+        {/* Global Universal Search Modal (Ctrl + K) */}
+        <GlobalSearchModal
+          isOpen={isSearchOpen}
+          onClose={() => setIsSearchOpen(false)}
+          majorItems={majorItems}
+          paoItems={paoItems}
+          peopleCards={peopleCards}
+          palaces={palaces}
+          academicPoints={academicPoints}
+          onNavigate={handleSearchNavigate}
+          onOpenSummary={(techId) => {
+            setActiveSummaryTechnique(techId);
+          }}
+        />
 
-      {/* Global Universal Search Modal (Ctrl + K) */}
-      <GlobalSearchModal
-        isOpen={isSearchOpen}
-        onClose={() => setIsSearchOpen(false)}
-        majorItems={majorItems}
-        paoItems={paoItems}
-        peopleCards={peopleCards}
-        palaces={palaces}
-        shapePegs={shapePegs}
-        bodyPegs={bodyPegs}
-        academicPoints={academicPoints}
-        onNavigate={handleSearchNavigate}
-        onOpenSummary={(techId) => {
-          setActiveSummaryTechnique(techId);
-        }}
-      />
-
-      {/* Footer */}
-      <footer className="border-t border-slate-200 bg-white/90 py-6 text-center text-xs text-slate-500 shadow-xs w-full max-w-full overflow-hidden">
-        <div className="w-full max-w-none px-4 sm:px-6 lg:px-8 xl:px-10 mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 flex-wrap">
-          <p className="font-medium text-slate-600">
-            ממנטו (Memento) • מבוסס על מחקרי נובל 2014, פרופ' אלינור מגווייר (UCL) ותקן אלופי העולם בזיכרון (WMC)
-          </p>
-          <p className="text-slate-400">
-            סנכרון ענן Firebase Firestore • אימות מאובטח ב-Google Auth • מנוע Gemini 3.8 Flash
-          </p>
-        </div>
-      </footer>
+        {/* Footer */}
+        <footer className="border-t border-slate-200 bg-white/90 py-6 text-center text-xs text-slate-500 shadow-xs w-full max-w-full overflow-hidden">
+          <div className="w-full max-w-none px-4 sm:px-6 lg:px-8 xl:px-10 mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 flex-wrap">
+            <p className="font-medium text-slate-600">
+              ממנטו (Memento) • מבוסס על מחקרי נובל 2014, פרופ' אלינור מגווייר (UCL) ותקן אלופי העולם בזיכרון (WMC)
+            </p>
+            <p className="text-slate-400">
+              סנכרון ענן Firebase Firestore • אימות מאובטח ב-Google Auth • מנוע Gemini 3.8 Flash
+            </p>
+          </div>
+        </footer>
       </div>
     </div>
   );

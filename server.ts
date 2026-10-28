@@ -73,71 +73,127 @@ Output Format (בכל יצירת דימוי או אסוציאציה):
 
 אתה בעל גישה מלאה לבסיס הנתונים של המשתמש. אם המשתמש מבקש ממך לקרוא, להוסיף, לערוך או למחוק נתונים (ארמון, תחנה, שלשת PAO, מילת Major, כרטיס אישי), בצע זאת וצרף את בלוק הפעולה המתאים.`;
 
-// API Endpoint: Smart Free-Text Association Evaluation
-app.post('/api/gemini/evaluate-association', async (req: Request, res: Response) => {
+// API Endpoint: Smart Free-Text & Voice Retrieval Semantic Evaluation
+const handleSemanticRecallEvaluation = async (req: Request, res: Response) => {
   try {
-    const { question, targetAssociation, userResponse, context } = req.body;
+    const { question, targetAssociation, targetScene, targetTriplet, userResponse, context } = req.body;
 
-    if (!userResponse || !targetAssociation) {
+    if (!userResponse || (!targetAssociation && !targetScene && !targetTriplet)) {
       return res.status(400).json({ error: 'Missing targetAssociation or userResponse' });
     }
 
-    const prompt = `אתה שופט זיכרון קוגניטיבי מומחה.
-המשתמש נבחן על שליפת אסוציאציית זיכרון שהוא קישר מראש.
+    const fullTargetText = [
+      targetAssociation ? `תשובת יעד מרכזית: ${targetAssociation}` : '',
+      targetTriplet ? `שלשת PAO מלאה (אדם • פעולה • חפץ): ${targetTriplet}` : '',
+      targetScene ? `סצנה מלאה במסד הנתונים: ${targetScene}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    const prompt = `אתה שופט זיכרון קוגניטיבי מומחה במערכת אימון זיכרון (Major, PAO, ארמונות זיכרון, שמות ופנים).
+המשתמש נבחן במבחן שליפה קולי / טקסט חופשי על אסוציאציית זיכרון השמורה במסד הנתונים שלו.
+
 השאלה שנשאלה: "${question || 'מהי האסוציאציה המקושרת?'}"
-האסוציאציה המקורית שנשמרה במערכת: "${targetAssociation}"
-תשובת המשתמש בשפה חופשית: "${userResponse}"
-הקשר נוסף (אם יש): "${context || 'כללי'}"
+המידע הנכון השמור במסד הנתונים (Target Answer):
+${fullTargetText}
 
-המשימה שלך:
-קבע האם המשתמש נזכר באסוציאציה הנכונה במהותה. שים לב: המשתמש כותב בשפה חופשית. ייתכן שהוא השתמש במילים נרדפות, תיאר את התמונה המנטלית במילים אחרות, התייחס לאותו אלמנט מרכזי, או הסביר את הקשר הסיפורי. אם הרעיון המרכזי תואם - אשר זאת כנכון!
+תשובת המשתמש (תמלול חופשי ממיקרופון או טקסט חופשי):
+"${userResponse}"
 
-השב אך ורק במבנה JSON הבא:
+הקשר נוסף: "${context || 'מבחן שליפה חופשי'}"
+
+כללי הערכה סמנטית (CRITICAL SEMANTIC EVALUATION RULES):
+1. ההערכה מבוססת על **דיוק רעיוני ומהותי (Conceptual Accuracy)** ולא על ניסוח מילולי מדויק (Exact Phrasing).
+2. המשתמש מדבר בשפה טבעית וזורמת דרך מיקרופון (לעיתים עם שגיאות קלות של תמלול קולי בעברית, הטיות פעלים שונות, מילים נרדפות או תיאור חלופי של אותה התמונה המנטלית).
+3. אם ליבת המשמעות (Core Meaning) של תשובת המשתמש תואמת לתשובת היעד במסד הנתונים — קבע \`"isCorrect": true\`!
+   - דוגמה מנחה 1:
+     Target: "Stan Lee draws with a pencil on a leaf" (סטן לי מצייר עם עיפרון על עלה)
+     User: "Stan Lee sketches a comic book on a giant green leaf" (סטן לי מאייר קומיקס על עלה ירוק ענק)
+     -> התוצאה חייבת להיות: \`"isCorrect": true\`!
+   - דוגמה מנחה 2:
+     Target: "סילבסטר סטאלון מתאגרף עם סוס"
+     User: "רוקי בלבואה נותן אגרופים לסוס" או "סטאלון מכה סוס עם כפפות אגרוף"
+     -> התוצאה חייבת להיות: \`"isCorrect": true\`!
+4. אם המשתמש ציין דמות אחרת לחלוטין, פעולה שונה לגמרי או חפץ אחר שאינו קשור לתשובת היעד — קבע \`"isCorrect": false\`.
+
+השב אך ורק במבנה JSON חוקי:
 {
-  "isCorrect": boolean, // true אם התשובה נכונה סמנטית או קרובה מאוד במהות
-  "score": number, // ציון מ-0 עד 100 על איכות הדיוק והשליפה
-  "verdictTitle": string, // כותרת קצרה, למשל: "מדויק להפליא!", "כמעט שם!", "הכיוון נכון", או "זיהוי שגוי"
-  "explanation": string, // הסבר קצר ומעודד בעברית (משפט או שניים) מדוע התשובה נכונה או מה היה חסר
-  "memoryTip": string // טיפ קוגניטיבי קצר לחיזוק הקשר הנוירוני (למשל תוספת תנועה קינטית או ריח)
+  "isCorrect": boolean,
+  "score": number,
+  "verdictTitle": string,
+  "explanation": string,
+  "memoryTip": string
 }`;
 
-    const response = await ai.models.generateContent({
-      model: FAST_TEXT_MODEL,
-      contents: prompt,
-      config: {
-        thinkingConfig: FAST_THINKING_CONFIG,
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            isCorrect: { type: Type.BOOLEAN },
-            score: { type: Type.NUMBER },
-            verdictTitle: { type: Type.STRING },
-            explanation: { type: Type.STRING },
-            memoryTip: { type: Type.STRING },
-          },
-          required: ['isCorrect', 'score', 'verdictTitle', 'explanation', 'memoryTip'],
-        },
-      },
-    });
+    const client = getGeminiClient();
+    const candidateModels = [FAST_TEXT_MODEL, 'gemini-flash-latest', 'gemini-3.1-flash-lite'];
+    let parsed: any = null;
+    let lastError: any = null;
 
-    const parsed = JSON.parse(response.text || '{}');
-    return res.json(parsed);
+    for (const modelName of candidateModels) {
+      try {
+        const configObj: any = {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              isCorrect: { type: Type.BOOLEAN },
+              score: { type: Type.NUMBER },
+              verdictTitle: { type: Type.STRING },
+              explanation: { type: Type.STRING },
+              memoryTip: { type: Type.STRING },
+            },
+            required: ['isCorrect', 'score', 'verdictTitle', 'explanation', 'memoryTip'],
+          },
+        };
+        if (modelName === FAST_TEXT_MODEL) {
+          configObj.thinkingConfig = FAST_THINKING_CONFIG;
+        }
+        const response = await client.models.generateContent({
+          model: modelName,
+          contents: prompt,
+          config: configObj,
+        });
+        if (response.text) {
+          parsed = JSON.parse(response.text);
+          break;
+        }
+      } catch (err: any) {
+        lastError = err;
+        console.warn(`[evaluate-recall] Model ${modelName} error:`, err?.message || err);
+      }
+    }
+
+    if (parsed && typeof parsed.isCorrect === 'boolean') {
+      return res.json(parsed);
+    }
+    throw lastError || new Error('Empty semantic evaluation response');
   } catch (error: any) {
     console.error('Error in evaluate-association:', error);
     // Intelligent fallback in case of API failure
     const target = String(req.body.targetAssociation || '').toLowerCase().trim();
+    const scene = String(req.body.targetScene || '').toLowerCase().trim();
     const user = String(req.body.userResponse || '').toLowerCase().trim();
-    const isDirectMatch = user.includes(target) || target.includes(user);
+    const targetWords = target.split(/\s+/).filter((w) => w.length >= 2);
+    const matchedWords = targetWords.filter((w) => user.includes(w));
+    const isDirectMatch =
+      (user.length > 0 && (user.includes(target) || target.includes(user))) ||
+      (scene.length > 0 && user.includes(scene)) ||
+      (targetWords.length > 0 && matchedWords.length >= Math.ceil(targetWords.length * 0.6));
     return res.json({
       isCorrect: isDirectMatch,
-      score: isDirectMatch ? 90 : 40,
-      verdictTitle: isDirectMatch ? 'שליפה מוצלחת!' : 'בדיקה מקומית',
-      explanation: isDirectMatch ? 'נמצאה התאמה ישירה בין מילות המפתח.' : `התשובה השמורה במערכת הייתה: ${req.body.targetAssociation}`,
+      score: isDirectMatch ? 90 : 30,
+      verdictTitle: isDirectMatch ? 'שליפה מוצלחת!' : 'תשובה לא מדויקת',
+      explanation: isDirectMatch
+        ? 'נמצאה התאמה סמנטית לתשובת היעד.'
+        : `התשובה השמורה במערכת היא: ${req.body.targetAssociation}`,
       memoryTip: 'טיפ: הקפד להוסיף תנועה עזה ושבירה כדי לנעוץ את הזיכרון בהיפוקמפוס.',
     });
   }
-});
+};
+
+app.post('/api/gemini/evaluate-association', handleSemanticRecallEvaluation);
+app.post('/api/gemini/evaluate-recall', handleSemanticRecallEvaluation);
 
 // Helper to sanitize and format user database for Gemini context injection
 function buildMentorDatabaseContext(rawDb: any, latestUserPrompt: string): {
@@ -1643,9 +1699,13 @@ app.post('/api/gemini/tts', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Text is required for TTS' });
     }
 
-    const cleanText = text.trim();
+    const cleanText = text
+      .replace(/speak in a [a-z\s]+ voice:?/gi, '')
+      .replace(/read aloud:?/gi, '')
+      .trim();
 
-    const response = await ai.models.generateContent({
+    const client = getGeminiClient();
+    const response = await client.models.generateContent({
       model: 'gemini-3.8-flash-lite-tts',
       contents: [
         {

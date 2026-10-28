@@ -271,11 +271,21 @@ export function useMemoryStore() {
     }
   });
 
-  // 6. People Cards
+  // 6. People Cards (Default DB loads without any images)
   const [peopleCards, setPeopleCards] = useState<PersonFaceCard[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.PEOPLE);
-      return saved ? JSON.parse(saved) : DEFAULT_PEOPLE_CARDS;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          return parsed.map((p: PersonFaceCard) => ({
+            ...p,
+            avatarUrl:
+              p.avatarUrl && p.avatarUrl.includes('images.unsplash.com') ? '' : p.avatarUrl || '',
+          }));
+        }
+      }
+      return DEFAULT_PEOPLE_CARDS;
     } catch {
       return DEFAULT_PEOPLE_CARDS;
     }

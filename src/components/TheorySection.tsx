@@ -26,13 +26,13 @@ interface TheorySectionProps {
 
 export const TheorySection: React.FC<TheorySectionProps> = ({ onNavigateToTable, initialTab }) => {
   const [activeTab, setActiveTab] = useState<
-    'major' | 'pao' | 'palaces' | 'names' | 'pegs' | 'kinetic' | 'neuroscience'
+    'major' | 'pao' | 'palaces' | 'names' | 'kinetic' | 'neuroscience'
   >((initialTab as any) || 'major');
 
   React.useEffect(() => {
     if (
       initialTab &&
-      ['major', 'pao', 'palaces', 'names', 'pegs', 'kinetic', 'neuroscience'].includes(initialTab)
+      ['major', 'pao', 'palaces', 'names', 'kinetic', 'neuroscience'].includes(initialTab)
     ) {
       setActiveTab(initialTab as any);
     }
@@ -65,9 +65,8 @@ export const TheorySection: React.FC<TheorySectionProps> = ({ onNavigateToTable,
             { id: 'pao', label: '2. שלשות PAO (6:1)', icon: <User className="w-3.5 h-3.5" /> },
             { id: 'palaces', label: '3. ארמונות זיכרון (Loci)', icon: <Compass className="w-3.5 h-3.5" /> },
             { id: 'names', label: '4. שמות ופנים', icon: <Smile className="w-3.5 h-3.5" /> },
-            { id: 'pegs', label: '5. מתלי צורה וגוף', icon: <Layers className="w-3.5 h-3.5" /> },
-            { id: 'kinetic', label: '6. חוקי הקידוד הקינטי', icon: <Zap className="w-3.5 h-3.5" /> },
-            { id: 'neuroscience', label: '7. המדע והמוח (נובל)', icon: <Brain className="w-3.5 h-3.5" /> },
+            { id: 'kinetic', label: '5. חוקי הקידוד הקינטי', icon: <Zap className="w-3.5 h-3.5" /> },
+            { id: 'neuroscience', label: '6. המדע והמוח (נובל)', icon: <Brain className="w-3.5 h-3.5" /> },
           ].map((tab) => (
             <button
               key={tab.id}
@@ -393,51 +392,7 @@ export const TheorySection: React.FC<TheorySectionProps> = ({ onNavigateToTable,
         </div>
       )}
 
-      {/* CHAPTER 5: PEGS */}
-      {activeTab === 'pegs' && (
-        <div className="bg-white border-2 border-slate-200 border-b-6 border-b-slate-300 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6 animate-fadeIn text-slate-900">
-          <div className="flex items-center gap-3 pb-4 border-b border-slate-200">
-            <div className="w-10 h-10 rounded-xl bg-yellow-50 border border-yellow-200 text-yellow-700 flex items-center justify-center font-black">
-              <Layers className="w-5 h-5" />
-            </div>
-            <div>
-              <h2 className="text-xl sm:text-2xl font-black text-slate-900">
-                שיטות המתלים (Peg Systems)
-              </h2>
-              <p className="text-xs sm:text-sm text-slate-500">
-                מתלי צורת ספרה (0-9) ומתלי 10 תחנות הגוף לשינון רשימות קצרות ומשימות יומיות
-              </p>
-            </div>
-          </div>
-
-          <div className="space-y-4 text-slate-700 leading-relaxed text-sm">
-            <p>
-              במקום לבנות ארמון זיכרון שלם, מתלים מספקים "קולבים מנטליים" מוכנים מראש. מתלי צורת הספרה מבוססים על הדמיון הוויזואלי של צורת הספרה לחפץ ממשי:
-            </p>
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-              {[
-                { n: '0', s: 'גלגל / ביצה' },
-                { n: '1', s: 'חנית / נר' },
-                { n: '2', s: 'ברבור במים' },
-                { n: '3', s: 'אזיקים / שחף' },
-                { n: '4', s: 'סירת מפרש' },
-                { n: '5', s: 'עוגן פלדה' },
-                { n: '6', s: 'מנעול תלייה' },
-                { n: '7', s: 'גרזן קרב' },
-                { n: '8', s: 'שעון חול' },
-                { n: '9', s: 'בלון על חוט' },
-              ].map((p) => (
-                <div key={p.n} className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-center shadow-2xs">
-                  <span className="text-amber-700 font-black text-lg block">{p.n}</span>
-                  <span className="text-xs text-slate-900 font-bold">{p.s}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* CHAPTER 6: KINETIC RULES */}
+      {/* CHAPTER 5: KINETIC RULES */}
       {activeTab === 'kinetic' && (
         <div className="bg-white border-2 border-slate-200 border-b-6 border-b-slate-300 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6 animate-fadeIn text-slate-900">
           <div className="flex items-center gap-3 pb-4 border-b border-slate-200">

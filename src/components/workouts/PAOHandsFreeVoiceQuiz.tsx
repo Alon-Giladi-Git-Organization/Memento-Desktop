@@ -3,706 +3,782 @@ import {
   Mic,
   MicOff,
   Volume2,
-  VolumeX,
   Play,
-  Pause,
+  Square,
   SkipForward,
   RotateCcw,
-  Sparkles,
   CheckCircle2,
   XCircle,
-  AlertCircle,
-  Radio,
-  Flame,
-  X,
+  AlertTriangle,
   Headphones,
+  Sparkles,
+  Loader2,
 } from 'lucide-react';
-import { PAOItem } from '../../types/memory';
-import { voiceService } from '../../lib/voiceService';
+import confetti from 'canvas-confetti';
+import { PAOItem, MajorItem } from '../../types/memory';
+import { voiceService, VoiceTriggerAction } from '../../lib/voiceService';
 import { soundEffects } from '../../lib/soundEffects';
-
-export type VoiceQuizMode = 'triplet' | 'person' | 'action' | 'object' | 'mixed';
+import { getPAOInitials } from '../../lib/paoInitials';
+import {
+  getCurrentOrInitialDeckItem,
+  advanceToNextDeckItem,
+  resetQuizDeck,
+  DeckProgress,
+} from '../../lib/quizDeckManager';
+import { QuizDeckProgressBar } from '../QuizDeckProgressBar';
 
 interface PAOHandsFreeVoiceQuizProps {
   readyItems: PAOItem[];
-  allPaoItems: PAOItem[];
-  onEarnPoints?: (amount: number, reason?: string) => void;
-  onClose?: () => void;
+  majorDigits?: MajorItem[];
+  onEarnPoints: (amount: number, reason?: string) => void;
+  onUnlockBadge: (badge: string) => void;
+  onExitVoiceMode?: () => void;
 }
 
-type QuizPhase =
-  | 'idle'
-  | 'prompting' // System is speaking question via TTS
-  | 'listening' // Mic is active, capturing user voice
-  | 'evaluating' // Checking answer
-  | 'feedback' // Showing & speaking feedback
-  | 'paused';
+type VoiceQuestionType = 'scene' | 'triplet' | 'person' | 'action' | 'object' | 'mixed';
+
+interface VoiceQuestion {
+  item: PAOItem;
+  aspect: 'scene' | 'triplet' | 'person' | 'action' | 'object';
+  spokenPrompt: string;
+  displayTitle: string;
+  displayValue: string;
+  expectedAnswers: string[];
+  correctDisplayAnswer: string;
+  spokenFullAnswer: string;
+  targetTriplet: string;
+  targetScene: string;
+}
 
 export const PAOHandsFreeVoiceQuiz: React.FC<PAOHandsFreeVoiceQuizProps> = ({
   readyItems,
-  allPaoItems,
+  majorDigits,
   onEarnPoints,
-  onClose,
+  onUnlockBadge,
+  onExitVoiceMode,
 }) => {
-  const activeDeck = readyItems.length > 0 ? readyItems : allPaoItems;
+  const [isHandsFreeActive, setIsHandsFreeActive] = useState(false);
+  const [questionMode, setQuestionMode] = useState<VoiceQuestionType>('scene');
+  const [deckProgress, setDeckProgress] = useState<DeckProgress | null>(null);
+  const [currentQuestion, setCurrentQuestion] = useState<VoiceQuestion | null>(null);
 
-  const [quizMode, setQuizMode] = useState<VoiceQuizMode>('mixed');
-  const [phase, setPhase] = useState<QuizPhase>('idle');
-  const [currentItem, setCurrentItem] = useState<PAOItem | null>(null);
-  const [currentQuestionType, setCurrentQuestionType] = useState<
-    'triplet' | 'person' | 'action' | 'object'
-  >('triplet');
-  const [currentQuestionText, setCurrentQuestionText] = useState('');
-  const [recognizedText, setRecognizedText] = useState('');
-  const [lastResult, setLastResult] = useState<'correct' | 'incorrect' | null>(null);
-  const [correctAnswerSummary, setCorrectAnswerSummary] = useState('');
-  const [streak, setStreak] = useState(0);
-  const [score, setScore] = useState(0);
+  const [statusPhase, setStatusPhase] = useState<
+    'idle' | 'speaking' | 'listening' | 'evaluating' | 'feedback_correct' | 'feedback_incorrect'
+  >('idle');
+  const [liveTranscript, setLiveTranscript] = useState('');
+  const [lastEvaluationMessage, setLastEvaluationMessage] = useState('');
+  const [semanticExplanation, setSemanticExplanation] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isMicPermissionGranted, setIsMicPermissionGranted] = useState<boolean | null>(null);
-  const [showPermissionModal, setShowPermissionModal] = useState(false);
-  const [isRequestingPermission, setIsRequestingPermission] = useState(false);
+  const [showMicPermissionPrompt, setShowMicPermissionPrompt] = useState(false);
 
-  const stopListeningRef = useRef<(() => void) | null>(null);
-  const isLoopActiveRef = useRef(false);
-  const currentItemRef = useRef<PAOItem | null>(null);
-  const questionTypeRef = useRef<'triplet' | 'person' | 'action' | 'object'>('triplet');
+  const [correctCount, setCorrectCount] = useState(0);
+  const [totalAttempted, setTotalAttempted] = useState(0);
 
-  currentItemRef.current = currentItem;
-  questionTypeRef.current = currentQuestionType;
+  const isHandsFreeRef = useRef(isHandsFreeActive);
+  isHandsFreeRef.current = isHandsFreeActive;
 
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      isLoopActiveRef.current = false;
-      voiceService.stopSpeaking();
-      if (stopListeningRef.current) {
-        stopListeningRef.current();
+  const currentQuestionRef = useRef<VoiceQuestion | null>(currentQuestion);
+  currentQuestionRef.current = currentQuestion;
+
+  const statusPhaseRef = useRef(statusPhase);
+  statusPhaseRef.current = statusPhase;
+
+  const buildQuestionFromItem = useCallback(
+    (item: PAOItem, mode: VoiceQuestionType): VoiceQuestion => {
+      const aspects: ('scene' | 'triplet' | 'person' | 'action' | 'object')[] = [
+        'scene',
+        'triplet',
+        'person',
+        'action',
+        'object',
+      ];
+      const chosenAspect =
+        mode === 'mixed' ? aspects[Math.floor(Math.random() * aspects.length)] : mode;
+
+      const spokenDigits =
+        item.number < 10 ? `אפס ${item.number}` : item.numberStr;
+
+      const fullTripletStr = `${item.person} • ${item.action} • ${item.object}`;
+      const fullSceneStr =
+        item.scene && item.scene.trim()
+          ? item.scene.trim()
+          : `${item.person} ${item.action} ${item.object}`;
+
+      if (chosenAspect === 'person') {
+        return {
+          item,
+          aspect: 'person',
+          spokenPrompt: `מספר ${spokenDigits}. מי הדמות?`,
+          displayTitle: 'מי הדמות (Person) של המספר:',
+          displayValue: item.numberStr,
+          expectedAnswers: [item.person],
+          correctDisplayAnswer: item.person,
+          spokenFullAnswer: `הדמות של מספר ${spokenDigits} היא ${item.person}`,
+          targetTriplet: fullTripletStr,
+          targetScene: fullSceneStr,
+        };
       }
-    };
-  }, []);
-
-  /**
-   * Generates a question prompt text based on selected mode
-   */
-  const generateQuestionFor = useCallback(
-    (item: PAOItem, mode: VoiceQuizMode) => {
-      let qType: 'triplet' | 'person' | 'action' | 'object' = 'triplet';
-
-      if (mode === 'mixed') {
-        const types: Array<'triplet' | 'person' | 'action' | 'object'> = [
-          'triplet',
-          'person',
-          'action',
-          'object',
-        ];
-        qType = types[Math.floor(Math.random() * types.length)];
-      } else {
-        qType = mode;
+      if (chosenAspect === 'action') {
+        return {
+          item,
+          aspect: 'action',
+          spokenPrompt: `מספר ${spokenDigits}. מה הפעולה?`,
+          displayTitle: 'מה הפעולה (Action) של המספר:',
+          displayValue: item.numberStr,
+          expectedAnswers: [item.action],
+          correctDisplayAnswer: item.action,
+          spokenFullAnswer: `הפעולה של מספר ${spokenDigits} היא ${item.action}`,
+          targetTriplet: fullTripletStr,
+          targetScene: fullSceneStr,
+        };
+      }
+      if (chosenAspect === 'object') {
+        return {
+          item,
+          aspect: 'object',
+          spokenPrompt: `מספר ${spokenDigits}. מה החפץ?`,
+          displayTitle: 'מה החפץ (Object) של המספר:',
+          displayValue: item.numberStr,
+          expectedAnswers: [item.object],
+          correctDisplayAnswer: item.object,
+          spokenFullAnswer: `החפץ של מספר ${spokenDigits} הוא ${item.object}`,
+          targetTriplet: fullTripletStr,
+          targetScene: fullSceneStr,
+        };
+      }
+      if (chosenAspect === 'triplet') {
+        return {
+          item,
+          aspect: 'triplet',
+          spokenPrompt: `מספר ${spokenDigits}. מהם הדמות, הפעולה והחפץ?`,
+          displayTitle: 'מהי שלשת ה-PAO המלאה (אדם • פעולה • חפץ) של המספר:',
+          displayValue: item.numberStr,
+          expectedAnswers: [
+            `${item.person} ${item.action} ${item.object}`,
+            fullSceneStr,
+          ],
+          correctDisplayAnswer: fullTripletStr,
+          spokenFullAnswer: `${item.person}, ${item.action}, ${item.object}`,
+          targetTriplet: fullTripletStr,
+          targetScene: fullSceneStr,
+        };
       }
 
-      let spokenQuestion = '';
-      if (qType === 'triplet') {
-        spokenQuestion = `מה השלשה של מספר ${item.number}?`;
-      } else if (qType === 'person') {
-        spokenQuestion = `מי האדם של מספר ${item.number}?`;
-      } else if (qType === 'action') {
-        spokenQuestion = `מה הפעולה של מספר ${item.number}?`;
-      } else if (qType === 'object') {
-        spokenQuestion = `מה החפץ של מספר ${item.number}?`;
-      }
-
-      return { qType, spokenQuestion };
+      // Default: 'scene' (Full Scene / Conceptual PAO Recall)
+      return {
+        item,
+        aspect: 'scene',
+        spokenPrompt: `מספר ${spokenDigits}. מה הסצנה או שלשת ה-PAO?`,
+        displayTitle: 'תאר בשפה חופשית את הסצנה או שלשת ה-PAO של המספר:',
+        displayValue: item.numberStr,
+        expectedAnswers: [
+          fullSceneStr,
+          `${item.person} ${item.action} ${item.object}`,
+        ],
+        correctDisplayAnswer: item.scene
+          ? `${fullTripletStr} — "${item.scene}"`
+          : fullTripletStr,
+        spokenFullAnswer: item.scene
+          ? `${item.person}, ${item.action}, ${item.object}. הסצנה היא: ${item.scene}`
+          : `${item.person}, ${item.action}, ${item.object}`,
+        targetTriplet: fullTripletStr,
+        targetScene: fullSceneStr,
+      };
     },
     []
   );
 
-  /**
-   * Evaluates the spoken transcript and proceeds with the automated hands-free flow
-   */
+  // Initialize first question on mount
+  useEffect(() => {
+    if (readyItems.length > 0 && !currentQuestion) {
+      const { item, progress } = getCurrentOrInitialDeckItem(
+        'workout_pao_voice',
+        readyItems,
+        (i) => i.number
+      );
+      setDeckProgress(progress);
+      if (item) {
+        setCurrentQuestion(buildQuestionFromItem(item, questionMode));
+      }
+    }
+  }, [readyItems, currentQuestion, questionMode, buildQuestionFromItem]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      voiceService.stopSpeaking();
+      voiceService.stopListening({ silent: true });
+    };
+  }, []);
+
   const handleAnswerEvaluation = useCallback(
-    async (spoken: string) => {
-      if (!isLoopActiveRef.current) return;
-      if (stopListeningRef.current) {
-        stopListeningRef.current();
-        stopListeningRef.current = null;
+    async (transcript: string) => {
+      const q = currentQuestionRef.current;
+      if (!q) return;
+
+      const trimmed = transcript.trim();
+      if (!trimmed) {
+        // If no transcript was captured and session is still active, re-open microphone for unlimited thinking time
+        if (isHandsFreeRef.current) {
+          startListeningPhase();
+        }
+        return;
       }
 
-      setPhase('evaluating');
-      const item = currentItemRef.current;
-      const qType = questionTypeRef.current;
+      voiceService.stopListening({ silent: true });
+      setStatusPhase('evaluating');
+      setLiveTranscript(trimmed);
+      setTotalAttempted((prev) => prev + 1);
 
-      if (!item) return;
+      // Send the user's transcribed free-text response to Gemini for semantic conceptual evaluation
+      const semanticResult = await voiceService.evaluateAnswerWithGemini({
+        question: `${q.displayTitle} ${q.displayValue}`,
+        userResponse: trimmed,
+        targetAnswer: q.correctDisplayAnswer,
+        targetTriplet: q.targetTriplet,
+        targetScene: q.targetScene,
+        acceptableAlternatives: q.expectedAnswers,
+        context: `מבחן שליפה קולי PAO למספר ${q.item.numberStr} (מצב: ${q.aspect})`,
+      });
 
-      const evalResult = voiceService.evaluateAnswer(
-        spoken,
-        item.number,
-        {
-          person: item.person,
-          action: item.action,
-          object: item.object,
-          scene: item.scene,
-        },
-        qType
-      );
+      if (!isHandsFreeRef.current && statusPhaseRef.current === 'idle') {
+        return;
+      }
 
-      const isCorrect = evalResult.isCorrect;
-      setLastResult(isCorrect ? 'correct' : 'incorrect');
+      setSemanticExplanation(semanticResult.explanation || '');
 
-      if (isCorrect) {
-        // Correct answer flow
-        setStreak((prev) => prev + 1);
-        setScore((prev) => prev + 15);
-        onEarnPoints?.(15, 'מענה קולי נכון בשליפה קולית');
+      if (semanticResult.isCorrect) {
+        setStatusPhase('feedback_correct');
+        setCorrectCount((prev) => prev + 1);
+        setLastEvaluationMessage(`נכון מאוד! "${trimmed}"`);
+        soundEffects.playSuccess();
+        onEarnPoints(25, 'מענה קולי סמנטי מדויק במבחן Hands-Free');
+        onUnlockBadge('אלוף שליפה קולית');
+        confetti({ particleCount: 35, spread: 60, origin: { y: 0.6 } });
 
-        // Play positive success chime
-        soundEffects.playSuccessChime();
-        setPhase('feedback');
-
-        // Wait 1200ms of visual/audio delight, then next question
-        setTimeout(() => {
-          if (isLoopActiveRef.current) {
-            askNextQuestion();
-          }
-        }, 1200);
-      } else {
-        // Incorrect answer flow
-        setStreak(0);
-        soundEffects.playErrorBuzzer();
-        setPhase('feedback');
-
-        // Prepare spoken correction
-        let correctionText = '';
-        if (qType === 'triplet') {
-          correctionText = `התשובה היא: ${item.person}, ${item.action}, ${item.object}.`;
-        } else if (qType === 'person') {
-          correctionText = `האדם של ${item.number} הוא ${item.person}.`;
-        } else if (qType === 'action') {
-          correctionText = `הפעולה של ${item.number} היא ${item.action}.`;
-        } else if (qType === 'object') {
-          correctionText = `החפץ של ${item.number} הוא ${item.object}.`;
+        // Confirm the correct answer aloud and immediately read the next question
+        await voiceService.speakHebrew('נכון מאוד!');
+        if (isHandsFreeRef.current) {
+          advanceAndSpeakNext();
+        } else {
+          setStatusPhase('idle');
         }
+      } else {
+        setStatusPhase('feedback_incorrect');
+        setLastEvaluationMessage(
+          `לא מדויק (נקלט: "${trimmed}"). התשובה הנכונה: ${q.correctDisplayAnswer}`
+        );
+        soundEffects.playError();
 
-        setCorrectAnswerSummary(correctionText);
-
-        // Speak the correct answer via Google Text-to-Speech
-        await voiceService.speakHebrew(correctionText, 0.95);
-
-        // Advance to next question after speaking
-        setTimeout(() => {
-          if (isLoopActiveRef.current) {
-            askNextQuestion();
-          }
-        }, 900);
+        // Notify the user that the answer is incorrect, read the full correct answer aloud,
+        // and ONLY THEN proceed to the next question.
+        await voiceService.speakHebrew(
+          `לא מדויק. התשובה הנכונה היא: ${q.spokenFullAnswer}`
+        );
+        if (isHandsFreeRef.current) {
+          advanceAndSpeakNext();
+        } else {
+          setStatusPhase('idle');
+        }
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [onEarnPoints]
+    [onEarnPoints, onUnlockBadge]
   );
 
-  /**
-   * Starts listening to user speech strictly AFTER TTS has completely finished speaking
-   */
-  const startListeningPhase = useCallback(() => {
-    if (!isLoopActiveRef.current) return;
+  const handleVoiceCommand = useCallback(
+    async (action: VoiceTriggerAction) => {
+      voiceService.stopListening({ silent: true });
+      voiceService.stopSpeaking();
 
-    setPhase('listening');
-    setRecognizedText('');
+      if (action === 'stop') {
+        setIsHandsFreeActive(false);
+        setStatusPhase('idle');
+        await voiceService.speakHebrew('אימון קולי הופסק');
+        return;
+      }
+
+      if (action === 'repeat') {
+        if (currentQuestionRef.current) {
+          speakAndListenQuestion(currentQuestionRef.current);
+        }
+        return;
+      }
+
+      if (action === 'hint') {
+        const q = currentQuestionRef.current;
+        if (q) {
+          const initials = getPAOInitials(q.item.number, majorDigits).initials;
+          await voiceService.speakHebrew(`רמז: ראשי התיבות הם ${initials}`);
+          if (isHandsFreeRef.current) {
+            startListeningPhase();
+          }
+        }
+        return;
+      }
+
+      if (action === 'next') {
+        advanceAndSpeakNext();
+      }
+    },
+    [majorDigits]
+  );
+
+  const startListeningPhase = useCallback(() => {
+    if (!isHandsFreeRef.current) return;
+    setStatusPhase('listening');
+    setLiveTranscript('');
     setErrorMessage(null);
 
-    // Play subtle mic activation beep
-    soundEffects.playMicListeningBeep();
-
-    const stopFn = voiceService.startListening({
-      onResult: (transcript, isFinal) => {
-        setRecognizedText(transcript);
-
-        // Voice skip command
-        const lower = transcript.toLowerCase();
-        if (lower.includes('דלג') || lower.includes('הבא') || lower.includes('עבור')) {
-          if (stopListeningRef.current) stopListeningRef.current();
-          askNextQuestion();
-          return;
-        }
-
-        if (isFinal && transcript.trim().length > 0) {
-          handleAnswerEvaluation(transcript);
-        }
+    voiceService.startListening(
+      {
+        onInterimResult: (interim) => {
+          setLiveTranscript(interim);
+        },
+        onFinalResult: (finalText) => {
+          handleAnswerEvaluation(finalText);
+        },
+        onTriggerCommand: (cmd) => {
+          handleVoiceCommand(cmd);
+        },
+        onError: (code, humanMsg) => {
+          if (code === 'not-allowed' || code === 'service-not-allowed') {
+            setIsHandsFreeActive(false);
+            isHandsFreeRef.current = false;
+            setStatusPhase('idle');
+            setShowMicPermissionPrompt(true);
+          } else if (code === 'audio-capture') {
+            setErrorMessage(humanMsg);
+            setIsHandsFreeActive(false);
+            isHandsFreeRef.current = false;
+            setStatusPhase('idle');
+          }
+        },
       },
-      onError: (err) => {
-        console.warn('Speech recognition warning:', err);
-        if (err.includes('הרשאת מיקרופון') || err.includes('not-allowed')) {
-          setIsMicPermissionGranted(false);
-          setShowPermissionModal(true);
-          setErrorMessage('נדרש אישור גישה למיקרופון עבור אימון ללא מגע ידיים.');
-          setPhase('paused');
-          isLoopActiveRef.current = false;
-        } else if (err.includes('לא זוהה דיבור')) {
-          // If no speech detected after silence timeout, treat as incorrect
-          handleAnswerEvaluation('');
-        }
-      },
-      onEnd: () => {
-        // If mic ended without final result, evaluate whatever we caught
-        // (Evaluation is handled by onResult or silence timeout)
-      },
-      silenceTimeoutMs: 7000,
-    });
+      {
+        continuous: true,
+        unlimitedThinkingTime: true,
+        postSpeechSilenceMs: 2400,
+      }
+    );
+  }, [handleAnswerEvaluation, handleVoiceCommand]);
 
-    stopListeningRef.current = stopFn;
-    setIsMicPermissionGranted(true);
-  }, [handleAnswerEvaluation]);
+  const speakAndListenQuestion = useCallback(
+    async (q: VoiceQuestion) => {
+      if (!isHandsFreeRef.current) return;
+      voiceService.stopListening({ silent: true });
+      setStatusPhase('speaking');
+      setLiveTranscript('');
+      setLastEvaluationMessage('');
+      setSemanticExplanation('');
 
-  /**
-   * Core Loop: Selects next random question and speaks it
-   */
-  const askNextQuestion = useCallback(async () => {
-    if (!isLoopActiveRef.current || activeDeck.length === 0) return;
+      await voiceService.speakHebrew(q.spokenPrompt);
 
-    // Pick a random item from deck
-    const nextItem = activeDeck[Math.floor(Math.random() * activeDeck.length)];
-    const { qType, spokenQuestion } = generateQuestionFor(nextItem, quizMode);
-
-    setCurrentItem(nextItem);
-    setCurrentQuestionType(qType);
-    setCurrentQuestionText(spokenQuestion);
-    setRecognizedText('');
-    setLastResult(null);
-    setCorrectAnswerSummary('');
-    setPhase('prompting');
-
-    // 1. Speak the question via high-quality natural Gemini TTS / speech engine
-    await voiceService.speakHebrew(spokenQuestion, 0.95);
-
-    // 2. Strict timing synchronization: wait 350ms of silence before opening mic to prevent echo loop!
-    setTimeout(() => {
-      if (isLoopActiveRef.current) {
+      if (isHandsFreeRef.current) {
         startListeningPhase();
       }
-    }, 350);
-  }, [activeDeck, generateQuestionFor, quizMode, startListeningPhase]);
+    },
+    [startListeningPhase]
+  );
 
-  /**
-   * Starts the hands-free session loop
-   */
-  const startSessionCore = useCallback(() => {
-    isLoopActiveRef.current = true;
-    setErrorMessage(null);
-    setPhase('prompting');
-    askNextQuestion();
-  }, [askNextQuestion]);
+  const advanceAndSpeakNext = useCallback(() => {
+    if (readyItems.length === 0) return;
+    voiceService.stopListening({ silent: true });
+    voiceService.stopSpeaking();
 
-  /**
-   * Requests browser microphone permission via getUserMedia and pops native browser dialog
-   */
-  const handleRequestMicPermission = async () => {
-    setIsRequestingPermission(true);
-    try {
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach((track) => track.stop());
-        setIsMicPermissionGranted(true);
-        setShowPermissionModal(false);
-        setIsRequestingPermission(false);
-        setErrorMessage(null);
-        startSessionCore();
+    const { item, progress } = advanceToNextDeckItem(
+      'workout_pao_voice',
+      readyItems,
+      (i) => i.number
+    );
+    setDeckProgress(progress);
+
+    if (item) {
+      const nextQ = buildQuestionFromItem(item, questionMode);
+      setCurrentQuestion(nextQ);
+      currentQuestionRef.current = nextQ;
+      if (isHandsFreeRef.current) {
+        setTimeout(() => {
+          speakAndListenQuestion(nextQ);
+        }, 250);
       } else {
-        throw new Error('getUserMedia not supported');
+        setStatusPhase('idle');
       }
-    } catch (err: any) {
-      console.warn('Microphone permission request error:', err);
-      setIsRequestingPermission(false);
-      setIsMicPermissionGranted(false);
-      setErrorMessage('הרשאת המיקרופון נדחתה או נחסמה. לחץ שוב כדי לפתוח את חלון האישור.');
     }
-  };
+  }, [readyItems, questionMode, buildQuestionFromItem, speakAndListenQuestion]);
 
-  /**
-   * Starts the hands-free session, requesting permission popup first if needed
-   */
-  const handleStartSession = async () => {
-    if (isMicPermissionGranted) {
-      startSessionCore();
+  const confirmMicPermissionAndStart = async () => {
+    setShowMicPermissionPrompt(false);
+    setErrorMessage(null);
+
+    const perm = await voiceService.requestMicrophonePermission();
+    if (!perm.granted && perm.errorMessage) {
+      setErrorMessage(perm.errorMessage);
       return;
     }
 
-    // Try checking browser permission status if supported
-    if (navigator.permissions && navigator.permissions.query) {
-      try {
-        const status = await navigator.permissions.query({ name: 'microphone' as PermissionName });
-        if (status.state === 'granted') {
-          setIsMicPermissionGranted(true);
-          startSessionCore();
-          return;
-        }
-      } catch {}
+    voiceService.markMicPermissionGranted();
+    setIsHandsFreeActive(true);
+    isHandsFreeRef.current = true;
+    if (currentQuestion) {
+      setTimeout(() => {
+        speakAndListenQuestion(currentQuestion);
+      }, 150);
     }
-
-    // Show friendly in-app modal popup so user can click to trigger browser permission dialog!
-    setShowPermissionModal(true);
   };
 
-  /**
-   * Pauses the hands-free session
-   */
-  const handlePauseSession = () => {
-    isLoopActiveRef.current = false;
-    voiceService.stopSpeaking();
-    if (stopListeningRef.current) {
-      stopListeningRef.current();
-      stopListeningRef.current = null;
+  const toggleHandsFreeSession = async () => {
+    if (isHandsFreeActive) {
+      setIsHandsFreeActive(false);
+      isHandsFreeRef.current = false;
+      setStatusPhase('idle');
+      voiceService.stopListening({ silent: true });
+      voiceService.stopSpeaking();
+    } else {
+      setErrorMessage(null);
+      if (!voiceService.hasMicPermission()) {
+        setShowMicPermissionPrompt(true);
+        return;
+      }
+      await confirmMicPermissionAndStart();
     }
-    setPhase('paused');
   };
 
-  /**
-   * Resumes the hands-free session
-   */
-  const handleResumeSession = () => {
-    isLoopActiveRef.current = true;
-    askNextQuestion();
-  };
-
-  /**
-   * Skips to the next question immediately
-   */
-  const handleSkipQuestion = () => {
-    voiceService.stopSpeaking();
-    if (stopListeningRef.current) {
-      stopListeningRef.current();
-      stopListeningRef.current = null;
-    }
-    askNextQuestion();
-  };
+  const supported = voiceService.isSupported();
 
   return (
-    <div className="w-full bg-slate-950 border-2 border-indigo-500/40 rounded-3xl p-5 sm:p-7 space-y-6 text-right text-slate-100 shadow-2xl relative overflow-hidden animate-fadeIn select-none">
-      {/* Background ambient driving glow */}
-      <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-80 h-80 bg-pink-600/10 rounded-full blur-3xl pointer-events-none" />
-
-      {/* Header with Mode Badge, Stats, and Close */}
-      <div className="flex items-center justify-between border-b border-indigo-500/20 pb-4 flex-wrap gap-3 relative z-10">
-        <div className="flex items-center gap-3">
-          <div className="p-3 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-600/30">
-            <Headphones className="w-6 h-6" />
-          </div>
-          <div>
-            <h3 className="text-base sm:text-lg font-black text-white flex items-center gap-2">
-              <span>אימון שליפה קולי ללא מגע ידיים</span>
-              <span className="text-xs bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 px-2.5 py-0.5 rounded-full font-bold">
-                Hands-Free Mode
-              </span>
+    <div className="space-y-6 animate-fadeIn">
+      {/* Top Banner & Explanation */}
+      <div className="bg-gradient-to-r from-indigo-950 via-purple-950/80 to-slate-950 border border-indigo-500/40 rounded-3xl p-5 sm:p-6 shadow-xl relative overflow-hidden">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="space-y-1.5">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 text-xs font-black">
+              <Headphones className="w-3.5 h-3.5 text-indigo-400" />
+              <span>מבחן שליפה קולי אוטונומי (Hands-Free + ניתוח סמנטי Gemini)</span>
+            </div>
+            <h3 className="text-lg sm:text-xl font-black text-white">
+              אימון קולי ללא ידיים — זמן מחשבה חופשי והערכה רעיונית חכמה
             </h3>
-            <p className="text-xs text-slate-400 font-medium">
-              אימון מלא באמצעות קול בלבד – מותאם לנהיגה, הליכה וספורט
+            <p className="text-xs text-slate-300 leading-relaxed max-w-2xl">
+              המערכת מקריאה את השאלה ופותחת את המיקרופון עם <strong>זמן מחשבה ללא הגבלה</strong>. ענה בשפה חופשית וטבעית ללא צורך במילות קוד לעצירה — תשובתך מתומללת ונשלחת ל-Gemini לבדיקת דיוק רעיוני מול מסד הנתונים.
             </p>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {onExitVoiceMode && (
+              <button
+                onClick={() => {
+                  setIsHandsFreeActive(false);
+                  voiceService.stopListening({ silent: true });
+                  voiceService.stopSpeaking();
+                  onExitVoiceMode();
+                }}
+                className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-bold border border-slate-700 cursor-pointer"
+              >
+                חזרה למבחן הרגיל
+              </button>
+            )}
           </div>
         </div>
 
-        {/* Stats & Close Button */}
-        <div className="flex items-center gap-2.5">
-          <div className="flex items-center gap-1.5 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800 text-xs font-bold text-amber-300">
-            <Flame className="w-4 h-4 text-amber-400" />
-            <span>רצף: {streak}</span>
+        {/* Mode Selector */}
+        <div className="mt-4 pt-4 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-xs font-bold text-slate-400 ml-1">מה לתרגל בקול:</span>
+            {[
+              { id: 'scene', label: '🎬 סצנה / שלשה מלאה (מומלץ)' },
+              { id: 'mixed', label: '🎲 מעורב אקראי' },
+              { id: 'triplet', label: '👥 שלשה (P+A+O)' },
+              { id: 'person', label: '👤 דמויות (P)' },
+              { id: 'action', label: '⚡ פעולות (A)' },
+              { id: 'object', label: '📦 חפצים (O)' },
+            ].map((m) => (
+              <button
+                key={m.id}
+                onClick={() => {
+                  const newMode = m.id as VoiceQuestionType;
+                  setQuestionMode(newMode);
+                  if (currentQuestion) {
+                    const updated = buildQuestionFromItem(currentQuestion.item, newMode);
+                    setCurrentQuestion(updated);
+                    currentQuestionRef.current = updated;
+                    if (isHandsFreeActive) {
+                      speakAndListenQuestion(updated);
+                    }
+                  }
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  questionMode === m.id
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'bg-slate-900/90 text-slate-400 hover:text-white border border-slate-800'
+                }`}
+              >
+                {m.label}
+              </button>
+            ))}
           </div>
 
-          <div className="flex items-center gap-1.5 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800 text-xs font-bold text-emerald-400">
-            <Sparkles className="w-4 h-4 text-emerald-400" />
-            <span>ניקוד: {score}</span>
+          <div className="flex items-center gap-3 text-xs">
+            <span className="px-3 py-1 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-bold">
+              הצלחות: {correctCount} / {totalAttempted}
+            </span>
           </div>
-
-          {onClose && (
-            <button
-              type="button"
-              onClick={() => {
-                handlePauseSession();
-                onClose();
-              }}
-              className="p-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-white transition-colors cursor-pointer"
-              title="סגור מצב נהיגה"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          )}
         </div>
       </div>
 
-      {/* Mode Filter Selector */}
-      <div className="flex items-center gap-2 flex-wrap bg-slate-900/80 p-2 rounded-2xl border border-slate-800/80 text-xs">
-        <span className="text-slate-400 font-bold ml-1">סוג השאלות:</span>
-        {[
-          { id: 'mixed', label: '🎯 הכל מעורב' },
-          { id: 'triplet', label: '🎬 שלשה שלמה (דמות+פעולה+חפץ)' },
-          { id: 'person', label: '👤 דמויות בלבד' },
-          { id: 'action', label: '⚡ פעולות בלבד' },
-          { id: 'object', label: '📦 חפצים בלבד' },
-        ].map((m) => (
-          <button
-            key={m.id}
-            type="button"
-            onClick={() => {
-              setQuizMode(m.id as VoiceQuizMode);
-              if (phase !== 'idle' && phase !== 'paused') {
-                askNextQuestion();
-              }
-            }}
-            className={`px-3 py-1.5 rounded-xl font-bold transition-all cursor-pointer ${
-              quizMode === m.id
-                ? 'bg-indigo-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            {m.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Mic Permission Warning */}
-      {isMicPermissionGranted === false && (
-        <div className="p-4 rounded-2xl bg-rose-500/15 border-2 border-rose-500/40 text-rose-200 flex items-start gap-3 animate-fadeIn">
-          <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <strong className="text-sm font-bold block">נדרשת הרשאת מיקרופון</strong>
-            <p className="text-xs text-rose-300/90 leading-relaxed">
-              כדי להשתמש במצב ה-Hands-Free, אנא אשר גישה למיקרופון בהגדרות הדפדפן (סמל המנעול ליד
-              שורת הכתובת).
-            </p>
+      {/* Browser Support Warning */}
+      {!supported.stt && (
+        <div className="bg-amber-950/60 border border-amber-500/50 rounded-2xl p-4 flex items-center gap-3 text-amber-200 text-xs">
+          <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+          <div>
+            <strong>שים לב:</strong> הדפדפן הנוכחי אינו תומך במלואו בזיהוי דיבור אוטומטי (Web Speech API). לחוויה קולית מלאה מומלץ להשתמש בדפדפן <strong>Google Chrome</strong>.
           </div>
         </div>
       )}
 
-      {/* Main Driving Stage: Huge Visual Status for Glancing from a Distance */}
-      <div className="py-8 sm:py-12 px-4 rounded-3xl bg-slate-900/95 border-2 border-indigo-500/40 flex flex-col items-center justify-center text-center space-y-6 shadow-2xl relative overflow-hidden min-h-[300px]">
-        {/* Pulsing Status Icon */}
-        <div className="relative">
-          {phase === 'prompting' && (
-            <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-indigo-600/30 border-4 border-indigo-400 flex items-center justify-center animate-pulse shadow-lg shadow-indigo-500/40">
-              <Volume2 className="w-12 h-12 text-indigo-300" />
-            </div>
-          )}
-
-          {phase === 'listening' && (
-            <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-pink-600/30 border-4 border-pink-400 flex items-center justify-center shadow-lg shadow-pink-500/50">
-              <span className="absolute inset-0 rounded-full border-4 border-pink-400 animate-ping opacity-75" />
-              <Mic className="w-12 h-12 text-pink-300 animate-bounce" />
-            </div>
-          )}
-
-          {phase === 'evaluating' && (
-            <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-purple-600/30 border-4 border-purple-400 flex items-center justify-center animate-spin">
-              <Radio className="w-10 h-10 text-purple-300" />
-            </div>
-          )}
-
-          {phase === 'feedback' && lastResult === 'correct' && (
-            <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-emerald-600/30 border-4 border-emerald-400 flex items-center justify-center shadow-lg shadow-emerald-500/50 animate-bounce">
-              <CheckCircle2 className="w-14 h-14 text-emerald-300 stroke-[2.5]" />
-            </div>
-          )}
-
-          {phase === 'feedback' && lastResult === 'incorrect' && (
-            <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-rose-600/30 border-4 border-rose-400 flex items-center justify-center shadow-lg shadow-rose-500/50">
-              <XCircle className="w-14 h-14 text-rose-300 stroke-[2.5]" />
-            </div>
-          )}
-
-          {(phase === 'idle' || phase === 'paused') && (
-            <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-full bg-slate-800 border-4 border-slate-700 flex items-center justify-center text-slate-400">
-              <MicOff className="w-12 h-12" />
-            </div>
-          )}
-        </div>
-
-        {/* Phase Text & Current Question */}
-        <div className="space-y-3 max-w-xl">
-          {phase === 'prompting' && (
-            <>
-              <span className="inline-block px-3 py-1 rounded-full text-xs font-black bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 uppercase tracking-wider">
-                המערכת שואלת כעת...
-              </span>
-              <h2 className="text-2xl sm:text-3xl font-black text-white leading-tight">
-                {currentQuestionText}
-              </h2>
-            </>
-          )}
-
-          {phase === 'listening' && (
-            <>
-              <span className="inline-block px-3 py-1 rounded-full text-xs font-black bg-pink-500/20 text-pink-300 border border-pink-500/40 uppercase tracking-wider animate-pulse">
-                מקשיב לתשובתך עכשיו... דבר בקול ברור
-              </span>
-              <h2 className="text-2xl sm:text-3xl font-black text-white leading-tight">
-                {currentQuestionText}
-              </h2>
-              {recognizedText ? (
-                <div className="p-3 bg-slate-950/80 rounded-2xl border border-pink-500/40 text-pink-200 text-base font-bold font-mono">
-                  &quot;{recognizedText}&quot;
-                </div>
-              ) : (
-                <p className="text-xs text-slate-400">
-                  אמור את התשובה (או אמור &quot;דלג&quot; למעבר לשאלה הבאה)
-                </p>
-              )}
-            </>
-          )}
-
-          {phase === 'feedback' && lastResult === 'correct' && (
-            <div className="space-y-2 animate-fadeIn">
-              <h2 className="text-3xl sm:text-4xl font-black text-emerald-400">
-                מעולה! תשובה נכונה (+15 נקודות)
-              </h2>
-              <p className="text-sm text-emerald-200/90 font-medium">
-                עובר מיד לשאלה הבאה ברצף...
-              </p>
-            </div>
-          )}
-
-          {phase === 'feedback' && lastResult === 'incorrect' && (
-            <div className="space-y-2 animate-fadeIn">
-              <h2 className="text-2xl sm:text-3xl font-black text-rose-400">
-                לא מדויק
-              </h2>
-              <p className="text-sm sm:text-base text-slate-200 leading-relaxed font-bold">
-                {correctAnswerSummary}
-              </p>
-            </div>
-          )}
-
-          {phase === 'idle' && (
-            <>
-              <h2 className="text-2xl sm:text-3xl font-black text-white">
-                מוכן לאימון קולי ללא מגע ידיים?
-              </h2>
-              <p className="text-xs sm:text-sm text-slate-400">
-                המערכת תקריא שאלות בקול, תקשיב לתשובותיך ותשמיע צליל אישור או תיקון אוטומטי.
-              </p>
-            </>
-          )}
-
-          {phase === 'paused' && (
-            <>
-              <h2 className="text-2xl sm:text-3xl font-black text-amber-400">
-                האימון הקולי מושהה
-              </h2>
-              <p className="text-xs sm:text-sm text-slate-400">
-                לחץ על &quot;המשך אימון&quot; לחזרה לרצף השליפה הקולית
-              </p>
-            </>
-          )}
-        </div>
+      {/* Deck Progress */}
+      <div className="w-full max-w-3xl mx-auto">
+        <QuizDeckProgressBar
+          progress={deckProgress}
+          onResetDeck={() => {
+            resetQuizDeck('workout_pao_voice');
+            advanceAndSpeakNext();
+          }}
+          deckTitle="סבב שליפה קולית (PAO)"
+        />
       </div>
 
-      {/* Prominent Action Controls Bar */}
-      <div className="flex items-center justify-center gap-3 pt-2 flex-wrap">
-        {phase === 'idle' && (
-          <button
-            type="button"
-            onClick={handleStartSession}
-            className="px-8 py-4 bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-500 hover:to-pink-500 text-white font-black text-base rounded-2xl flex items-center gap-3 shadow-xl shadow-indigo-600/30 cursor-pointer transition-all active:scale-95"
-          >
-            <Play className="w-5 h-5 fill-white" />
-            <span>התחל אימון קולי (Start)</span>
-          </button>
-        )}
+      {/* Main Voice Control & Active Question Card */}
+      {currentQuestion && (
+        <div className="w-full max-w-3xl mx-auto bg-slate-950 border-2 border-slate-800 rounded-3xl p-6 sm:p-8 text-center space-y-6 shadow-2xl relative overflow-hidden">
+          {/* Status Indicator Pill */}
+          <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+            <div className="flex items-center gap-2">
+              {statusPhase === 'listening' && (
+                <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-rose-500/20 border border-rose-500/50 text-rose-300 text-xs font-black animate-pulse">
+                  <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
+                  <span>מקשיב לתשובתך... (זמן מחשבה ללא הגבלה)</span>
+                </span>
+              )}
+              {statusPhase === 'speaking' && (
+                <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-indigo-500/20 border border-indigo-500/50 text-indigo-300 text-xs font-black">
+                  <Volume2 className="w-4 h-4 text-indigo-400 animate-bounce" />
+                  <span>מקריא בקול...</span>
+                </span>
+              )}
+              {statusPhase === 'evaluating' && (
+                <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-purple-500/20 border border-purple-500/50 text-purple-200 text-xs font-black">
+                  <Loader2 className="w-4 h-4 text-purple-400 animate-spin" />
+                  <span>מנתח תשובה סמנטית מול Gemini...</span>
+                </span>
+              )}
+              {statusPhase === 'feedback_correct' && (
+                <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 text-xs font-black">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                  <span>תשובה נכונה! מיד עובר לשאלה הבאה...</span>
+                </span>
+              )}
+              {statusPhase === 'feedback_incorrect' && (
+                <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-500/20 border border-amber-500/50 text-amber-300 text-xs font-black">
+                  <XCircle className="w-4 h-4 text-amber-400" />
+                  <span>מקריא את התשובה המלאה לפני מעבר לשאלה הבאה...</span>
+                </span>
+              )}
+              {statusPhase === 'idle' && (
+                <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-900 border border-slate-700 text-slate-400 text-xs font-bold">
+                  <MicOff className="w-3.5 h-3.5" />
+                  <span>ממתין להפעלה</span>
+                </span>
+              )}
+            </div>
 
-        {(phase === 'prompting' || phase === 'listening' || phase === 'feedback') && (
-          <>
+            <span className="text-xs font-mono text-amber-300 bg-amber-500/10 px-3 py-1 rounded-xl border border-amber-500/20 font-bold">
+              ר"ת: {getPAOInitials(currentQuestion.item.number, majorDigits).initials}
+            </span>
+          </div>
+
+          {/* Question Display */}
+          <div className="py-4 space-y-2">
+            <span className="text-xs sm:text-sm font-bold text-indigo-400 block">
+              {currentQuestion.displayTitle}
+            </span>
+            <div className="text-6xl sm:text-7xl font-black font-mono text-white tracking-wider">
+              {currentQuestion.displayValue}
+            </div>
+          </div>
+
+          {/* Live Transcript Box */}
+          <div className="min-h-[84px] flex flex-col items-center justify-center bg-slate-900/90 border border-slate-800 rounded-2xl p-4 space-y-2">
+            {liveTranscript ? (
+              <div className="space-y-1">
+                <span className="text-[10px] text-slate-400 block">התשובה שלך (תמלול חי):</span>
+                <p className="text-base sm:text-lg font-black text-white">"{liveTranscript}"</p>
+              </div>
+            ) : statusPhase === 'listening' ? (
+              <p className="text-xs sm:text-sm text-rose-300 font-semibold">
+                🎤 המיקרופון פתוח (זמן מחשבה חופשי ללא הגבלה) — דבר בשפה טבעית, והמערכת תזהה אוטומטית כשסיימת לענות
+              </p>
+            ) : (
+              <p className="text-xs text-slate-500">
+                לחץ על הכפתור הראשי למטה להפעלת רצף שליפה קולי אוטונומי
+              </p>
+            )}
+
+            {statusPhase === 'listening' && liveTranscript.trim().length > 0 && (
+              <button
+                type="button"
+                onClick={() => voiceService.completeListeningNow()}
+                className="mt-1 px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-black cursor-pointer shadow-md transition-all"
+              >
+                סיימתי לענות — בדוק תשובה כעת ↵
+              </button>
+            )}
+          </div>
+
+          {/* Evaluation Feedback Banner */}
+          {lastEvaluationMessage && (
+            <div
+              className={`p-4 rounded-2xl border text-sm font-bold space-y-1.5 animate-fadeIn ${
+                statusPhase === 'feedback_correct'
+                  ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+                  : 'bg-rose-500/15 border-rose-500/40 text-rose-300'
+              }`}
+            >
+              <div>{lastEvaluationMessage}</div>
+              {semanticExplanation && (
+                <div className="text-xs font-normal text-slate-200">{semanticExplanation}</div>
+              )}
+              {statusPhase === 'feedback_incorrect' && currentQuestion.item.scene && (
+                <div className="text-xs text-amber-200 pt-1 border-t border-rose-500/20">
+                  🎬 סצנה מלאה: "{currentQuestion.item.scene}"
+                </div>
+              )}
+            </div>
+          )}
+
+          {errorMessage && (
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold">
+              {errorMessage}
+            </div>
+          )}
+
+          {/* Big Hands-Free Control Buttons */}
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
             <button
               type="button"
-              onClick={handlePauseSession}
-              className="px-6 py-3.5 bg-slate-900 hover:bg-slate-800 text-amber-300 font-bold text-sm rounded-2xl border border-slate-700 flex items-center gap-2 cursor-pointer transition-all active:scale-95"
+              onClick={toggleHandsFreeSession}
+              className={`px-7 py-4 rounded-2xl font-black text-sm sm:text-base flex items-center gap-2.5 shadow-xl transition-all cursor-pointer active:scale-95 ${
+                isHandsFreeActive
+                  ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-600/30'
+                  : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white shadow-indigo-600/30'
+              }`}
             >
-              <Pause className="w-4 h-4" />
-              <span>השהה אימון</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleSkipQuestion}
-              className="px-6 py-3.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-sm rounded-2xl flex items-center gap-2 shadow-lg shadow-indigo-600/30 cursor-pointer transition-all active:scale-95"
-            >
-              <SkipForward className="w-4 h-4" />
-              <span>דלג לשאלה הבאה</span>
-            </button>
-          </>
-        )}
-
-        {phase === 'paused' && (
-          <>
-            <button
-              type="button"
-              onClick={handleResumeSession}
-              className="px-8 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm rounded-2xl flex items-center gap-2 shadow-lg shadow-emerald-900/40 cursor-pointer transition-all active:scale-95"
-            >
-              <Play className="w-4 h-4 fill-white" />
-              <span>המשך אימון קולי</span>
+              {isHandsFreeActive ? (
+                <>
+                  <Square className="w-5 h-5 fill-white" />
+                  <span>עצור אימון קולי</span>
+                </>
+              ) : (
+                <>
+                  <Play className="w-5 h-5 fill-white" />
+                  <span>התחל מבחן שליפה קולי (Hands-Free)</span>
+                </>
+              )}
             </button>
 
             <button
               type="button"
               onClick={() => {
-                setScore(0);
-                setStreak(0);
-                handleResumeSession();
+                if (currentQuestion) {
+                  if (!isHandsFreeActive) {
+                    setIsHandsFreeActive(true);
+                    isHandsFreeRef.current = true;
+                  }
+                  speakAndListenQuestion(currentQuestion);
+                }
               }}
-              className="px-4 py-3.5 bg-slate-900 hover:bg-slate-800 text-slate-300 font-bold text-sm rounded-2xl border border-slate-700 flex items-center gap-2 cursor-pointer"
+              className="px-4 py-4 rounded-2xl bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 font-bold text-xs sm:text-sm flex items-center gap-2 cursor-pointer"
+              title="הקרא שוב את השאלה הנוכחית"
             >
-              <RotateCcw className="w-4 h-4" />
-              <span>איפוס והתחלה מחדש</span>
+              <RotateCcw className="w-4 h-4 text-indigo-400" />
+              <span>הקרא שוב</span>
             </button>
-          </>
-        )}
-      </div>
 
-      {/* Voice commands hint footer */}
-      <div className="pt-3 border-t border-slate-800 text-center text-[11px] text-slate-500 flex items-center justify-center gap-3">
-        <span>💡 פקודות קוליות נתמכות: אמור &quot;דלג&quot; או &quot;הבא&quot; למעבר מהיר</span>
-        <span>•</span>
-        <span>סנכרון זמנים קפדני מונע קליטה חוזרת של קול השאלה</span>
-      </div>
+            <button
+              type="button"
+              onClick={advanceAndSpeakNext}
+              className="px-4 py-4 rounded-2xl bg-slate-900 hover:bg-slate-800 text-slate-200 border border-slate-700 font-bold text-xs sm:text-sm flex items-center gap-2 cursor-pointer"
+              title="דלג לשאלה הבאה"
+            >
+              <SkipForward className="w-4 h-4 text-emerald-400" />
+              <span>הבא</span>
+            </button>
+          </div>
 
-      {/* In-App Microphone Permission Modal Popup */}
-      {showPermissionModal && (
-        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn">
-          <div className="bg-slate-900 border-2 border-indigo-500/60 rounded-3xl max-w-md w-full p-6 sm:p-7 text-right space-y-5 shadow-2xl relative">
-            <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
-              <div className="p-3.5 rounded-2xl bg-indigo-600/25 text-indigo-400 border border-indigo-500/30">
-                <Mic className="w-7 h-7 animate-pulse text-indigo-400" />
+          {/* Hands-Free Workflow Guide */}
+          <div className="pt-4 border-t border-slate-800/80 text-right">
+            <div className="flex items-center gap-1.5 text-xs font-bold text-slate-400 mb-2">
+              <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+              <span>כיצד פועל מבחן השליפה הקולי והניתוח הסמנטי:</span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
+              <div className="bg-slate-900/80 border border-slate-800 rounded-xl px-3 py-2 text-slate-300">
+                <strong className="text-indigo-400 block">1. הקראה וזמן מחשבה חופשי</strong>
+                המערכת מקריאה את השאלה ופותחת מיקרופון יחיד עם זמן מחשבה בלתי מוגבל.
+              </div>
+              <div className="bg-slate-900/80 border border-slate-800 rounded-xl px-3 py-2 text-slate-300">
+                <strong className="text-purple-400 block">2. שפה טבעית + ניתוח Gemini</strong>
+                דבר חופשי ללא מילות קוד לעצירה. Gemini בודק דיוק רעיוני מול התשובה במסד הנתונים.
+              </div>
+              <div className="bg-slate-900/80 border border-slate-800 rounded-xl px-3 py-2 text-slate-300">
+                <strong className="text-emerald-400 block">3. משוב קולי חכם</strong>
+                בתשובה נכונה עוברים מיד לשאלה הבאה; בשגיאה המערכת מקריאה את התשובה המלאה ורק אז ממשיכה.
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Microphone Permission Request Popup Modal */}
+      {showMicPermissionPrompt && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn"
+          onClick={() => setShowMicPermissionPrompt(false)}
+        >
+          <div
+            className="w-full max-w-md bg-slate-900 border-2 border-indigo-500/40 rounded-3xl p-6 shadow-2xl space-y-5 text-right"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center shrink-0">
+                <Mic className="w-6 h-6 text-indigo-400" />
               </div>
               <div>
-                <h3 className="text-lg font-black text-white">אישור גישה למיקרופון</h3>
-                <p className="text-xs text-indigo-300 font-semibold">אימון שליפה קולי Hands-Free</p>
+                <h4 className="text-lg font-black text-white">אישור גישה למיקרופון</h4>
+                <p className="text-xs text-indigo-300 font-semibold">
+                  נדרש להפעלת מבחן שליפה קולי (Hands-Free)
+                </p>
               </div>
             </div>
 
-            <p className="text-sm text-slate-200 leading-relaxed font-medium">
-              כדי לאפשר מענה קולי ללא מגע ידיים (בנהיגה, הליכה או אימון), לחץ על הכפתור למטה ובחלון הקופץ שייפתח בדפדפן בחר באפשרות <strong className="text-emerald-400">&quot;אפשר&quot; (Allow)</strong>.
+            <p className="text-sm text-slate-300 leading-relaxed">
+              מבחן השליפה הקולי זקוק לגישה למיקרופון כדי להקשיב לתשובותיך בשפה חופשית ולנתח אותן סמנטית מול מסד הנתונים. לחץ על <strong>"אשר גישה למיקרופון"</strong> כדי לאפשר גישה ולהתחיל במבחן.
             </p>
 
-            {errorMessage && (
-              <div className="p-3 rounded-xl bg-rose-950/40 border border-rose-800/60 text-rose-300 text-xs flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-                <span>{errorMessage}</span>
-              </div>
-            )}
-
-            <div className="flex items-center gap-3 pt-1">
+            <div className="flex items-center justify-end gap-2.5 pt-2">
               <button
                 type="button"
-                onClick={handleRequestMicPermission}
-                disabled={isRequestingPermission}
-                className="flex-1 py-3.5 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-black text-sm rounded-2xl shadow-lg shadow-indigo-600/30 flex items-center justify-center gap-2 cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+                onClick={() => setShowMicPermissionPrompt(false)}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold border border-slate-700 cursor-pointer transition-colors"
               >
-                <Mic className="w-4 h-4" />
-                <span>{isRequestingPermission ? 'ממתין לאישורך בחלון הדפדפן...' : 'אפשר גישה למיקרופון עכשיו'}</span>
+                ביטול
               </button>
               <button
                 type="button"
-                onClick={() => setShowPermissionModal(false)}
-                className="py-3.5 px-4 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold text-sm rounded-2xl border border-slate-700 cursor-pointer"
+                onClick={confirmMicPermissionAndStart}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-black flex items-center gap-2 shadow-lg shadow-indigo-600/30 cursor-pointer transition-all"
               >
-                ביטול
+                <Mic className="w-4 h-4" />
+                <span>אשר גישה למיקרופון והתחל</span>
               </button>
             </div>
           </div>
