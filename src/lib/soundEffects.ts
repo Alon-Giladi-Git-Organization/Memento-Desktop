@@ -101,6 +101,14 @@ class SoundEffects {
     osc.start(now);
     osc.stop(now + 0.12);
   }
+
+  playSuccess(): void {
+    this.playSuccessChime();
+  }
+
+  playError(): void {
+    this.playErrorBuzzer();
+  }
 }
 
 export const soundEffects = new SoundEffects();

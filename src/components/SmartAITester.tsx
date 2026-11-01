@@ -111,7 +111,7 @@ export const SmartAITester: React.FC<SmartAITesterProps> = ({
     majorItems
       .filter((m) => Boolean(m.is_ready_for_practice))
       .forEach((m) => {
-        const scene = m.userWord || m.imageHint || m.defaultWord;
+        const scene = m.imageHint || m.defaultWord;
         pool.push({
           id: `major-${m.number}`,
           category: 'major',

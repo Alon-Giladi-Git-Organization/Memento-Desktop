@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Compass,
   Plus,
@@ -134,6 +135,18 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [editingLocusId, isEditingPalace, showAddPalaceModal, isWalkthroughOpen]);
+
+  // Lock body scroll while any modal dialog is open so viewport never shifts or scrolls behind the modal
+  useEffect(() => {
+    const isAnyModalOpen = Boolean(editingLocusId || isEditingPalace || showAddPalaceModal || isWalkthroughOpen);
+    if (isAnyModalOpen && typeof document !== 'undefined') {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
   }, [editingLocusId, isEditingPalace, showAddPalaceModal, isWalkthroughOpen]);
 
   const currentPalace = palaces.find((p) => p.id === selectedPalaceId) || palaces[0];
@@ -694,9 +707,9 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
         const editingLocus = currentPalace.loci.find((l) => l.id === editingLocusId);
         if (!editingLocus) return null;
 
-        return (
+        const modalNode = (
           <div
-            className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 md:p-8 animate-fadeIn overflow-y-auto"
+            className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex flex-col sm:items-center sm:justify-center p-0 sm:p-5 md:p-8 animate-fadeIn overflow-y-auto"
             dir="rtl"
             onMouseDown={(e) => {
               // Light Dismiss: Close ONLY if the initial mousedown occurred outside the modal container
@@ -706,7 +719,7 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
             }}
           >
             <div
-              className="w-full max-w-5xl max-h-[92vh] overflow-y-auto bg-slate-900 border-2 border-indigo-500/50 rounded-3xl p-5 sm:p-7 text-right space-y-5 shadow-2xl m3-container-transform my-auto"
+              className="w-full h-full sm:h-auto min-h-full sm:min-h-0 sm:max-h-[92vh] max-w-full sm:max-w-5xl overflow-y-auto bg-slate-900 border-0 sm:border-2 border-indigo-500/50 rounded-none sm:rounded-3xl p-4 sm:p-7 text-right space-y-4 sm:space-y-5 shadow-2xl m3-container-transform sm:my-auto"
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
             >
@@ -919,14 +932,18 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
             </div>
           </div>
         );
+
+        return typeof document !== 'undefined'
+          ? createPortal(modalNode, document.body)
+          : modalNode;
       })()}
 
       {/* =====================================================================
           WIDE CENTERED EDIT PALACE MODAL (PAO Light Dismiss Pattern)
          ===================================================================== */}
-      {isEditingPalace && currentPalace && (
+      {isEditingPalace && currentPalace && typeof document !== 'undefined' && createPortal(
         <div
-          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 md:p-8 animate-fadeIn overflow-y-auto"
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex flex-col sm:items-center sm:justify-center p-0 sm:p-5 md:p-8 animate-fadeIn overflow-y-auto"
           dir="rtl"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) {
@@ -935,7 +952,7 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
           }}
         >
           <div
-            className="w-full max-w-3xl max-h-[92vh] overflow-y-auto bg-slate-900 border-2 border-indigo-500/50 rounded-3xl p-5 sm:p-7 text-right space-y-5 shadow-2xl m3-container-transform my-auto"
+            className="w-full h-full sm:h-auto min-h-full sm:min-h-0 sm:max-h-[92vh] max-w-full sm:max-w-3xl overflow-y-auto bg-slate-900 border-0 sm:border-2 border-indigo-500/50 rounded-none sm:rounded-3xl p-4 sm:p-7 text-right space-y-4 sm:space-y-5 shadow-2xl m3-container-transform sm:my-auto"
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
@@ -1038,11 +1055,12 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Interactive Palace Walkthrough & Active Recall Simulator Modal */}
-      {isWalkthroughOpen && currentPalace && (
+      {isWalkthroughOpen && currentPalace && typeof document !== 'undefined' && createPortal(
         <div
           className="fixed inset-0 z-40 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn"
           onMouseDown={(e) => {
@@ -1304,11 +1322,12 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* New Palace Modal */}
-      {showAddPalaceModal && (
+      {showAddPalaceModal && typeof document !== 'undefined' && createPortal(
         <div
           className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn"
           onMouseDown={(e) => {
@@ -1405,7 +1424,8 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
               </div>
             </form>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

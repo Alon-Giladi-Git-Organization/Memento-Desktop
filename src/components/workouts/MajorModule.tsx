@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Hash,
   Search,
@@ -130,6 +131,18 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
       onApplyPaoToBoth: () => void;
     };
   } | null>(null);
+
+  // Lock body scroll while any modal dialog is open so viewport never shifts or scrolls behind the modal
+  useEffect(() => {
+    const isAnyModalOpen = Boolean(editingNum !== null || (validationModal && validationModal.isOpen));
+    if (isAnyModalOpen && typeof document !== 'undefined') {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [editingNum, validationModal]);
 
   const handleApplySyncValueToBoth = (
     itemNum: number,
@@ -1754,9 +1767,9 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
           Boolean(editWord.trim() && modalPaoObj && editWord.trim() !== modalPaoObj) &&
           !isIgnored(modalMismatchIgnoreKey);
 
-        return (
+        const modalNode = (
           <div
-            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-fadeIn"
+            className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex flex-col sm:items-center sm:justify-center p-0 sm:p-6 overflow-y-auto animate-fadeIn"
             dir="rtl"
             onMouseDown={(e) => {
               if (e.target === e.currentTarget) {
@@ -1765,7 +1778,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
             }}
           >
             <div
-              className="bg-slate-900 border-2 border-amber-500/50 rounded-3xl w-full max-w-2xl p-5 sm:p-7 shadow-2xl space-y-5 text-right my-auto relative"
+              className="bg-slate-900 border-0 sm:border-2 border-amber-500/50 rounded-none sm:rounded-3xl w-full h-full sm:h-auto min-h-full sm:min-h-0 sm:max-h-[92vh] max-w-full sm:max-w-2xl overflow-y-auto p-4 sm:p-7 shadow-2xl space-y-4 sm:space-y-5 text-right sm:my-auto relative"
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
             >
@@ -1973,10 +1986,14 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
             </div>
           </div>
         );
+
+        return typeof document !== 'undefined'
+          ? createPortal(modalNode, document.body)
+          : modalNode;
       })()}
 
       {/* Validation Alert Modal */}
-      {validationModal && validationModal.isOpen && (
+      {validationModal && validationModal.isOpen && typeof document !== 'undefined' && createPortal(
         <div
           className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4"
           dir="rtl"
@@ -2055,7 +2072,8 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

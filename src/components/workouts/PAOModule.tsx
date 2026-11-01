@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   User,
   Search,
@@ -460,6 +461,20 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
   const [editScene, setEditScene] = useState('');
   const [editImageUrl, setEditImageUrl] = useState('');
   const [editActionNotice, setEditActionNotice] = useState<string | null>(null);
+
+  // Lock body scroll while any modal dialog is open so viewport never shifts or scrolls behind the modal
+  useEffect(() => {
+    const isAnyModalOpen = Boolean(
+      selectedPreviewImage || quickUploadItem || editingNum !== null || (validationModal && validationModal.isOpen)
+    );
+    if (isAnyModalOpen && typeof document !== 'undefined') {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [selectedPreviewImage, quickUploadItem, editingNum, validationModal]);
 
   // Escape key & Gallery Arrow keys handler
   useEffect(() => {
@@ -3106,16 +3121,17 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
       {subView === 'voice' && (
         <PAOHandsFreeVoiceQuiz
           readyItems={readyPaoItems}
-          allPaoItems={paoItems}
+          majorDigits={majorDigits}
           onEarnPoints={onEarnPoints}
-          onClose={() => setSubView('registry')}
+          onUnlockBadge={onUnlockBadge}
+          onExitVoiceMode={() => setSubView('registry')}
         />
       )}
 
       {/* Light-Dismiss Full-Screen Image Modal */}
-      {selectedPreviewImage && (
+      {selectedPreviewImage && typeof document !== 'undefined' && createPortal(
         <div
-          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn"
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex flex-col sm:items-center sm:justify-center p-0 sm:p-4 animate-fadeIn overflow-y-auto"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) {
               setSelectedPreviewImage(null);
@@ -3124,7 +3140,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
         >
           {/* דפוס M3 מספר 1: Container Transform (טרנספורמציית קונטיינר) */}
           <div
-            className="relative w-full max-w-6xl xl:max-w-7xl bg-slate-900 border border-slate-700 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[92vh] m3-container-transform"
+            className="relative w-full h-full sm:h-auto min-h-full sm:min-h-0 sm:max-h-[92vh] max-w-full sm:max-w-6xl xl:max-w-7xl bg-slate-900 border-0 sm:border border-slate-700 rounded-none sm:rounded-3xl overflow-hidden shadow-2xl flex flex-col m3-container-transform"
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
@@ -3399,7 +3415,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                   setModalIsCompressing(false);
                 }
               }}
-              className="relative flex-1 overflow-auto p-4 flex items-center justify-center bg-black/60 min-h-[300px]"
+              className="relative flex-1 overflow-auto p-2 sm:p-4 flex items-center justify-center bg-black/60 min-h-0"
             >
               {isModalDragOver && (
                 <div className="absolute inset-0 z-20 bg-indigo-950/85 border-4 border-dashed border-indigo-400 rounded-2xl flex flex-col items-center justify-center p-6 text-center animate-fadeIn">
@@ -3439,7 +3455,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
               <img
                 src={selectedPreviewImage.url}
                 alt={selectedPreviewImage.title}
-                className="max-h-[65vh] w-auto max-w-full object-contain rounded-xl shadow-2xl border border-slate-800"
+                className="max-h-full sm:max-h-[65vh] w-auto max-w-full object-contain rounded-xl shadow-2xl border border-slate-800"
               />
             </div>
 
@@ -3494,13 +3510,14 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
               </div>
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Quick Image Upload Modal */}
-      {quickUploadItem && (
+      {quickUploadItem && typeof document !== 'undefined' && createPortal(
         <div
-          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 md:p-8 animate-fadeIn overflow-y-auto"
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex flex-col sm:items-center sm:justify-center p-0 sm:p-5 md:p-8 animate-fadeIn overflow-y-auto"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) {
               setQuickUploadItem(null);
@@ -3509,7 +3526,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
         >
           {/* דפוס M3 מספר 1: Container Transform (טרנספורמציית קונטיינר) */}
           <div
-            className="w-full max-w-6xl xl:max-w-7xl max-h-[92vh] overflow-y-auto bg-slate-900 border-2 border-pink-500/40 rounded-3xl p-5 sm:p-7 text-right space-y-5 shadow-2xl m3-container-transform my-auto"
+            className="w-full h-full sm:h-auto min-h-full sm:min-h-0 sm:max-h-[92vh] max-w-full sm:max-w-6xl xl:max-w-7xl overflow-y-auto bg-slate-900 border-0 sm:border-2 border-pink-500/40 rounded-none sm:rounded-3xl p-4 sm:p-7 text-right space-y-4 sm:space-y-5 shadow-2xl m3-container-transform sm:my-auto"
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
@@ -3690,7 +3707,8 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* Expanded Centered PAO Edit Modal (with Light Dismiss via mousedown outside or Escape) */}
@@ -3727,9 +3745,9 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
           Boolean(editObject.trim() && modalMajorWord && editObject.trim() !== modalMajorWord) &&
           !isIgnored(modalMismatchIgnoreKey);
 
-        return (
+        const modalNode = (
           <div
-            className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-5 md:p-8 animate-fadeIn overflow-y-auto"
+            className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex flex-col sm:items-center sm:justify-center p-0 sm:p-5 md:p-8 animate-fadeIn overflow-y-auto"
             dir="rtl"
             onMouseDown={(e) => {
               // Light Dismiss: Close ONLY if the initial mousedown occurred outside the modal container
@@ -3741,7 +3759,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
             }}
           >
             <div
-              className="w-full max-w-5xl max-h-[92vh] overflow-y-auto bg-slate-900 border-2 border-indigo-500/50 rounded-3xl p-5 sm:p-7 text-right space-y-5 shadow-2xl m3-container-transform my-auto"
+              className="w-full h-full sm:h-auto min-h-full sm:min-h-0 sm:max-h-[92vh] max-w-full sm:max-w-5xl overflow-y-auto bg-slate-900 border-0 sm:border-2 border-indigo-500/50 rounded-none sm:rounded-3xl p-4 sm:p-7 text-right space-y-4 sm:space-y-5 shadow-2xl m3-container-transform sm:my-auto"
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
             >
@@ -4211,10 +4229,14 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
             </div>
           </div>
         );
+
+        return typeof document !== 'undefined'
+          ? createPortal(modalNode, document.body)
+          : modalNode;
       })()}
 
       {/* Validation Alert Modal */}
-      {validationModal && validationModal.isOpen && (
+      {validationModal && validationModal.isOpen && typeof document !== 'undefined' && createPortal(
         <div
           className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fadeIn"
           onMouseDown={(e) => {
@@ -4292,7 +4314,8 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

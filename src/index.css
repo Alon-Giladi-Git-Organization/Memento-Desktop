@@ -298,23 +298,19 @@
 }
 
 .m3-shared-axis-x-forward {
-  will-change: transform, opacity;
-  animation: m3SharedAxisXForward var(--m3-duration-medium) var(--m3-easing-emphasized-decelerate) forwards;
+  animation: m3SharedAxisXForward var(--m3-duration-medium) var(--m3-easing-emphasized-decelerate);
 }
 
 .m3-shared-axis-x-backward {
-  will-change: transform, opacity;
-  animation: m3SharedAxisXBackward var(--m3-duration-medium) var(--m3-easing-emphasized-decelerate) forwards;
+  animation: m3SharedAxisXBackward var(--m3-duration-medium) var(--m3-easing-emphasized-decelerate);
 }
 
 .m3-shared-axis-y {
-  will-change: transform, opacity;
-  animation: m3SharedAxisY var(--m3-duration-medium) var(--m3-easing-emphasized-decelerate) forwards;
+  animation: m3SharedAxisY var(--m3-duration-medium) var(--m3-easing-emphasized-decelerate);
 }
 
 .m3-shared-axis-z {
-  will-change: transform, opacity;
-  animation: m3SharedAxisZ var(--m3-duration-medium) var(--m3-easing-emphasized-decelerate) forwards;
+  animation: m3SharedAxisZ var(--m3-duration-medium) var(--m3-easing-emphasized-decelerate);
 }
 
 /* ==========================================================================
@@ -337,8 +333,7 @@
 }
 
 .m3-fade-through {
-  will-change: transform, opacity;
-  animation: m3FadeThrough var(--m3-duration-medium) var(--m3-easing-emphasized-decelerate) forwards;
+  animation: m3FadeThrough var(--m3-duration-medium) var(--m3-easing-emphasized-decelerate);
 }
 
 /* ==========================================================================
