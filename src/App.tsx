@@ -170,8 +170,8 @@ export default function App() {
     onAddPAOItem: addPAOItem,
     onUpdatePAOItem: updatePAOItem,
     onDeletePAOItem: deletePAOItem,
-    onAddPalace: (name: string, desc: string, cat?: 'home' | 'familiar_route' | 'custom') =>
-      addMemoryPalace(name, desc, cat || 'custom'),
+    onAddPalace: (name: string, desc: string, cat?: any) =>
+      addMemoryPalace(name, desc, (cat === 'familiar_route' ? 'custom' : cat) || 'custom'),
     onUpdatePalace: updatePalace,
     onDeletePalace: deletePalace,
     onAddLocus: (
@@ -218,7 +218,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col lg:flex-row font-sans selection:bg-amber-500/20 selection:text-amber-900 w-full max-w-full overflow-x-hidden">
+    <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col lg:flex-row font-sans selection:bg-amber-500/20 selection:text-amber-900 w-full max-w-full overflow-x-clip">
       {/* Vertical Sidebar Navigation (Desktop) & Top Drawer Header (Mobile) */}
       <Navbar
         currentTab={currentTab}
@@ -255,7 +255,7 @@ export default function App() {
       {/* Main Content + Footer Column */}
       <div className="flex-1 min-w-0 flex flex-col w-full">
         {/* Main Content Area */}
-        <main className="flex-1 w-full max-w-none px-3 sm:px-6 lg:px-8 xl:px-10 pt-4 sm:pt-8 pb-12 overflow-x-hidden">
+        <main className="flex-1 w-full max-w-none px-3 sm:px-6 lg:px-8 xl:px-10 pt-4 sm:pt-8 pb-12 overflow-x-clip">
           <div key={currentTab} className="w-full m3-fade-through">
             {currentTab === 'workouts' && (
               <WorkoutsHub
@@ -362,9 +362,23 @@ export default function App() {
                 paoItems={paoItems}
                 peopleCards={peopleCards}
                 personalAssociations={personalAssociations}
+                academicPoints={academicPoints}
                 palaces={palaces}
-                testResults={testResults}
-                onSaveTestResult={addTestResult}
+                onEarnPoints={earnPoints}
+                onUnlockBadge={unlockBadge}
+                onSaveTestResult={(cat, score, total) => {
+                  addTestResult({
+                    category: cat === 'palaces' ? 'palace' : (cat as any),
+                    question: `מבחן שליפה חכם - ${cat}`,
+                    targetAssociation: 'מבחן מסכם',
+                    userResponse: `${score} / ${total}`,
+                    isCorrect: score >= total / 2,
+                    score: Math.round((score / Math.max(1, total)) * 100),
+                    verdictTitle: score === total ? 'מושלם!' : 'הושלם בהצלחה',
+                    explanation: `ענית נכונה על ${score} מתוך ${total} שאלות`,
+                    memoryTip: 'המשך לתרגל שליפה פעילה כדי לקבע את המידע בזיכרון לטווח ארוך',
+                  });
+                }}
               />
             )}
 

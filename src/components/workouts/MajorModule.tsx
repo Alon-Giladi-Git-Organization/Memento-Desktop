@@ -948,7 +948,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                     <div
                       id={`major-item-${item.number}`}
                       key={item.number}
-                      className={`bg-slate-950 border rounded-2xl p-4 transition-all duration-300 flex flex-col justify-between space-y-2.5 m3-shape-morph ${
+                      className={`bg-slate-950 border rounded-2xl p-4 transition-all duration-300 flex flex-col justify-between m3-shape-morph h-full ${
                         isEditing
                           ? 'border-amber-400 ring-2 ring-amber-400/30'
                           : !wordValidation.isValid || hasPaoMismatch
@@ -960,7 +960,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                           : 'border-slate-800 hover:border-slate-700'
                       }`}
                     >
-                      <div className="space-y-2.5">
+                      <div className="flex-1 space-y-2.5">
                         {/* Horizontal Top Row: Number Badge + Consonants + Action Icons */}
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-2.5 min-w-0">
@@ -1058,27 +1058,21 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                             </div>
                           )}
                         </div>
+                      </div>
 
-                        {/* Ready for Practice Checkbox */}
-                        <div className="pt-2.5 mt-2 border-t border-slate-800/80 flex items-center justify-between">
-                          <label className="inline-flex items-center gap-2 cursor-pointer select-none py-1.5 px-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 transition-all">
-                            <input
-                              type="checkbox"
-                              checked={Boolean(item.is_ready_for_practice)}
-                              onChange={() => handleToggleItemReady(item.number, item.is_ready_for_practice)}
-                              className="w-4 h-4 rounded text-emerald-500 focus:ring-emerald-500 cursor-pointer accent-emerald-500"
-                            />
-                            <span className={`text-xs font-bold ${item.is_ready_for_practice ? 'text-emerald-400' : 'text-slate-400'}`}>
-                              מוכן לתרגול
-                            </span>
-                          </label>
-                          {item.is_ready_for_practice && (
-                            <span className="text-xs bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded-full border border-emerald-500/30 flex items-center gap-1">
-                              <Check className="w-3.5 h-3.5 text-emerald-400" />
-                              <span>מוכן</span>
-                            </span>
-                          )}
-                        </div>
+                      {/* Ready for Practice Checkbox - Anchored to Bottom Right */}
+                      <div className="pt-2.5 mt-auto border-t border-slate-800/80 flex items-center justify-start">
+                        <label className="inline-flex items-center gap-2 cursor-pointer select-none py-1.5 px-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 transition-all">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(item.is_ready_for_practice)}
+                            onChange={() => handleToggleItemReady(item.number, item.is_ready_for_practice)}
+                            className="w-4 h-4 rounded text-emerald-500 focus:ring-emerald-500 cursor-pointer accent-emerald-500"
+                          />
+                          <span className={`text-xs font-bold ${item.is_ready_for_practice ? 'text-emerald-400' : 'text-slate-400'}`}>
+                            מוכן לתרגול
+                          </span>
+                        </label>
                       </div>
                     </div>
                   );
@@ -1778,12 +1772,12 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
             }}
           >
             <div
-              className="bg-slate-900 border-0 sm:border-2 border-amber-500/50 rounded-none sm:rounded-3xl w-full h-full sm:h-auto min-h-full sm:min-h-0 sm:max-h-[92vh] max-w-full sm:max-w-2xl overflow-y-auto p-4 sm:p-7 shadow-2xl space-y-4 sm:space-y-5 text-right sm:my-auto relative"
+              className="bg-slate-900 border-0 sm:border-2 border-amber-500/50 rounded-none sm:rounded-3xl w-full h-full sm:h-auto min-h-full sm:min-h-0 sm:max-h-[92vh] max-w-full sm:max-w-2xl flex flex-col overflow-hidden shadow-2xl text-right sm:my-auto relative"
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Modal Header */}
-              <div className="flex items-start justify-between gap-4 border-b border-slate-800 pb-4">
+              {/* Modal Header (Fixed at top) */}
+              <div className="shrink-0 flex items-start justify-between gap-4 border-b border-slate-800 bg-slate-900/95 backdrop-blur-md p-4 sm:p-6 z-10">
                 <div className="flex items-center gap-3 flex-wrap">
                   <span className="font-mono text-2xl sm:text-3xl font-black text-amber-300 bg-amber-500/15 px-3.5 py-1.5 rounded-2xl border border-amber-500/30 shadow-inner">
                     #{modalItem.numberStr}
@@ -1813,8 +1807,8 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                 </button>
               </div>
 
-              {/* Modal Body: Anchor Word/Object + Scene (NO Consonants Field) */}
-              <div className="space-y-4">
+              {/* Scrollable Modal Body: Anchor Word/Object + Scene */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
                 {/* Anchor Object Word Field */}
                 <div className="bg-slate-950/90 border border-slate-800 rounded-2xl p-4 space-y-2">
                   <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -1937,8 +1931,8 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                 </div>
               </div>
 
-              {/* Modal Footer */}
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-4 border-t border-slate-800">
+              {/* Modal Footer (Permanently Pinned and Visible) */}
+              <div className="shrink-0 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 p-3.5 sm:p-5 border-t border-slate-800 bg-slate-900/95 backdrop-blur-md z-10 shadow-lg">
                 <div className="flex items-center gap-3">
                   <label className="inline-flex items-center gap-2 cursor-pointer select-none py-2 px-3 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-700 transition-all">
                     <input

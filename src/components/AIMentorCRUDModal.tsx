@@ -279,8 +279,8 @@ export interface AIMentorCRUDHandlers {
   ) => void;
   onDeletePAOItem?: (number: number) => void;
   // Memory Palaces & Loci
-  onAddPalace?: (name: string, description: string, category?: 'home' | 'familiar_route' | 'custom') => void;
-  onUpdatePalace?: (palaceId: string, updates: { name?: string; description?: string; category?: 'home' | 'familiar_route' | 'custom' }) => void;
+  onAddPalace?: (name: string, description: string, category?: any) => void;
+  onUpdatePalace?: (palaceId: string, updates: Partial<MemoryPalace>) => void;
   onDeletePalace?: (palaceId: string) => void;
   onAddLocus?: (
     palaceId: string,
@@ -474,7 +474,7 @@ export function executeAIMentorCRUDAction(
     if (!existing && t === 'CREATE_MAJOR' && handlers.onAddMajorItem) {
       handlers.onAddMajorItem({
         number: num,
-        displayNumber: num < 10 ? `0${num}` : String(num),
+        numberStr: num < 10 ? `0${num}` : String(num),
         consonants: payload.consonants || '',
         defaultWord: word || 'חפץ חדש',
         imageHint: hint || '',
@@ -508,8 +508,7 @@ export function executeAIMentorCRUDAction(
     if (!existing && t === 'CREATE_PAO' && handlers.onAddPAOItem) {
       handlers.onAddPAOItem({
         number: num,
-        displayNumber: num < 10 ? `0${num}` : String(num),
-        consonants: payload.consonants || '',
+        numberStr: num < 10 ? `0${num}` : String(num),
         person: person || 'דמות',
         action: act || 'פעולה',
         object: obj || 'חפץ',
@@ -610,9 +609,11 @@ export function executeAIMentorCRUDAction(
   if ((t === 'CREATE_PERSON_CARD' || t === 'ADD_PERSON_CARD') && payload.name) {
     handlers.onAddPersonFaceCard?.({
       name: String(payload.name),
-      roleOrContext: String(payload.roleOrContext || 'איש קשר'),
-      prominentFacialFeature: String(payload.prominentFacialFeature || 'תו פנים בולט'),
-      namePhoneticAnchor: String(payload.namePhoneticAnchor || payload.name),
+      roleOrJob: String(payload.roleOrJob || payload.roleOrContext || 'איש קשר'),
+      avatarUrl: String(payload.avatarUrl || ''),
+      avatarSeed: String(payload.avatarSeed || payload.name),
+      morphologicalAnchor: String(payload.morphologicalAnchor || payload.prominentFacialFeature || 'תו פנים בולט'),
+      substituteWord: String(payload.substituteWord || payload.namePhoneticAnchor || payload.name),
       mnemonicScene: String(payload.mnemonicScene || ''),
       is_ready_for_practice: true,
     });

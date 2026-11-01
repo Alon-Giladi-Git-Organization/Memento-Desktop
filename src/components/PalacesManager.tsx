@@ -719,12 +719,12 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
             }}
           >
             <div
-              className="w-full h-full sm:h-auto min-h-full sm:min-h-0 sm:max-h-[92vh] max-w-full sm:max-w-5xl overflow-y-auto bg-slate-900 border-0 sm:border-2 border-indigo-500/50 rounded-none sm:rounded-3xl p-4 sm:p-7 text-right space-y-4 sm:space-y-5 shadow-2xl m3-container-transform sm:my-auto"
+              className="w-full h-full sm:h-auto min-h-full sm:min-h-0 sm:max-h-[92vh] max-w-full sm:max-w-5xl flex flex-col overflow-hidden bg-slate-900 border-0 sm:border-2 border-indigo-500/50 rounded-none sm:rounded-3xl text-right shadow-2xl m3-container-transform sm:my-auto"
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Modal Header */}
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+              {/* Modal Header (Fixed at top) */}
+              <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-slate-900/95 backdrop-blur-md p-4 sm:p-6 z-10">
                 <div className="flex items-center gap-3">
                   <span className="font-mono text-2xl sm:text-3xl font-black text-indigo-300 bg-indigo-500/15 px-3.5 py-1.5 rounded-2xl border border-indigo-500/30 shadow-inner">
                     #{editingLocus.stepNumber}
@@ -759,8 +759,10 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
                 </div>
               </div>
 
-              {/* 3 Spatial Anchor Fields in Expanded Horizontal Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Scrollable Modal Content */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-5">
+                {/* 3 Spatial Anchor Fields in Expanded Horizontal Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* 1. Room Name */}
                 <div className="bg-slate-950/90 border border-indigo-500/30 rounded-2xl p-4 space-y-2 shadow-inner">
                   <label className="text-xs sm:text-sm text-indigo-300 font-black flex items-center gap-1.5">
@@ -892,45 +894,49 @@ export const PalacesManager: React.FC<PalacesManagerProps> = ({
                   className="w-full bg-slate-900 border border-slate-700 focus:border-amber-500 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white placeholder-slate-500 leading-relaxed"
                 />
               </div>
+            </div>
 
-              {/* Modal Footer Action Buttons */}
-              <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-800">
-                <span className="text-xs text-slate-400">
-                  💡 טיפ: לחץ{' '}
-                  <kbd className="px-1.5 py-0.5 bg-slate-800 rounded font-mono text-[10px] text-slate-300">
-                    Enter
-                  </kbd>{' '}
-                  לשמירה מהירה או{' '}
-                  <kbd className="px-1.5 py-0.5 bg-slate-800 rounded font-mono text-[10px] text-slate-300">
-                    Esc
-                  </kbd>{' '}
-                  לביטול
-                </span>
-                <div className="flex items-center gap-2.5">
-                  <button
-                    type="button"
-                    onClick={handleCloseEditLocusModal}
-                    className="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 cursor-pointer transition-colors"
-                  >
-                    ביטול
-                  </button>
-                  <button
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleSaveEditLocusModal();
-                    }}
-                    className="px-6 py-2.5 rounded-xl text-xs sm:text-sm font-black bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white cursor-pointer shadow-lg shadow-indigo-600/30 flex items-center gap-2 transition-all"
-                  >
-                    <Save className="w-4 h-4" />
-                    <span>שמור שינויים</span>
-                  </button>
-                </div>
+            {/* Modal Footer Action Buttons (Permanently Pinned and Visible) */}
+            <div className="shrink-0 flex items-center justify-between gap-3 p-3.5 sm:p-5 border-t border-slate-800 bg-slate-900/95 backdrop-blur-md z-10 shadow-lg">
+              <span className="text-xs text-slate-400 hidden sm:inline">
+                💡 טיפ: לחץ{' '}
+                <kbd className="px-1.5 py-0.5 bg-slate-800 rounded font-mono text-[10px] text-slate-300">
+                  Enter
+                </kbd>{' '}
+                לשמירה מהירה או{' '}
+                <kbd className="px-1.5 py-0.5 bg-slate-800 rounded font-mono text-[10px] text-slate-300">
+                  Esc
+                </kbd>{' '}
+                לביטול
+              </span>
+              <span className="text-xs text-slate-400 sm:hidden">
+                תחנה #{editingLocus.stepNumber}
+              </span>
+              <div className="flex items-center gap-2.5">
+                <button
+                  type="button"
+                  onClick={handleCloseEditLocusModal}
+                  className="px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold text-slate-300 hover:text-white bg-slate-800 hover:bg-slate-700 cursor-pointer transition-colors"
+                >
+                  ביטול
+                </button>
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleSaveEditLocusModal();
+                  }}
+                  className="px-6 py-2.5 rounded-xl text-xs sm:text-sm font-black bg-indigo-600 hover:bg-indigo-500 active:scale-95 text-white cursor-pointer shadow-lg shadow-indigo-600/30 flex items-center gap-2 transition-all"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>שמור שינויים</span>
+                </button>
               </div>
             </div>
           </div>
+        </div>
         );
 
         return typeof document !== 'undefined'

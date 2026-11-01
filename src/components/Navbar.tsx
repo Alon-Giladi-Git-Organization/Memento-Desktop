@@ -21,6 +21,8 @@ import {
   User,
   Hash,
   Smile,
+  ChevronsRight,
+  ChevronsLeft,
 } from 'lucide-react';
 import { UserProfileData } from '../lib/firebase';
 import { User as FirebaseUser } from 'firebase/auth';
@@ -84,6 +86,26 @@ export const Navbar: React.FC<NavbarProps> = ({
   // Persistent expandable sub-menu for "מרכז אימונים":
   // Remains open while navigating within the Training Center and collapses ONLY upon a second click of the main "מרכז אימונים" button.
   const [isWorkoutsSubMenuOpen, setIsWorkoutsSubMenuOpen] = useState(true);
+  // Expand / Minimize state for desktop Navbar (persistent in localStorage)
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem('memento_navbar_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleCollapse = () => {
+    setIsCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('memento_navbar_collapsed', String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
 
   const workoutSubModules: {
     id: WorkoutSubModule;
@@ -259,14 +281,24 @@ export const Navbar: React.FC<NavbarProps> = ({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setMobileMenuOpen(false)}
-            className="lg:hidden p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
-            title="סגור תפריט"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={toggleCollapse}
+              className="hidden lg:flex p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 border border-transparent hover:border-slate-200 cursor-pointer transition-all"
+              title="מזער סרגל ניווט (הרחב שטח עבודה)"
+            >
+              <ChevronsRight className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(false)}
+              className="lg:hidden p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer"
+              title="סגור תפריט"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Global Search Trigger Bar */}
@@ -467,11 +499,164 @@ export const Navbar: React.FC<NavbarProps> = ({
     </div>
   );
 
+  const collapsedSidebarContent = (
+    <div className="flex flex-col h-full justify-between items-center py-3.5 px-2 gap-3 select-none">
+      {/* Top: Expand Button + Brain Brand Icon + Search + Stats */}
+      <div className="flex flex-col items-center gap-2.5 w-full">
+        {/* Expand / Minimize Toggle Button */}
+        <button
+          type="button"
+          onClick={toggleCollapse}
+          className="w-11 h-11 rounded-2xl bg-[#58CC02]/15 text-[#2e6e01] hover:bg-[#58CC02] hover:text-white border-2 border-[#58CC02]/40 hover:border-[#46a302] flex items-center justify-center transition-all cursor-pointer shadow-xs active:translate-y-0.5 group"
+          title="הרחב סרגל ניווט (הצג את כל הפרטים והשמות)"
+        >
+          <ChevronsLeft className="w-5 h-5 group-hover:scale-110 transition-transform" />
+        </button>
+
+        {/* Brand Brain Icon */}
+        <div
+          onClick={() => {
+            onTabChange('workouts');
+            setIsWorkoutsSubMenuOpen(true);
+          }}
+          className="relative flex items-center justify-center w-11 h-11 rounded-2xl bg-[#58CC02] border-b-4 border-[#46a302] shadow-sm hover:scale-105 active:translate-y-0.5 transition-all cursor-pointer shrink-0"
+          title="ממנטו (Memento) - לחץ למרכז האימונים"
+        >
+          <Brain className="w-5 h-5 text-white font-black drop-shadow" />
+          <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-[#FFC800] rounded-full border-2 border-white animate-pulse" />
+        </div>
+
+        {/* Global Search Button */}
+        {onOpenSearch && (
+          <button
+            onClick={onOpenSearch}
+            className="w-11 h-10 rounded-2xl bg-slate-100 hover:bg-amber-100 text-slate-600 hover:text-amber-800 border border-slate-300/80 hover:border-amber-400 flex items-center justify-center transition-all cursor-pointer shadow-2xs"
+            title="חיפוש כללי (Ctrl + K)"
+          >
+            <Search className="w-4 h-4 text-amber-600" />
+          </button>
+        )}
+
+        {/* Compact Stats (Streak & XP) */}
+        <div className="flex flex-col items-center gap-1.5 w-full pt-1.5 border-t border-slate-100">
+          <div
+            onClick={() => handleSelectTab('gamification')}
+            className="flex flex-col items-center justify-center bg-[#FF9600]/15 border border-[#FF9600]/40 w-11 py-1 rounded-xl text-[#c76500] font-black text-[10px] cursor-pointer hover:bg-[#FF9600]/25 transition-all"
+            title={`רצף יומי: ${profile.dailyStreak} ימים`}
+          >
+            <Flame className="w-3.5 h-3.5 fill-[#FF9600]" />
+            <span className="leading-tight">{profile.dailyStreak}</span>
+          </div>
+          <div
+            onClick={() => handleSelectTab('gamification')}
+            className="flex flex-col items-center justify-center bg-[#FFC800]/20 border border-[#FFC800]/50 w-11 py-1 rounded-xl text-amber-900 font-black text-[10px] cursor-pointer hover:bg-[#FFC800]/30 transition-all"
+            title={`נקודות XP: ${profile.points}`}
+          >
+            <Zap className="w-3.5 h-3.5 fill-[#FFC800]" />
+            <span className="leading-tight font-mono">{profile.points}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Middle: Centered Icon Modules Navigation */}
+      <nav className="flex-1 overflow-y-auto space-y-2 py-2 w-full flex flex-col items-center">
+        {tabs.map((tab) => {
+          const isActive = currentTab === tab.id;
+          return (
+            <div key={tab.id} className="relative group w-full flex justify-center">
+              <button
+                type="button"
+                onClick={() => handleSelectTab(tab.id)}
+                className={`relative w-11 h-11 rounded-2xl flex items-center justify-center transition-all cursor-pointer ${
+                  isActive
+                    ? 'bg-slate-100 text-slate-900 border-2 border-[#58CC02] border-b-4 border-b-[#46a302] shadow-xs scale-105'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border-2 border-transparent'
+                }`}
+                title={`${tab.label}${tab.badge ? ` (${tab.badge})` : ''}`}
+              >
+                <span className={isActive ? 'text-[#58CC02]' : tab.color}>
+                  {tab.icon}
+                </span>
+
+                {/* Left Active Glow Indicator */}
+                {isActive && (
+                  <span className="absolute -left-2 top-1/2 -translate-y-1/2 w-1.5 h-5 bg-[#58CC02] rounded-full" />
+                )}
+              </button>
+
+              {/* Tooltip on Hover */}
+              <div className="absolute right-full mr-2 top-1/2 -translate-y-1/2 hidden group-hover:flex items-center gap-1.5 bg-slate-900 text-white text-xs font-bold px-2.5 py-1.5 rounded-xl shadow-xl whitespace-nowrap z-50 pointer-events-none animate-fadeIn">
+                <span>{tab.label}</span>
+                {tab.badge && (
+                  <span className="text-[10px] bg-slate-800 text-amber-300 px-1.5 py-0.5 rounded-md font-mono">
+                    {tab.badge}
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </nav>
+
+      {/* Bottom: Compact User Profile / Login */}
+      <div className="pt-2 border-t border-slate-100 w-full flex flex-col items-center gap-2">
+        {currentUser ? (
+          <div className="relative group flex justify-center">
+            <div
+              className="relative cursor-pointer"
+              title={`${profile.displayName || currentUser.email} (מחובר)`}
+            >
+              {currentUser.photoURL ? (
+                <img
+                  src={currentUser.photoURL}
+                  alt=""
+                  className="w-9 h-9 rounded-xl border-2 border-[#58CC02] object-cover shadow-xs"
+                />
+              ) : (
+                <div className="w-9 h-9 rounded-xl bg-slate-100 text-[#58CC02] border-2 border-[#58CC02] flex items-center justify-center font-black text-xs">
+                  {profile.displayName?.charAt(0) || 'U'}
+                </div>
+              )}
+              <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500 border border-white"></span>
+              </span>
+            </div>
+
+            {/* Quick Logout Flyout on hover */}
+            <div className="absolute right-full mr-2 bottom-0 hidden group-hover:flex items-center gap-2 bg-slate-900 text-white text-xs font-bold p-2 rounded-xl shadow-xl whitespace-nowrap z-50">
+              <span className="max-w-28 truncate">{profile.displayName || currentUser.email}</span>
+              <button
+                onClick={onLogout}
+                className="text-rose-400 hover:text-rose-300 p-1 hover:bg-slate-800 rounded-lg cursor-pointer"
+                title="התנתק"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={onLogin}
+            className="w-10 h-10 rounded-2xl bg-[#58CC02] hover:bg-[#46a302] text-white flex items-center justify-center transition-all cursor-pointer shadow-sm"
+            title="התחבר לענן"
+          >
+            <LogIn className="w-4 h-4" />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <>
-      {/* Desktop Vertical Sidebar */}
-      <aside className="hidden lg:flex lg:flex-col lg:w-68 xl:w-72 shrink-0 bg-white border-l-2 border-slate-200 sticky top-0 h-screen z-40 shadow-xs">
-        {sidebarContent}
+      {/* Desktop Vertical Sidebar (Sticky, stays visible on scroll, Expandable & Minimizable) */}
+      <aside
+        className={`hidden lg:flex lg:flex-col shrink-0 bg-white border-l-2 border-slate-200 sticky top-0 h-screen z-40 shadow-xs transition-all duration-300 ease-in-out ${
+          isCollapsed ? 'w-20' : 'w-68 xl:w-72'
+        }`}
+      >
+        {isCollapsed ? collapsedSidebarContent : sidebarContent}
       </aside>
 
       {/* Mobile Header Bar */}

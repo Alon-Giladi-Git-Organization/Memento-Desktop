@@ -1814,7 +1814,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                           setIsCompressing(false);
                         }
                       }}
-                      className={`relative bg-slate-950 border rounded-2xl p-4 transition-all duration-300 flex flex-col justify-between space-y-2.5 overflow-hidden m3-shape-morph ${
+                      className={`relative bg-slate-950 border rounded-2xl p-4 transition-all duration-300 flex flex-col justify-between overflow-hidden m3-shape-morph h-full ${
                         dragOverCardNum === item.number
                           ? 'border-indigo-400 ring-4 ring-indigo-400/40 scale-[1.01] shadow-xl bg-indigo-950/40'
                           : isHighlighted
@@ -1835,7 +1835,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                         </div>
                       )}
 
-                      <div className="space-y-2.5">
+                      <div className="flex-1 space-y-2.5">
                         {/* Top Header Row: Number Badge + Initials + Person Title + Actions */}
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-2 min-w-0">
@@ -2032,27 +2032,21 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                             </div>
                           ) : null}
                         </div>
+                      </div>
 
-                        {/* Ready for Practice Checkbox */}
-                        <div className="pt-2 mt-1 border-t border-slate-800/80 flex items-center justify-between">
-                          <label className="inline-flex items-center gap-1.5 cursor-pointer select-none py-1 px-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 transition-all">
-                            <input
-                              type="checkbox"
-                              checked={Boolean(item.is_ready_for_practice)}
-                              onChange={() => handleTogglePaoReady(item.number, item.is_ready_for_practice)}
-                              className="w-4 h-4 rounded text-indigo-500 focus:ring-indigo-500 cursor-pointer accent-indigo-500"
-                            />
-                            <span className={`text-xs font-bold ${item.is_ready_for_practice ? 'text-indigo-300' : 'text-slate-400'}`}>
-                              מוכן לתרגול
-                            </span>
-                          </label>
-                          {item.is_ready_for_practice && (
-                            <span className="text-xs bg-indigo-500/20 text-indigo-300 font-bold px-2 py-0.5 rounded-full border border-indigo-500/30 flex items-center gap-1">
-                              <Check className="w-3.5 h-3.5 text-indigo-400" />
-                              <span>מוכן</span>
-                            </span>
-                          )}
-                        </div>
+                      {/* Ready for Practice Checkbox - Anchored to Bottom Right */}
+                      <div className="pt-2.5 mt-auto border-t border-slate-800/80 flex items-center justify-start">
+                        <label className="inline-flex items-center gap-1.5 cursor-pointer select-none py-1 px-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 transition-all">
+                          <input
+                            type="checkbox"
+                            checked={Boolean(item.is_ready_for_practice)}
+                            onChange={() => handleTogglePaoReady(item.number, item.is_ready_for_practice)}
+                            className="w-4 h-4 rounded text-indigo-500 focus:ring-indigo-500 cursor-pointer accent-indigo-500"
+                          />
+                          <span className={`text-xs font-bold ${item.is_ready_for_practice ? 'text-indigo-300' : 'text-slate-400'}`}>
+                            מוכן לתרגול
+                          </span>
+                        </label>
                       </div>
                     </div>
                   );
@@ -3759,12 +3753,12 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
             }}
           >
             <div
-              className="w-full h-full sm:h-auto min-h-full sm:min-h-0 sm:max-h-[92vh] max-w-full sm:max-w-5xl overflow-y-auto bg-slate-900 border-0 sm:border-2 border-indigo-500/50 rounded-none sm:rounded-3xl p-4 sm:p-7 text-right space-y-4 sm:space-y-5 shadow-2xl m3-container-transform sm:my-auto"
+              className="w-full h-full sm:h-auto min-h-full sm:min-h-0 sm:max-h-[92vh] max-w-full sm:max-w-5xl flex flex-col overflow-hidden bg-slate-900 border-0 sm:border-2 border-indigo-500/50 rounded-none sm:rounded-3xl text-right shadow-2xl m3-container-transform sm:my-auto"
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => e.stopPropagation()}
             >
-              {/* Modal Header */}
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+              {/* Modal Header (Fixed at top) */}
+              <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 bg-slate-900/95 backdrop-blur-md p-4 sm:p-6 z-10">
                 <div className="flex items-center gap-3">
                   <span className="font-mono text-2xl sm:text-3xl font-black text-indigo-300 bg-indigo-500/15 px-3.5 py-1.5 rounded-2xl border border-indigo-500/30 shadow-inner">
                     #{editingItem.numberStr}
@@ -3816,8 +3810,10 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                 </div>
               </div>
 
-              {/* 3 Main PAO Fields in Expanded Horizontal Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Scrollable Form Body */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-5">
+                {/* 3 Main PAO Fields in Expanded Horizontal Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {/* 1. Person */}
                 <div className="bg-slate-950/90 border border-amber-500/30 rounded-2xl p-4 space-y-2 shadow-inner">
                   <div className="flex items-center justify-between gap-2">
@@ -4193,11 +4189,15 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                   </div>
                 )}
               </div>
+              </div>
 
-              {/* Modal Footer Action Buttons */}
-              <div className="flex items-center justify-between gap-3 pt-3 border-t border-slate-800">
-                <span className="text-xs text-slate-400">
+              {/* Modal Footer Action Buttons (Permanently Pinned and Visible) */}
+              <div className="shrink-0 flex items-center justify-between gap-3 p-3.5 sm:p-5 border-t border-slate-800 bg-slate-900/95 backdrop-blur-md z-10 shadow-lg">
+                <span className="text-xs text-slate-400 hidden sm:inline">
                   💡 טיפ: לחץ <kbd className="px-1.5 py-0.5 bg-slate-800 rounded font-mono text-[10px] text-slate-300">Enter</kbd> לשמירה מהירה או <kbd className="px-1.5 py-0.5 bg-slate-800 rounded font-mono text-[10px] text-slate-300">Esc</kbd> לביטול
+                </span>
+                <span className="text-xs text-slate-400 sm:hidden">
+                  #{editingItem.numberStr}
                 </span>
                 <div className="flex items-center gap-2.5">
                   <button

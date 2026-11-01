@@ -67,17 +67,17 @@ export interface WorkoutsHubProps {
   onSetAllPAOReady?: (ready: boolean, numbers?: number[]) => void;
   onSyncMajorAndPAOObjects?: (direction: 'majorToPao' | 'paoToMajor') => void;
   onRestoreOriginalPAO?: () => Promise<any>;
-  onAddPalace: (name: string, description: string, category?: 'home' | 'familiar_route' | 'custom') => void;
-  onUpdatePalace?: (palaceId: string, updates: { name?: string; description?: string }) => void;
-  onDeletePalace: (id: string) => void;
+  onAddPalace: (name: string, description: string, category: 'home' | 'work' | 'campus' | 'outdoor' | 'custom') => Promise<any>;
+  onUpdatePalace?: (palaceId: string, updates: Partial<MemoryPalace>) => void;
+  onDeletePalace: (id: string) => Promise<void>;
   onAddLocus: (
     palaceId: string,
     title: string,
     roomName: string,
     positionDescription: string,
-    storedContent: string,
-    mnemonicScene: string
-  ) => void;
+    storedContent?: string,
+    mnemonicScene?: string
+  ) => Promise<void>;
   onUpdateLocus: (palaceId: string, locusId: string, updates: Partial<PalaceLocus>) => void;
   onDeleteLocus: (palaceId: string, locusId: string) => void;
   onSetAllLociReady?: (palaceId: string, ready: boolean) => void;
