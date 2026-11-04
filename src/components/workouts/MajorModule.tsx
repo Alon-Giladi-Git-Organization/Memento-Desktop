@@ -2380,7 +2380,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
       {/* Major Quick Image Upload / Gemini AI Modal */}
       {quickUploadItem && typeof document !== 'undefined' && createPortal(
         <div
-          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex flex-col sm:items-center sm:justify-center p-0 sm:p-5 md:p-8 animate-fadeIn overflow-y-auto"
+          className="fixed inset-0 z-[70] bg-black/85 backdrop-blur-md flex flex-col sm:items-center sm:justify-center p-0 sm:p-5 md:p-8 animate-fadeIn overflow-y-auto"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) {
               setQuickUploadItem(null);

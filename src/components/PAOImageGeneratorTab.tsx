@@ -292,7 +292,7 @@ export const PAOImageGeneratorTab: React.FC<PAOImageGeneratorTabProps> = ({
               יוצר את הסצנה שלך... התהליך עשוי לקחת מספר דקות
             </h3>
             <p className="text-xs sm:text-sm text-indigo-200/80 leading-relaxed font-medium">
-              Gemini מתרגם את שלשת ה-PAO לקריקטורה אבסטרקטית עשירה ומטמיע את פרטי הסצנה
+              Gemini מתרגם את שלשת ה-PAO לאנימציית 2D קלילה בסגנון דיסני וסטודיו ג&apos;יבלי ומטמיע את פרטי הסצנה
             </p>
             <div className="pt-2 flex items-center justify-center gap-2 text-xs font-mono text-slate-400">
               <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
@@ -389,7 +389,7 @@ export const PAOImageGeneratorTab: React.FC<PAOImageGeneratorTabProps> = ({
             className="w-full bg-slate-900 border border-slate-700 focus:border-indigo-500 rounded-2xl p-3 text-xs text-white placeholder-slate-500 focus:outline-none transition-all disabled:opacity-50"
           />
           <p className="text-[10px] text-slate-400 leading-normal">
-            💡 <strong className="text-indigo-300">ברירת המחדל המובנית:</strong> סגנון קריקטורה אבסטרקטית צבעונית והומוריסטית המותאם לסלבריטאים, כולל שילוב טקסט טבעי של האדם (על הבגד/עצם), הפעולה (בבועת קומיקס כמו POW או GLUG), והחפץ (על גבי תווית).
+            💡 <strong className="text-indigo-300">ברירת המחדל המובנית:</strong> סגנון אנימציית 2D קלילה וקסומה בהשראת דיסני וסטודיו ג&apos;יבלי (מותאם גם לדמויות מוכרות וסלבריטאים), כולל שילוב פרטי האדם, הפעולה והחפץ בסצנה אחת.
           </p>
         </div>
       )}

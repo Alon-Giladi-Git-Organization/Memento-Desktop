@@ -175,10 +175,10 @@ export const MajorImageGeneratorTab: React.FC<MajorImageGeneratorTabProps> = ({
   };
 
   const styleSuggestions = [
-    { label: '🎨 קריקטורה קומית חיה', prompt: 'Humorous, vibrant abstract 2D cartoon caricature with bold clean comic outlines and saturated expressive colors' },
-    { label: '🌟 תלת-מימד ססגוני (3D Render)', prompt: 'Crisp vibrant 3D stylized character render, claymation Disney-Pixar style lighting, vibrant reflections' },
-    { label: '🖌️ ציור שמן מנמוני', prompt: 'Lively expressive oil painting style with thick brushstrokes and dramatic mnemonic lighting' },
-    { label: '💥 סגנון קומיקס רטרו (Pop-Art)', prompt: 'Classic vintage comic book illustration, pop-art halftone dots, vibrant action panel layout' },
+    { label: '✨ אנימציית 2D דיסני / ג׳יבלי (ברירת מחדל)', prompt: 'Light-hearted, charming 2D hand-drawn animation style inspired by Studio Ghibli and classic 2D Disney animated films, warm cel-shaded colors and painterly background' },
+    { label: '🎨 אנימציית פנטזיה קסומה', prompt: 'Whimsical Studio Ghibli fantasy 2D animation with glowing magical lighting and lush hand-painted scenery' },
+    { label: '🌟 הרפתקה קלאסית מצוירת', prompt: 'Classic golden-age 2D Disney animated feature style, expressive character animation and vibrant storybook colors' },
+    { label: '🎬 סצנה קולנועית מוארת', prompt: 'Cinematic 2D animated film frame in Studio Ghibli and Disney style with dramatic sunset lighting' },
   ];
 
   return (
@@ -212,7 +212,7 @@ export const MajorImageGeneratorTab: React.FC<MajorImageGeneratorTabProps> = ({
       {/* Style & Atmosphere Optional Prompt */}
       <div className="space-y-1.5">
         <label className="text-xs font-bold text-slate-200 block">
-          התאמת סגנון ויזואלי והנחיות מיוחדות (אופציונלי):
+          דגשים נוספים לסצנה (ברירת מחדל: אנימציית 2D קלילה בסגנון דיסני / סטודיו ג&apos;יבלי):
         </label>
         <div className="flex flex-wrap gap-1.5 mb-2">
           {styleSuggestions.map((s, idx) => (
@@ -230,7 +230,7 @@ export const MajorImageGeneratorTab: React.FC<MajorImageGeneratorTabProps> = ({
           rows={2}
           value={stylePrompt}
           onChange={(e) => setStylePrompt(e.target.value)}
-          placeholder="למשל: סגנון קריקטורה קומית חיה, תאורה דרמטית, צבעים זוהרים..."
+          placeholder="למשל: תאורת שקיעה קסומה, רקע של יער מצויר בסגנון ג'יבלי, הבעת פנים משעשעת..."
           className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500"
         />
       </div>

@@ -116,17 +116,31 @@ export const PAOGalleryCarousel: React.FC<PAOGalleryCarouselProps> = ({
     setCurrentIndex(nextIndex);
   };
 
-  // Keyboard navigation & Light Dismiss via Escape key
+  // Keyboard navigation, Enter to save in edit mode & Light Dismiss via Escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't intercept if user is typing in an input
+      if (isEditingSlide && e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSaveSlideEdits();
+        return;
+      }
+
+      // Don't intercept arrow keys / space if user is typing in an input
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          handleCancelSlideEdits();
+        }
         return;
       }
 
       if (e.key === 'Escape') {
         e.preventDefault();
-        onClose?.();
+        if (isEditingSlide) {
+          handleCancelSlideEdits();
+        } else {
+          onClose?.();
+        }
       } else if (e.key === 'ArrowLeft') {
         goToNext();
       } else if (e.key === 'ArrowRight') {
@@ -139,7 +153,7 @@ export const PAOGalleryCarousel: React.FC<PAOGalleryCarouselProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [goToNext, goToPrev, onClose]);
+  }, [goToNext, goToPrev, onClose, isEditingSlide, editPerson, editAction, editObject, editScene, currentIndex]);
 
   // Autoplay timer
   useEffect(() => {
@@ -459,10 +473,11 @@ export const PAOGalleryCarousel: React.FC<PAOGalleryCarouselProps> = ({
                       <button
                         type="button"
                         onClick={handleSaveSlideEdits}
-                        className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/30 transition-all cursor-pointer"
+                        title="שמור שינויים (ניתן גם ללחוץ Enter)"
+                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/30 transition-all cursor-pointer"
                       >
                         <Save className="w-4 h-4" />
-                        <span>שמור</span>
+                        <span>שמור (Enter)</span>
                       </button>
                     </div>
                   )}
@@ -550,6 +565,12 @@ export const PAOGalleryCarousel: React.FC<PAOGalleryCarouselProps> = ({
                         type="text"
                         value={editPerson}
                         onChange={(e) => setEditPerson(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleSaveSlideEdits();
+                          }
+                        }}
                         placeholder="שם הדמות..."
                         className="w-full bg-slate-900 border border-slate-700 focus:border-amber-500 rounded-xl px-3.5 py-2 text-base sm:text-lg font-bold text-white focus:outline-none"
                       />
@@ -581,6 +602,12 @@ export const PAOGalleryCarousel: React.FC<PAOGalleryCarouselProps> = ({
                         type="text"
                         value={editAction}
                         onChange={(e) => setEditAction(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleSaveSlideEdits();
+                          }
+                        }}
                         placeholder="פעולה קינטית..."
                         className="w-full bg-slate-900 border border-slate-700 focus:border-purple-500 rounded-xl px-3.5 py-2 text-base sm:text-lg font-bold text-white focus:outline-none"
                       />
@@ -612,6 +639,12 @@ export const PAOGalleryCarousel: React.FC<PAOGalleryCarouselProps> = ({
                         type="text"
                         value={editObject}
                         onChange={(e) => setEditObject(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleSaveSlideEdits();
+                          }
+                        }}
                         placeholder="חפץ פסיבי מובחן..."
                         className="w-full bg-slate-900 border border-slate-700 focus:border-teal-500 rounded-xl px-3.5 py-2 text-base sm:text-lg font-bold text-white focus:outline-none"
                       />
@@ -649,26 +682,18 @@ export const PAOGalleryCarousel: React.FC<PAOGalleryCarouselProps> = ({
                       rows={3}
                       value={editScene}
                       onChange={(e) => setEditScene(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSaveSlideEdits();
+                        }
+                      }}
                       placeholder="תאר סצנה חיה, הומוריסטית ורב-חושית המשלבת את הדמות, הפעולה והחפץ יחד..."
                       className="w-full bg-slate-900 border border-slate-700 focus:border-amber-500 rounded-xl px-3.5 py-2.5 text-base sm:text-lg text-white focus:outline-none leading-relaxed"
                     />
-                    <div className="flex items-center justify-end gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={handleCancelSlideEdits}
-                        className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs sm:text-sm font-bold transition-all cursor-pointer"
-                      >
-                        ביטול
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleSaveSlideEdits}
-                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/30 transition-all cursor-pointer"
-                      >
-                        <Save className="w-4 h-4" />
-                        <span>שמור שינויים</span>
-                      </button>
-                    </div>
+                    <p className="text-xs text-slate-400 text-left">
+                      לחץ <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-slate-200">Enter</kbd> לשמירה מהירה
+                    </p>
                   </div>
                 </div>
               )}
@@ -705,16 +730,16 @@ export const PAOGalleryCarousel: React.FC<PAOGalleryCarouselProps> = ({
                   className="w-full h-full max-h-[74vh] object-contain transition-transform duration-500 group-hover:scale-[1.01] drop-shadow-2xl"
                 />
 
-                {/* Floating Quick Action Overlay on Image (Regenerate with AI only) */}
+                {/* Floating Quick Action Overlay on Image (Change Image: Upload or AI) */}
                 <div className="absolute top-3 left-3 z-20 flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => onOpenImageGenerator?.(currentItem)}
-                    className="p-2.5 rounded-xl bg-gradient-to-r from-indigo-600/90 to-pink-600/90 hover:from-indigo-500 hover:to-pink-500 text-white backdrop-blur-md border border-white/10 shadow-lg transition-all cursor-pointer flex items-center gap-1.5 text-xs sm:text-sm font-bold"
-                    title="צור תמונה מחדש עם Gemini"
+                    className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600/90 to-pink-600/90 hover:from-indigo-500 hover:to-pink-500 text-white backdrop-blur-md border border-white/10 shadow-lg transition-all cursor-pointer flex items-center gap-1.5 text-xs sm:text-sm font-bold"
+                    title="שנה תמונה (יצירה עם AI או העלאת תמונה)"
                   >
                     <Sparkles className="w-4 h-4 text-amber-300" />
-                    <span className="hidden sm:inline">יצירה מחדש (AI)</span>
+                    <span>שנה תמונה</span>
                   </button>
                 </div>
 
@@ -734,7 +759,7 @@ export const PAOGalleryCarousel: React.FC<PAOGalleryCarouselProps> = ({
                     אין עדיין תמונה לשלשת PAO #{currentItem.numberStr}
                   </h4>
                   <p className="text-xs sm:text-sm text-indigo-200/80 max-w-md mx-auto">
-                    הפק דימוי מנמוני חי ומרהיב של הסצנה באמצעות Gemini AI בלחיצת כפתור אחת.
+                    הפק דימוי מנמוני חי ומרהיב של הסצנה באמצעות Gemini AI או העלה תמונה בלחיצת כפתור.
                   </p>
                 </div>
                 <button
@@ -743,7 +768,7 @@ export const PAOGalleryCarousel: React.FC<PAOGalleryCarouselProps> = ({
                   className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-pink-600 hover:from-indigo-500 hover:to-pink-500 text-white font-black text-sm rounded-2xl flex items-center gap-2.5 shadow-xl shadow-indigo-600/30 cursor-pointer transition-all active:scale-95"
                 >
                   <Sparkles className="w-5 h-5 text-amber-300" />
-                  <span>צור תמונה עם Gemini</span>
+                  <span>שנה תמונה</span>
                 </button>
               </div>
             )}
