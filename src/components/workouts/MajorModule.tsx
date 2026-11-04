@@ -23,11 +23,18 @@ import {
   X,
   Package,
   RefreshCw,
+  Image as ImageIcon,
+  ImagePlus,
+  Maximize2,
+  Upload,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { MajorItem, PAOItem } from '../../types/memory';
 import { isHebrewFuzzyMatch, isHebrewMultiFieldSearchMatch } from '../../lib/fuzzyMatch';
 import { AIFieldGeneratorButton } from '../AIFieldGeneratorButton';
+import { MajorGalleryCarousel } from './MajorGalleryCarousel';
+import { MajorImageGeneratorTab } from '../MajorImageGeneratorTab';
+import { compressImageFile } from '../../lib/imageCompression';
 import {
   validateHebrewLogic,
   checkMajorDuplicates,
@@ -49,6 +56,8 @@ interface MajorModuleProps {
   connectingLetters?: string[];
   majorItems: MajorItem[];
   paoItems?: PAOItem[];
+  currentUser?: any;
+  onLogin?: () => void;
   onEarnPoints: (amount: number, reason?: string) => void;
   onUnlockBadge: (badge: string) => void;
   onUpdateMajorDigit: (digit: number, consonants: string, word?: string, hint?: string) => void;
@@ -62,6 +71,7 @@ interface MajorModuleProps {
       consonants?: string;
       imageHint?: string;
       customNotes?: string;
+      imageUrl?: string;
       is_ready_for_practice?: boolean;
     }
   ) => void;
@@ -83,6 +93,8 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
   connectingLetters = DEFAULT_CONNECTING_LETTERS,
   majorItems,
   paoItems = [],
+  currentUser,
+  onLogin,
   onEarnPoints,
   onUnlockBadge,
   onRecalculateMajor00_99FromDigits,
@@ -98,12 +110,28 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
 }) => {
   const { isIgnored, ignoreValidation } = useIgnoredValidations();
   const [subView, setSubView] = useState<'table' | 'digits' | 'quiz'>('table');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [viewMode, setViewMode] = useState<'grid' | 'list' | 'gallery'>('grid');
+  const [previousViewMode, setPreviousViewMode] = useState<'grid' | 'list'>('grid');
+  const [galleryInitialIndex, setGalleryInitialIndex] = useState(0);
   const [search, setSearch] = useState('');
   const [decadeFilter, setDecadeFilter] = useState('all');
   const [onlyReadyFilter, setOnlyReadyFilter] = useState(false);
   const [syncToast, setSyncToast] = useState<string | null>(null);
   const [openSyncChoiceKey, setOpenSyncChoiceKey] = useState<string | null>(null);
+
+  // Quick image upload modal & full image preview modal states
+  const [quickUploadItem, setQuickUploadItem] = useState<MajorItem | null>(null);
+  const [quickUploadMode, setQuickUploadMode] = useState<'file' | 'url' | 'ai'>('ai');
+  const [quickUploadUrl, setQuickUploadUrl] = useState('');
+  const [isCompressing, setIsCompressing] = useState(false);
+  const [selectedPreviewImage, setSelectedPreviewImage] = useState<{
+    url: string;
+    title: string;
+    subtitle: string;
+    numberStr: string;
+    number: number;
+    scene?: string;
+  } | null>(null);
 
   // Ready for practice items calculation (Strict Whitelist Filtering)
   const readyItems = majorItems.filter((item) => Boolean(item.is_ready_for_practice));
@@ -114,6 +142,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
   const [editingNum, setEditingNum] = useState<number | null>(null);
   const [editWord, setEditWord] = useState('');
   const [editHint, setEditHint] = useState('');
+  const [editImageUrl, setEditImageUrl] = useState('');
 
   // Validation alert modal state
   const [validationModal, setValidationModal] = useState<{
@@ -258,6 +287,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
     setEditingNum(item.number);
     setEditWord(item.defaultWord || '');
     setEditHint(item.imageHint || '');
+    setEditImageUrl(item.imageUrl || '');
   };
 
   const handleSaveItem = (itemNum: number, bypassValidation = false) => {
@@ -340,6 +370,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
       defaultWord: wordToSave,
       consonants: liveCons,
       imageHint: editHint.trim(),
+      imageUrl: editImageUrl,
     });
     setEditingNum(null);
     setValidationModal(null);
@@ -702,7 +733,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                 <span>מוכנים בלבד ({readyItems.length})</span>
               </button>
 
-              {/* View Mode Toggle (כוורת vs. רשימה) */}
+              {/* View Mode Toggle (כוורת vs. רשימה vs. גלריה) */}
               <div className="flex items-center bg-slate-950 p-1 rounded-xl border border-slate-800">
                 <button
                   type="button"
@@ -729,6 +760,23 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                 >
                   <span>☰</span>
                   <span>רשימה</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPreviousViewMode(viewMode === 'gallery' ? 'grid' : viewMode);
+                    setGalleryInitialIndex(0);
+                    setViewMode('gallery');
+                  }}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                    viewMode === 'gallery'
+                      ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-xs'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                  title="תצוגת גלריה (קרוסלה להצגת כל מספרי Major ועריכתם)"
+                >
+                  <span>🖼️</span>
+                  <span>גלריה</span>
                 </button>
               </div>
             </div>
@@ -912,8 +960,8 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
           )}
 
           {/* דפוס M3 מספר 3: Fade Through (דהייה והחלפה בין כוורת לרשימה) */}
-          <div key={viewMode} className="flex gap-4 items-start m3-fade-through">
-            {viewMode === 'grid' ? (
+          <div key={viewMode === 'gallery' ? previousViewMode : viewMode} className="flex gap-4 items-start m3-fade-through">
+            {(viewMode === 'grid' || (viewMode === 'gallery' && previousViewMode === 'grid')) ? (
               /* Main Cards Grid - Maximum 3 per row, Wide Horizontal Rectangular Cards matching NamesFacesModule */
               <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full">
                 {filteredItems.map((item) => {
@@ -961,9 +1009,9 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                       }`}
                     >
                       <div className="flex-1 space-y-2.5">
-                        {/* Horizontal Top Row: Number Badge + Consonants + Action Icons */}
+                        {/* Horizontal Top Row: Number Badge + Consonants + Image + Action Icons */}
                         <div className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="flex items-center gap-2 min-w-0">
                             <span className="font-mono text-xl font-black text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-lg border border-amber-500/20 shrink-0">
                               {item.numberStr}
                             </span>
@@ -973,6 +1021,39 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                             >
                               [{activeConsonants}]
                             </span>
+
+                            {/* Image Thumbnail or AI Generator trigger */}
+                            {item.imageUrl ? (
+                              <div
+                                onClick={() => {
+                                  const idx = filteredItems.findIndex((m) => m.number === item.number);
+                                  setGalleryInitialIndex(idx >= 0 ? idx : 0);
+                                  setPreviousViewMode(viewMode === 'gallery' ? 'grid' : viewMode);
+                                  setViewMode('gallery');
+                                }}
+                                className="relative group cursor-pointer shrink-0"
+                                title="פתח בגלריה המרכזית עם אפשרות עריכה (Light Dismiss)"
+                              >
+                                <img
+                                  src={item.imageUrl}
+                                  alt={activeWord}
+                                  className="w-8 h-8 rounded-lg object-cover border border-amber-500/40 group-hover:scale-110 transition-transform shadow-xs"
+                                />
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setQuickUploadItem(item);
+                                  setQuickUploadMode('ai');
+                                  setQuickUploadUrl('');
+                                }}
+                                className="p-1.5 rounded-lg bg-slate-900 hover:bg-emerald-600/30 text-slate-400 hover:text-emerald-300 border border-slate-800 hover:border-emerald-500/40 transition-all cursor-pointer shrink-0"
+                                title="הגדר תמונה עם Gemini AI או מקובץ"
+                              >
+                                <ImagePlus className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
 
                           <div className="flex items-center gap-1 shrink-0">
@@ -1085,6 +1166,7 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                   <thead className="bg-slate-900/90 sticky top-0 z-10 border-b border-slate-800 text-xs font-bold text-slate-400">
                     <tr>
                       <th className="py-3 px-4 w-16 text-center">מספר</th>
+                      <th className="py-3 px-2 w-16 text-center text-emerald-400">תמונה</th>
                       <th className="py-3 px-4 w-28">עיצורים</th>
                       <th className="py-3 px-4 w-48">מילה (חפץ מוחשי)</th>
                       <th className="py-3 px-4">דימוי חושי קינטי</th>
@@ -1128,6 +1210,39 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                         >
                           <td className="py-3 px-4 text-center font-mono font-black text-amber-400 text-base">
                             {item.numberStr}
+                          </td>
+                          <td className="py-2 px-2 text-center whitespace-nowrap">
+                            {item.imageUrl ? (
+                              <div
+                                onClick={() => {
+                                  const idx = filteredItems.findIndex((m) => m.number === item.number);
+                                  setGalleryInitialIndex(idx >= 0 ? idx : 0);
+                                  setPreviousViewMode(viewMode === 'gallery' ? 'grid' : viewMode);
+                                  setViewMode('gallery');
+                                }}
+                                className="relative inline-block group cursor-pointer"
+                                title="פתח בגלריה המרכזית עם אפשרות עריכה (Light Dismiss)"
+                              >
+                                <img
+                                  src={item.imageUrl}
+                                  alt={activeWord}
+                                  className="w-8 h-8 rounded-lg object-cover border border-amber-500/40 group-hover:scale-110 transition-transform shadow-xs inline-block"
+                                />
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setQuickUploadItem(item);
+                                  setQuickUploadMode('ai');
+                                  setQuickUploadUrl('');
+                                }}
+                                className="p-1.5 rounded-lg bg-slate-900 hover:bg-emerald-600/30 text-slate-400 hover:text-emerald-300 border border-slate-800 transition-all cursor-pointer inline-flex items-center justify-center"
+                                title="הגדר תמונה עם Gemini AI"
+                              >
+                                <ImagePlus className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </td>
                           <td className="py-3 px-4 font-mono text-amber-300 font-semibold text-xs">
                             {activeConsonants}
@@ -1230,6 +1345,40 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
               ))}
             </div>
           </div>
+
+          {/* Central Gallery Modal Overlay (with inline values edit, AI generation, and Light Dismiss on sides of screen or Esc) */}
+          {viewMode === 'gallery' && (
+            <MajorGalleryCarousel
+              items={filteredItems}
+              majorDigits={majorDigits}
+              connectingLetters={connectingLetters}
+              initialIndex={galleryInitialIndex}
+              onClose={() => setViewMode(previousViewMode || 'grid')}
+              onOpenImagePreview={(item) => {
+                setSelectedPreviewImage({
+                  url: item.imageUrl || '',
+                  title: item.defaultWord || `מספר #${item.numberStr}`,
+                  subtitle: `עיצורים: [${item.consonants || ''}]`,
+                  numberStr: item.numberStr,
+                  number: item.number,
+                  scene: item.imageHint || '',
+                });
+              }}
+              onOpenImageGenerator={(item) => {
+                setQuickUploadItem(item);
+                setQuickUploadMode('ai');
+                setQuickUploadUrl('');
+              }}
+              onEditItem={(num) => {
+                const it = majorItems.find((m) => m.number === num);
+                if (it) {
+                  handleOpenEditModal(it);
+                }
+              }}
+              onUpdateMajorItem={onUpdateMajorItem}
+              onToggleReady={(num, curr) => handleToggleItemReady(num, curr)}
+            />
+          )}
         </div>
       )}
 
@@ -1929,6 +2078,67 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2.5 text-sm text-amber-100 focus:outline-none focus:border-amber-500 resize-none leading-relaxed"
                   />
                 </div>
+
+                {/* Visual Mnemonic Image Section */}
+                <div className="bg-slate-950/90 border border-slate-800 rounded-2xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-sm font-black text-emerald-400 flex items-center gap-1.5">
+                      <ImageIcon className="w-4 h-4 text-emerald-400" />
+                      <span>🖼️ תמונה ויזואלית מנמונית</span>
+                    </label>
+                    {editImageUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setEditImageUrl('')}
+                        className="text-xs text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 px-2.5 py-1 rounded-xl flex items-center gap-1 cursor-pointer transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>הסר תמונה</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {editImageUrl ? (
+                    <div className="flex items-center gap-4 bg-slate-900 p-3 rounded-2xl border border-slate-800">
+                      <img
+                        src={editImageUrl}
+                        alt="Major Item"
+                        className="w-20 h-20 rounded-xl object-contain bg-black border border-slate-700 shrink-0"
+                      />
+                      <div className="space-y-1.5">
+                        <span className="text-xs font-bold text-white block">תמונה מוגדרת עבור מספר זה</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setQuickUploadItem(modalItem);
+                            setQuickUploadMode('ai');
+                            setQuickUploadUrl('');
+                          }}
+                          className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-sm"
+                        >
+                          <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                          <span>יצירה מחדש עם Gemini AI</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-between bg-slate-900 p-3 rounded-2xl border border-slate-800">
+                      <span className="text-xs text-slate-400">אין תמונה מוגדרת למספר זה עדיין</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setQuickUploadItem(modalItem);
+                          setQuickUploadMode('ai');
+                          setQuickUploadUrl('');
+                        }}
+                        className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                        <span>צור תמונה עם Gemini</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Modal Footer (Permanently Pinned and Visible) */}
@@ -2065,6 +2275,277 @@ export const MajorModule: React.FC<MajorModuleProps> = ({
                 חזור ותקן ערך
               </button>
             </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Major Full Image Preview Modal */}
+      {selectedPreviewImage && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col items-center justify-center p-3 sm:p-6 animate-fadeIn"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              setSelectedPreviewImage(null);
+            }
+          }}
+        >
+          <div
+            className="relative bg-slate-900 border-2 border-emerald-500/50 rounded-3xl max-w-4xl w-full max-h-[92vh] overflow-hidden flex flex-col shadow-2xl text-right"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Top Bar */}
+            <div className="flex items-center justify-between p-4 border-b border-slate-800 bg-slate-950/80">
+              <div className="flex items-center gap-3">
+                <span className="font-mono text-base font-black px-2.5 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                  #{selectedPreviewImage.numberStr}
+                </span>
+                <div>
+                  <h3 className="text-base sm:text-lg font-bold text-white">
+                    {selectedPreviewImage.title}
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    {selectedPreviewImage.subtitle}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const item = majorItems.find((m) => m.number === selectedPreviewImage.number);
+                    if (item) {
+                      setQuickUploadItem(item);
+                      setQuickUploadMode('ai');
+                      setQuickUploadUrl('');
+                      setSelectedPreviewImage(null);
+                    }
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-md"
+                  title="צור תמונה מחדש עם Gemini AI"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                  <span>יצירה מחדש (AI)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onUpdateMajorItem(selectedPreviewImage.number, { imageUrl: '' });
+                    setSelectedPreviewImage(null);
+                  }}
+                  className="px-3 py-1.5 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-bold transition-all cursor-pointer"
+                  title="הסר תמונה זו"
+                >
+                  הסר תמונה
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSelectedPreviewImage(null)}
+                  className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                  title="סגור חלון (Esc)"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Image Container */}
+            <div className="flex-1 overflow-auto bg-black flex items-center justify-center p-2 min-h-[350px]">
+              <img
+                src={selectedPreviewImage.url}
+                alt={selectedPreviewImage.title}
+                className="max-h-[68vh] max-w-full object-contain rounded-xl"
+              />
+            </div>
+
+            {/* Scene Footer */}
+            {selectedPreviewImage.scene && (
+              <div className="p-4 border-t border-slate-800 bg-slate-950/80 text-right space-y-1">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-amber-300">
+                  <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                  <span>סצנה מנטלית / רמז ויזואלי:</span>
+                </div>
+                <p className="text-xs text-slate-200 italic leading-relaxed">
+                  "{selectedPreviewImage.scene}"
+                </p>
+              </div>
+            )}
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Major Quick Image Upload / Gemini AI Modal */}
+      {quickUploadItem && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex flex-col sm:items-center sm:justify-center p-0 sm:p-5 md:p-8 animate-fadeIn overflow-y-auto"
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              setQuickUploadItem(null);
+            }
+          }}
+        >
+          <div
+            className="w-full h-full sm:h-auto min-h-full sm:min-h-0 sm:max-h-[92vh] max-w-full sm:max-w-4xl overflow-y-auto bg-slate-900 border-0 sm:border-2 border-emerald-500/40 rounded-none sm:rounded-3xl p-4 sm:p-7 text-right space-y-4 sm:space-y-5 shadow-2xl m3-container-transform sm:my-auto"
+            onMouseDown={(e) => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-emerald-500/20 text-emerald-400">
+                  <ImageIcon className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-white text-base sm:text-lg flex items-center gap-2">
+                    <span>תמונה מנמונית למספר Major</span>
+                    <span className="font-mono text-sm px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-black">
+                      #{quickUploadItem.numberStr}
+                    </span>
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    הצמד דימוי מנמוני חי או צור תמונה ייחודית בעזרת Gemini
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQuickUploadItem(null)}
+                className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer transition-colors"
+                title="סגור חלון"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Mode Tabs */}
+            <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+              <button
+                type="button"
+                onClick={() => setQuickUploadMode('ai')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  quickUploadMode === 'ai'
+                    ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-sm'
+                    : 'bg-slate-800 text-slate-400 hover:text-white'
+                }`}
+              >
+                <Sparkles className="w-4 h-4 text-amber-300" />
+                <span>יצירה עם Gemini AI</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuickUploadMode('file')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  quickUploadMode === 'file'
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'bg-slate-800 text-slate-400 hover:text-white'
+                }`}
+              >
+                📁 העלאת קובץ מהמכשיר
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuickUploadMode('url')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  quickUploadMode === 'url'
+                    ? 'bg-emerald-600 text-white shadow-sm'
+                    : 'bg-slate-800 text-slate-400 hover:text-white'
+                }`}
+              >
+                🔗 הזנת כתובת אינטרנט (URL)
+              </button>
+            </div>
+
+            {/* Tab 1: Gemini AI Image Generator */}
+            {quickUploadMode === 'ai' && (
+              <MajorImageGeneratorTab
+                numberStr={quickUploadItem.numberStr}
+                numberVal={quickUploadItem.number}
+                defaultWord={quickUploadItem.defaultWord}
+                imageHint={quickUploadItem.imageHint}
+                consonants={
+                  getLiveMajorConsonants(quickUploadItem.number, majorDigits) ||
+                  quickUploadItem.consonants ||
+                  ''
+                }
+                currentUser={currentUser}
+                saveButtonLabel="שמור תמונה למספר זה"
+                onLogin={onLogin}
+                onImageGenerated={(dataUrl) => {
+                  onUpdateMajorItem(quickUploadItem.number, { imageUrl: dataUrl });
+                  setQuickUploadItem(null);
+                  onEarnPoints(15, 'יצירת תמונה מנמונית עם Gemini עבור שיטת Major');
+                }}
+              />
+            )}
+
+            {/* Tab 2: Local File Upload */}
+            {quickUploadMode === 'file' && (
+              <div className="space-y-4 text-center py-6">
+                <label className="border-2 border-dashed border-emerald-500/40 hover:border-emerald-500 rounded-2xl p-8 flex flex-col items-center justify-center cursor-pointer bg-slate-950/60 hover:bg-slate-950 transition-colors">
+                  <Upload className="w-10 h-10 text-emerald-400 mb-2" />
+                  <span className="text-sm font-bold text-white">בחר קובץ תמונה מהמכשיר</span>
+                  <span className="text-xs text-slate-400 mt-1">PNG, JPG, WebP או GIF (עד 5MB)</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      try {
+                        setIsCompressing(true);
+                        const comp = await compressImageFile(file);
+                        onUpdateMajorItem(quickUploadItem.number, { imageUrl: comp });
+                        setQuickUploadItem(null);
+                      } catch (err) {
+                        console.error('Error compressing file:', err);
+                      } finally {
+                        setIsCompressing(false);
+                      }
+                    }}
+                  />
+                </label>
+                {isCompressing && (
+                  <p className="text-xs text-emerald-300 font-bold">מעבד ומכווץ תמונה...</p>
+                )}
+              </div>
+            )}
+
+            {/* Tab 3: URL input */}
+            {quickUploadMode === 'url' && (
+              <div className="space-y-4 py-3">
+                <input
+                  type="url"
+                  placeholder="הדבק כאן כתובת תמונה ישירה (https://...)..."
+                  value={quickUploadUrl}
+                  onChange={(e) => setQuickUploadUrl(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white focus:outline-none focus:border-emerald-500"
+                />
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setQuickUploadItem(null)}
+                    className="px-4 py-2 text-xs text-slate-400 hover:text-white"
+                  >
+                    ביטול
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!quickUploadUrl.trim()}
+                    onClick={() => {
+                      if (!quickUploadUrl.trim()) return;
+                      onUpdateMajorItem(quickUploadItem.number, { imageUrl: quickUploadUrl.trim() });
+                      setQuickUploadItem(null);
+                    }}
+                    className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-bold text-xs rounded-xl cursor-pointer shadow-md"
+                  >
+                    החל תמונה
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>,
         document.body

@@ -1691,6 +1691,211 @@ CRITICAL RULES (TO GUARANTEE FIRST-ATTEMPT ACCEPTANCE BY THE IMAGE MODEL):
   }
 });
 
+// API Endpoint: Generate Visual Mnemonic Scene Image with Gemini for Major Module
+app.post('/api/gemini/generate-major-image', async (req: Request, res: Response) => {
+  req.setTimeout(130000);
+
+  try {
+    const { userId, userEmail, defaultWord, imageHint, consonants, userStylePrompt, numberStr } = req.body;
+
+    if (!userId || !userEmail) {
+      return res.status(401).json({
+        error: 'AUTH_REQUIRED',
+        message: 'כדי לייצר תמונות עם Gemini, יש להתחבר תחילה עם חשבון Google שלך (התחבר בסרגל העליון).',
+      });
+    }
+
+    if (!defaultWord && !imageHint) {
+      return res.status(400).json({
+        error: 'MISSING_MAJOR_DATA',
+        message: 'יש להזין מילת עוגן או סצנה/רמז ויזואלי לצורך יצירת הדימוי המנמוני בשיטת Major.',
+      });
+    }
+
+    const hasHint = Boolean(imageHint && typeof imageHint === 'string' && imageHint.trim().length > 0);
+    const hintText = hasHint ? (imageHint as string).trim() : '';
+    const client = getGeminiClient();
+
+    let synthesizedPrompt = '';
+    try {
+      const flashSynthesis = await client.models.generateContent({
+        model: FAST_TEXT_MODEL,
+        config: {
+          thinkingConfig: FAST_THINKING_CONFIG,
+        },
+        contents: `You are an expert cognitive illustration prompter specializing in the Major Mnemonic System and vibrant caricature cartoon art.
+Convert the following Hebrew Major anchor word and mnemonic scene into a single, vibrant, humorous abstract caricature cartoon image generation prompt in English.
+
+Input Data:
+- Major Number: "${numberStr || ''}"
+- Phonetic Consonants: "${consonants || ''}"
+- Anchor Word/Object: "${defaultWord || ''}"
+${hasHint ? `- Mnemonic Scene/Visual Details: "${hintText}"` : ''}
+${userStylePrompt ? `- User Style/Notes: "${userStylePrompt.trim()}"` : ''}
+
+CRITICAL RULES:
+1. CENTRAL ANCHOR OBJECT & SCENE:
+- Make the anchor object ("${defaultWord || ''}") the vibrant, exaggerated, humorous heroic center of the composition.
+- Render in lively 2D abstract caricature cartoon comic art style with bold outlines and saturated color palette.
+2. VISUAL TEXT EMBEDDINGS (CLEAN & SUBTLE):
+- Write the anchor word or its English meaning clearly on a distinct comic label, sticker, wooden crate stamp, or tag directly on or beside the object.
+3. SCENE DETAILS:
+- Fully incorporate the comedic, sensory, and visual actions described in the mnemonic scene.
+4. OUTPUT:
+- Output ONLY the final image generation prompt in English. No introductory text or conversational markdown.`,
+      });
+
+      if (flashSynthesis.text) {
+        synthesizedPrompt = flashSynthesis.text.trim();
+      }
+    } catch (synthesisErr) {
+      console.warn('Major flash synthesis note:', synthesisErr);
+    }
+
+    const fallbackPrompt = `A colorful, humorous abstract caricature cartoon illustration of an exaggerated cartoon object "${defaultWord || ''}" for the Major memory system. ${hasHint ? `Scene: ${hintText}. ` : ''}${userStylePrompt ? `Style: ${userStylePrompt}. ` : ''}A distinct comic label with "${defaultWord || ''}" on the object. Vibrant colors, clean 2D comic art style.`;
+    const finalPrompt = synthesizedPrompt || fallbackPrompt;
+
+    console.log(`[Gemini Nano Banana - Major] Generating image with prompt: "${finalPrompt.substring(0, 160)}..."`);
+
+    let generatedImageUrl = '';
+
+    try {
+      const response = await client.models.generateContent({
+        model: 'gemini-nano-banana-2.1',
+        contents: {
+          parts: [{ text: finalPrompt }],
+        },
+        config: {
+          imageConfig: {
+            aspectRatio: '1:1',
+            imageSize: '1K',
+          },
+        },
+      });
+
+      for (const part of response.candidates?.[0]?.content?.parts || []) {
+        if (part.inlineData) {
+          const base64 = part.inlineData.data;
+          const mime = part.inlineData.mimeType || 'image/png';
+          generatedImageUrl = `data:${mime};base64,${base64}`;
+          break;
+        }
+      }
+
+      if (!generatedImageUrl && response.candidates?.[0]) {
+        const finish = response.candidates[0].finishReason;
+        if (finish === 'IMAGE_OTHER' || finish === 'IMAGE_SAFETY') {
+          console.log(`Major image attempt ended with ${finish}, attempting retry...`);
+          const retryPrompt = `A colorful humorous cartoon illustration of ${defaultWord || 'a mnemonic object'}. ${hasHint ? hintText : ''}. Clean outlines, bright colors.`;
+          try {
+            const retryRes = await client.models.generateContent({
+              model: 'gemini-nano-banana-2.1',
+              contents: { parts: [{ text: retryPrompt }] },
+              config: { imageConfig: { aspectRatio: '1:1', imageSize: '1K' } },
+            });
+            for (const part of retryRes.candidates?.[0]?.content?.parts || []) {
+              if (part.inlineData) {
+                const base64 = part.inlineData.data;
+                const mime = part.inlineData.mimeType || 'image/png';
+                generatedImageUrl = `data:${mime};base64,${base64}`;
+                break;
+              }
+            }
+          } catch (retryErr) {
+            console.warn('Major retry note:', retryErr);
+          }
+        }
+      }
+    } catch (genError: any) {
+      console.warn('Major gemini-nano-banana call note, attempting image fallback:', genError?.message || genError);
+
+      const errStr = (genError?.message || String(genError)).toLowerCase();
+      if (errStr.includes('api_key_invalid') || errStr.includes('api key not valid')) {
+        return res.status(401).json({
+          error: 'API_KEY_INVALID',
+          message: 'מפתח ה-API של Gemini אינו תקין או פג תוקפו. יש לבחור או להגדיר מפתח תקין ב-AI Studio.',
+        });
+      }
+      if (errStr.includes('quota') || errStr.includes('429') || errStr.includes('resource_exhausted')) {
+        return res.status(429).json({
+          error: 'QUOTA_EXHAUSTED',
+          message: 'מכסת הטוקנים היומית של Gemini לחשבונך מוצתה לסשן זה. תוכל להעלות תמונה מהמכשיר או לנסות שוב מאוחר יותר.',
+        });
+      }
+
+      try {
+        const fallbackRes = await client.models.generateContent({
+          model: 'gemini-3.1-flash-lite-image',
+          contents: {
+            parts: [{ text: finalPrompt }],
+          },
+          config: {
+            imageConfig: {
+              aspectRatio: '1:1',
+            },
+          },
+        });
+
+        for (const part of fallbackRes.candidates?.[0]?.content?.parts || []) {
+          if (part.inlineData) {
+            const base64 = part.inlineData.data;
+            const mime = part.inlineData.mimeType || 'image/png';
+            generatedImageUrl = `data:${mime};base64,${base64}`;
+            break;
+          }
+        }
+      } catch (fallbackError: any) {
+        const fbErrStr = (fallbackError?.message || String(fallbackError)).toLowerCase();
+        if (fbErrStr.includes('api_key_invalid') || fbErrStr.includes('api key not valid')) {
+          return res.status(401).json({
+            error: 'API_KEY_INVALID',
+            message: 'מפתח ה-API של Gemini אינו תקין או פג תוקפו. יש לבחור מפתח תקין ב-AI Studio.',
+          });
+        }
+        if (fbErrStr.includes('quota') || fbErrStr.includes('429') || fbErrStr.includes('resource_exhausted')) {
+          return res.status(429).json({
+            error: 'QUOTA_EXHAUSTED',
+            message: 'מכסת הטוקנים היומית של Gemini לחשבונך מוצתה לסשן זה. תוכל להעלות תמונה מהמכשיר או לנסות שוב מאוחר יותר.',
+          });
+        }
+        throw genError;
+      }
+    }
+
+    if (!generatedImageUrl) {
+      return res.status(422).json({
+        error: 'GENERATION_FILTERED',
+        message: 'לא התקבלה תמונה מ-Gemini עבור ערכים אלו. נסה להזין תיאור חפץ כללי יותר או לנסח סגנון אחר.',
+      });
+    }
+
+    return res.json({
+      success: true,
+      imageUrl: generatedImageUrl,
+      numberStr,
+    });
+  } catch (error: any) {
+    console.error('Error generating Major image:', error);
+    const msg = (error?.message || String(error)).toLowerCase();
+    if (msg.includes('api_key_invalid') || msg.includes('api key not valid')) {
+      return res.status(401).json({
+        error: 'API_KEY_INVALID',
+        message: 'מפתח ה-API של Gemini אינו תקין או שאינו מוגדר. יש לבחור מפתח תקין ב-AI Studio.',
+      });
+    }
+    if (msg.includes('quota') || msg.includes('429') || msg.includes('resource_exhausted')) {
+      return res.status(429).json({
+        error: 'QUOTA_EXHAUSTED',
+        message: 'מכסת הטוקנים היומית של Gemini לחשבונך מוצתה לסשן זה. תוכל להעלות תמונה מהמכשיר או לנסות שוב מאוחר יותר.',
+      });
+    }
+    return res.status(500).json({
+      error: 'SERVER_ERROR',
+      message: 'אירעה שגיאה ביצירת התמונה עם Gemini. תוכל להעלות קובץ ידנית מהמכשיר.',
+    });
+  }
+});
+
 // API Endpoint: Advanced Natural AI Text-to-Speech (Gemini Flash Lite TTS)
 app.post('/api/gemini/tts', async (req: Request, res: Response) => {
   try {

@@ -1240,6 +1240,7 @@ export function useMemoryStore() {
       consonants?: string;
       imageHint?: string;
       customNotes?: string;
+      imageUrl?: string;
       is_ready_for_practice?: boolean;
     }
   ) => {
@@ -1254,7 +1255,7 @@ export function useMemoryStore() {
 
     setMajorItems((prev) => prev.map((item) => (item.number === number ? updatedItem : item)));
 
-    if (updates.defaultWord || updates.imageHint) {
+    if (updates.defaultWord || updates.imageHint || updates.imageUrl) {
       earnPoints(10, 'התאמת אסוציאציית Major אישית');
     }
 

@@ -153,6 +153,8 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
 
   // View mode: 'grid' (כוורת) or 'list' (רשימה) or 'gallery' (קרוסלה)
   const [viewMode, setViewMode] = useState<'grid' | 'list' | 'gallery'>('grid');
+  const [previousViewMode, setPreviousViewMode] = useState<'grid' | 'list'>('grid');
+  const [galleryInitialIndex, setGalleryInitialIndex] = useState(0);
 
   // Excel-style customizable column order & widths for List View
   const [columnOrder, setColumnOrder] = useState<PAOColumnKey[]>(() => {
@@ -1398,13 +1400,17 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setViewMode('gallery')}
+                  onClick={() => {
+                    setPreviousViewMode(viewMode === 'gallery' ? 'grid' : viewMode);
+                    setGalleryInitialIndex(0);
+                    setViewMode('gallery');
+                  }}
                   className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                     viewMode === 'gallery'
                       ? 'bg-gradient-to-r from-pink-600 to-indigo-600 text-white shadow-xs'
                       : 'text-slate-400 hover:text-white'
                   }`}
-                  title="תצוגת גלריה (קרוסלה להצגת כל השלשות)"
+                  title="תצוגת גלריה (קרוסלה להצגת כל השלשות ועריכתן)"
                 >
                   <span>🖼️</span>
                   <span>גלריה</span>
@@ -1702,43 +1708,8 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
           {/* דפוס M3 מספר 3: Fade Through (דהייה והחלפה בין כוורת לטבלה)
               החלפה בין תצוגת כרטיסים לתצוגת שורות טבלה מבוצעת ב-Fade Through,
               למניעת קפיצות גלילה וליצירת מעבר חלק וזורם לעין. */}
-          <div key={viewMode} className="flex gap-3 items-start m3-fade-through">
-            {viewMode === 'gallery' ? (
-              <PAOGalleryCarousel
-                items={filteredItems}
-                majorDigits={majorDigits}
-                onClose={() => setViewMode('grid')}
-                onOpenImagePreview={(item) => {
-                  setSelectedPreviewImage({
-                    url: item.imageUrl || '',
-                    title: item.person || `שלשה #${item.numberStr}`,
-                    subtitle: `${item.action || ''} • ${item.object || ''}`,
-                    numberStr: item.numberStr,
-                    number: item.number,
-                    scene: item.scene || '',
-                  });
-                }}
-                onOpenImageGenerator={(item) => {
-                  setQuickUploadItem(item);
-                  setQuickUploadMode('ai');
-                  setQuickUploadUrl('');
-                }}
-                onEditItem={(num) => {
-                  const it = paoItems.find((p) => p.number === num);
-                  if (it) {
-                    setEditingNum(it.number);
-                    setEditPerson(it.person || '');
-                    setEditAction(it.action || '');
-                    setEditObject(it.object || '');
-                    setEditScene(it.scene || '');
-                    setEditImageUrl(it.imageUrl || '');
-                    setViewMode('grid');
-                    scrollToNumber(it.number);
-                  }
-                }}
-                onToggleReady={(num, curr) => handleTogglePaoReady(num, curr)}
-              />
-            ) : viewMode === 'grid' ? (
+          <div key={viewMode === 'gallery' ? previousViewMode : viewMode} className="flex gap-3 items-start m3-fade-through">
+            {(viewMode === 'grid' || (viewMode === 'gallery' && previousViewMode === 'grid')) ? (
               /* Main Cards Grid - Maximum 3 per row, Wide Horizontal Rectangular Cards matching NamesFacesModule */
               <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 w-full">
                 {filteredItems.map((item) => {
@@ -1853,18 +1824,14 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                             {/* Image Thumbnail or Quick Upload trigger */}
                             {item.imageUrl ? (
                               <div
-                                onClick={() =>
-                                  setSelectedPreviewImage({
-                                    url: item.imageUrl!,
-                                    title: `שלשת PAO #${item.numberStr}`,
-                                    subtitle: `${p} • ${a} • ${o}`,
-                                    scene: s,
-                                    numberStr: item.numberStr,
-                                    number: item.number,
-                                  })
-                                }
+                                onClick={() => {
+                                  const idx = filteredItems.findIndex((p) => p.number === item.number);
+                                  setGalleryInitialIndex(idx >= 0 ? idx : 0);
+                                  setPreviousViewMode(viewMode === 'gallery' ? 'grid' : viewMode);
+                                  setViewMode('gallery');
+                                }}
                                 className="relative group cursor-pointer shrink-0"
-                                title="לחץ להגדלה במסך מלא (Light Dismiss)"
+                                title="פתח בגלריה המרכזית עם אפשרות עריכה (Light Dismiss)"
                               >
                                 <img
                                   src={item.imageUrl}
@@ -2168,18 +2135,14 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                           <td className="py-2 px-2 text-center whitespace-nowrap">
                             {item.imageUrl ? (
                               <div
-                                onClick={() =>
-                                  setSelectedPreviewImage({
-                                    url: item.imageUrl!,
-                                    title: `שלשת PAO #${item.numberStr}`,
-                                    subtitle: `${p} • ${a} • ${o}`,
-                                    scene: s,
-                                    numberStr: item.numberStr,
-                                    number: item.number,
-                                  })
-                                }
+                                onClick={() => {
+                                  const idx = filteredItems.findIndex((p) => p.number === item.number);
+                                  setGalleryInitialIndex(idx >= 0 ? idx : 0);
+                                  setPreviousViewMode(viewMode === 'gallery' ? 'grid' : viewMode);
+                                  setViewMode('gallery');
+                                }}
                                 className="relative inline-block group cursor-pointer"
-                                title="לחץ להגדלה במסך מלא (Light Dismiss)"
+                                title="פתח בגלריה המרכזית עם אפשרות עריכה (Light Dismiss)"
                               >
                                 <img
                                   src={item.imageUrl}
@@ -2354,6 +2317,48 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
               </div>
             )}
           </div>
+
+          {/* Central Gallery Modal Overlay (with inline values edit, AI generation, and Light Dismiss on sides of screen or Esc) */}
+          {viewMode === 'gallery' && (
+            <PAOGalleryCarousel
+              items={filteredItems}
+              majorDigits={majorDigits}
+              majorItems={majorItems}
+              connectingLetters={connectingLetters}
+              initialIndex={galleryInitialIndex}
+              onClose={() => setViewMode(previousViewMode || 'grid')}
+              onOpenImagePreview={(item) => {
+                setSelectedPreviewImage({
+                  url: item.imageUrl || '',
+                  title: item.person || `שלשה #${item.numberStr}`,
+                  subtitle: `${item.action || ''} • ${item.object || ''}`,
+                  numberStr: item.numberStr,
+                  number: item.number,
+                  scene: item.scene || '',
+                });
+              }}
+              onOpenImageGenerator={(item) => {
+                setQuickUploadItem(item);
+                setQuickUploadMode('ai');
+                setQuickUploadUrl('');
+              }}
+              onEditItem={(num) => {
+                const it = paoItems.find((p) => p.number === num);
+                if (it) {
+                  setEditingNum(it.number);
+                  setEditPerson(it.person || '');
+                  setEditAction(it.action || '');
+                  setEditObject(it.object || '');
+                  setEditScene(it.scene || '');
+                  setEditImageUrl(it.imageUrl || '');
+                  setViewMode(previousViewMode || 'grid');
+                  scrollToNumber(it.number);
+                }
+              }}
+              onUpdateItem={onUpdatePAOItem}
+              onToggleReady={(num, curr) => handleTogglePaoReady(num, curr)}
+            />
+          )}
         </div>
       )}
 

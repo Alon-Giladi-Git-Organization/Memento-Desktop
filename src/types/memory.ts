@@ -6,6 +6,7 @@ export interface MajorItem {
   defaultWord: string; // e.g. "סם"
   imageHint: string; // e.g. "בקבוק רעל זוהר"
   customNotes?: string;
+  imageUrl?: string; // Visual scene image thumbnail / full resolution
   is_ready_for_practice?: boolean; // Flag: ready for testing & practice
   updatedAt?: number;
 }

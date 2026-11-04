@@ -49,6 +49,7 @@ export interface WorkoutsHubProps {
       consonants?: string;
       imageHint?: string;
       customNotes?: string;
+      imageUrl?: string;
       is_ready_for_practice?: boolean;
     }
   ) => void;
@@ -353,6 +354,8 @@ export const WorkoutsHub: React.FC<WorkoutsHubProps> = ({
             onOpenSummary={onOpenSummary}
             onNavigateToLogicTab={onNavigateToLogicTab}
             onSyncMajorAndPAOObjects={onSyncMajorAndPAOObjects}
+            currentUser={currentUser}
+            onLogin={onLogin}
           />
         )}
 
