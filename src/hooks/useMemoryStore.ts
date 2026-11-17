@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   MajorItem,
   PAOItem,
@@ -66,7 +66,12 @@ import {
   startRealtimeCloudSync,
   mergeWithRemoteItems,
   restoreOriginalPAOAndCleanDuplicates,
+  sanitizeDefaultDbImagesInFirestore,
 } from '../lib/cloudDbSync';
+import {
+  saveImagesMapToIndexedDb,
+  loadImagesMapFromIndexedDb,
+} from '../lib/imageCacheDb';
 
 const STORAGE_KEYS = {
   CONNECTING_LETTERS: 'mem_connecting_letters_v1',
@@ -86,6 +91,7 @@ const STORAGE_KEYS = {
   PROFILE: 'mem_offline_profile',
   DAILY_CHALLENGE: 'mem_daily_challenge',
   LAST_SYNC: 'mem_last_cloud_sync_v1',
+  LAST_AUTH_UID: 'mem_last_auth_uid',
 };
 
 const DEFAULT_OFFLINE_PROFILE: UserProfileData = {
@@ -182,16 +188,18 @@ export function useMemoryStore() {
     }
   });
 
-  // 1. Major System
+  // 1. Major System (Text-only in localStorage; images hydrate per authenticated user from IndexedDB + Firestore)
   const [majorItems, setMajorItems] = useState<MajorItem[]>(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEYS.MAJOR);
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed)) {
-          const valid = parsed.filter(
-            (x: any) => typeof x?.number === 'number' && !isNaN(x.number) && isFinite(x.number) && x.numberStr !== 'NaN' && x.id !== 'NaN'
-          );
+          const valid = parsed
+            .filter(
+              (x: any) => typeof x?.number === 'number' && !isNaN(x.number) && isFinite(x.number) && x.numberStr !== 'NaN' && x.id !== 'NaN'
+            )
+            .map(({ imageUrl, ...rest }: any) => rest as MajorItem);
           if (valid.length > 0) return valid;
         }
       }
@@ -201,6 +209,7 @@ export function useMemoryStore() {
     }
   });
 
+  // 2. PAO System (Text-only in localStorage so #24+ never hits 5MB quota; images hydrate per authenticated user from IndexedDB + Firestore)
   const [paoItems, setPaoItems] = useState<PAOItem[]>(() => {
     try {
       const PAO_SCHEMA_VERSION = 'v3_user_csv_authentic';
@@ -221,16 +230,30 @@ export function useMemoryStore() {
             localStorage.setItem(STORAGE_KEYS.PAO, JSON.stringify(DEFAULT_PAO_ITEMS));
             return DEFAULT_PAO_ITEMS;
           }
+          // If legacy localStorage contained base64 images and the user is logged in, migrate them into user-scoped IndexedDB
+          const lastUid = localStorage.getItem(STORAGE_KEYS.LAST_AUTH_UID);
+          if (lastUid) {
+            const legacyImgMap: Record<number, string> = {};
+            for (const x of parsed) {
+              if (x && typeof x.number === 'number' && x.imageUrl && typeof x.imageUrl === 'string' && x.imageUrl !== 'null') {
+                legacyImgMap[x.number] = x.imageUrl;
+              }
+            }
+            if (Object.keys(legacyImgMap).length > 0) {
+              saveImagesMapToIndexedDb('pao', legacyImgMap, lastUid);
+            }
+          }
           const valid = parsed
             .filter(
               (x: any) => typeof x?.number === 'number' && !isNaN(x.number) && isFinite(x.number) && x.numberStr !== 'NaN' && x.id !== 'NaN'
             )
             .map((x: PAOItem) => {
-              if (x.scene === 'עודכן החפץ עבור שלשת PAO זו, וצריך ליצור סצנה חדשה') {
-                const orig = DEFAULT_PAO_ITEMS.find((d) => d.number === x.number);
-                return { ...x, scene: orig?.scene || '' };
+              const { imageUrl, ...rest } = x;
+              if (rest.scene === 'עודכן החפץ עבור שלשת PAO זו, וצריך ליצור סצנה חדשה') {
+                const orig = DEFAULT_PAO_ITEMS.find((d) => d.number === rest.number);
+                return { ...rest, scene: orig?.scene || '' };
               }
-              return x;
+              return rest;
             });
           if (valid.length > 0) return valid;
         }
@@ -372,19 +395,107 @@ export function useMemoryStore() {
     localStorage.setItem(STORAGE_KEYS.CONNECTING_LETTERS, JSON.stringify(connectingLetters));
   }, [connectingLetters]);
 
+  // Hydrate all PAO and Major images from high-capacity IndexedDB for the authenticated user
+  // (bypasses the 5MB localStorage ceiling that truncated images from #24 onwards, and ensures default DB has 0 images)
+  useEffect(() => {
+    let cancelled = false;
+    const activeUid = currentUser?.uid || (isAuthLoading ? localStorage.getItem(STORAGE_KEYS.LAST_AUTH_UID) : null);
+
+    if (!activeUid) {
+      // Unauthenticated visitor / default DB: ensure no images are shown
+      setPaoItems((prev) => {
+        if (!prev.some((item) => item.imageUrl)) return prev;
+        return prev.map(({ imageUrl, ...rest }) => rest);
+      });
+      setMajorItems((prev) => {
+        if (!prev.some((item) => item.imageUrl)) return prev;
+        return prev.map(({ imageUrl, ...rest }) => rest);
+      });
+      return;
+    }
+
+    loadImagesMapFromIndexedDb('pao', activeUid).then((paoImgMap) => {
+      if (cancelled || Object.keys(paoImgMap).length === 0) return;
+      setPaoItems((prev) => {
+        let changed = false;
+        const next = prev.map((item) => {
+          const cachedImg = paoImgMap[item.number];
+          if (cachedImg && (!item.imageUrl || item.imageUrl === 'null')) {
+            changed = true;
+            return { ...item, imageUrl: cachedImg };
+          }
+          return item;
+        });
+        return changed ? next : prev;
+      });
+    });
+
+    loadImagesMapFromIndexedDb('major', activeUid).then((majorImgMap) => {
+      if (cancelled || Object.keys(majorImgMap).length === 0) return;
+      setMajorItems((prev) => {
+        let changed = false;
+        const next = prev.map((item) => {
+          const cachedImg = majorImgMap[item.number];
+          if (cachedImg && (!item.imageUrl || item.imageUrl === 'null')) {
+            changed = true;
+            return { ...item, imageUrl: cachedImg };
+          }
+          return item;
+        });
+        return changed ? next : prev;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.uid, isAuthLoading]);
+
   useEffect(() => {
     const valid = majorItems.filter((x) => typeof x?.number === 'number' && !isNaN(x.number) && isFinite(x.number) && x.numberStr !== 'NaN');
-    localStorage.setItem(STORAGE_KEYS.MAJOR, JSON.stringify(valid));
-  }, [majorItems]);
+    const activeUid = currentUser?.uid || localStorage.getItem(STORAGE_KEYS.LAST_AUTH_UID);
+    if (activeUid) {
+      const majorImgMap: Record<number, string> = {};
+      for (const item of valid) {
+        if (item.imageUrl && typeof item.imageUrl === 'string' && item.imageUrl.trim().length > 0 && item.imageUrl !== 'null') {
+          majorImgMap[item.number] = item.imageUrl;
+        }
+      }
+      if (Object.keys(majorImgMap).length > 0) {
+        saveImagesMapToIndexedDb('major', majorImgMap, activeUid);
+      }
+    }
+    try {
+      const lightValid = valid.map(({ imageUrl, ...rest }) => rest);
+      localStorage.setItem(STORAGE_KEYS.MAJOR, JSON.stringify(lightValid));
+    } catch (e2) {
+      console.warn('LocalStorage quota warning for Major:', e2);
+    }
+  }, [majorItems, currentUser?.uid]);
 
   useEffect(() => {
     const valid = paoItems.filter((x) => typeof x?.number === 'number' && !isNaN(x.number) && isFinite(x.number) && x.numberStr !== 'NaN');
-    try {
-      localStorage.setItem(STORAGE_KEYS.PAO, JSON.stringify(valid));
-    } catch (e) {
-      console.warn('LocalStorage quota warning for PAO:', e);
+    const activeUid = currentUser?.uid || localStorage.getItem(STORAGE_KEYS.LAST_AUTH_UID);
+    // Always persist all PAO images to high-capacity user-scoped IndexedDB so items #24-#99 never disappear
+    if (activeUid) {
+      const paoImgMap: Record<number, string> = {};
+      for (const item of valid) {
+        if (item.imageUrl && typeof item.imageUrl === 'string' && item.imageUrl.trim().length > 0 && item.imageUrl !== 'null') {
+          paoImgMap[item.number] = item.imageUrl;
+        }
+      }
+      if (Object.keys(paoImgMap).length > 0) {
+        saveImagesMapToIndexedDb('pao', paoImgMap, activeUid);
+      }
     }
-  }, [paoItems]);
+    try {
+      // Store only lightweight text fields in localStorage (~30KB) so the 5MB limit is never hit at item #24
+      const lightValid = valid.map(({ imageUrl, ...rest }) => rest);
+      localStorage.setItem(STORAGE_KEYS.PAO, JSON.stringify(lightValid));
+    } catch (e2) {
+      console.warn('LocalStorage quota warning for PAO:', e2);
+    }
+  }, [paoItems, currentUser?.uid]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.SHAPES_PEGS, JSON.stringify(shapePegs));
@@ -437,37 +548,61 @@ export function useMemoryStore() {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // Initial background sync check on startup if online
-    if (isNetworkOnline()) {
-      const timer = setTimeout(() => {
-        syncAllToFirestore(false);
-      }, 1200);
-      return () => {
-        clearTimeout(timer);
-        window.removeEventListener('online', handleOnline);
-        window.removeEventListener('offline', handleOffline);
-      };
-    }
-
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
-  }, []);
+  }, [currentUser]);
+
+  // Keep a live ref to current state so async auth/sync callbacks never read stale mount-time closures
+  const latestStateRef = useRef({
+    majorDigits,
+    majorItems,
+    paoItems,
+    shapePegs,
+    bodyPegs,
+    palaces,
+    peopleCards,
+    abstractShapes,
+    academicPoints,
+    personalAssociations,
+    profile,
+    currentUser,
+  });
+
+  useEffect(() => {
+    latestStateRef.current = {
+      majorDigits,
+      majorItems,
+      paoItems,
+      shapePegs,
+      bodyPegs,
+      palaces,
+      peopleCards,
+      abstractShapes,
+      academicPoints,
+      personalAssociations,
+      profile,
+      currentUser,
+    };
+  });
 
   // Multi-tenant Firestore Helpers for Rowy table compatibility:
-  // Saves documents tagged with composite IDs (${userId}_${rawId}), userId, userEmail, and isDefault.
+  // Saves documents tagged with composite IDs (${userId}_${rawId}), userId, userEmail, and isDefault: false.
+  // Never writes unauthenticated visitor edits/images into the global system_default branch.
   const saveFirestoreDoc = useCallback(
     async (collectionName: string, rawId: string, itemData: any) => {
       if (!isNetworkOnline()) return;
-      const docId = currentUser ? `${currentUser.uid}_${rawId}` : rawId;
+      const activeUser = currentUser || auth.currentUser;
+      if (!activeUser) return;
+      const docId = `${activeUser.uid}_${rawId}`;
       const payload = cleanForFirestore({
         ...itemData,
         id: docId,
         rawId,
-        userId: currentUser?.uid || 'system_default',
-        userEmail: currentUser?.email || '',
-        isDefault: !currentUser,
+        userId: activeUser.uid,
+        userEmail: activeUser.email || '',
+        isDefault: false,
         updatedAt: itemData.updatedAt || Date.now(),
       });
       try {
@@ -483,7 +618,9 @@ export function useMemoryStore() {
   const deleteFirestoreDoc = useCallback(
     (collectionName: string, rawId: string) => {
       if (!isNetworkOnline()) return;
-      const docId = currentUser ? `${currentUser.uid}_${rawId}` : rawId;
+      const activeUser = currentUser || auth.currentUser;
+      if (!activeUser) return;
+      const docId = `${activeUser.uid}_${rawId}`;
       deleteDoc(doc(db, collectionName, docId)).catch(() => {});
     },
     [currentUser]
@@ -564,30 +701,31 @@ export function useMemoryStore() {
 
       if (user) {
         try {
+          localStorage.setItem(STORAGE_KEYS.LAST_AUTH_UID, user.uid);
           const userProf = await getOrInitUserProfile(user);
           setProfile(userProf);
 
-          // Check if user has their own database branch in Firestore.
-          // If this is a new user, automatically provisions their isolated branch populated with default data!
-          setSyncStatusMessage('מאתחל ענף נתונים אישי בענן...');
-          await ensureUserBranchExists(user.uid, user.email, {
-            majorItems,
-            paoItems,
-            bodyPegs,
-            shapePegs,
-            palaces,
-            peopleCards,
-            abstractShapes,
-            academicPoints,
-            personalAssociations,
-          });
+          // Ensure default DB has 0 images and user's saved images have authoritative timestamps
+          await sanitizeDefaultDbImagesInFirestore(user.uid);
 
-          // Sync user branch
-          syncAllToFirestore(false);
+          // Check if user has their own database branch in Firestore.
+          // If this is a new user, automatically provisions their isolated branch populated with clean default data (0 images)!
+          setSyncStatusMessage('מאתחל ענף נתונים אישי בענן...');
+          await ensureUserBranchExists(user.uid, user.email);
+
+          // Sync user branch explicitly passing `user`
+          await syncAllToFirestore(false, user);
           loadLeaderboard();
         } catch (err) {
           console.error('Error in auth user profile initialization:', err);
         }
+      } else {
+        // Unauthenticated visitor: clear auth UID and ensure default DB shows 0 images
+        localStorage.removeItem(STORAGE_KEYS.LAST_AUTH_UID);
+        setPaoItems((prev) => prev.map(({ imageUrl, ...rest }) => rest));
+        setMajorItems((prev) => prev.map(({ imageUrl, ...rest }) => rest));
+        setPeopleCards((prev) => prev.map((p) => ({ ...p, avatarUrl: '' })));
+        sanitizeDefaultDbImagesInFirestore(null);
       }
     });
 
@@ -620,8 +758,12 @@ export function useMemoryStore() {
   const logout = async () => {
     try {
       await firebaseSignOut();
+      localStorage.removeItem(STORAGE_KEYS.LAST_AUTH_UID);
       setCurrentUser(null);
       setProfile(DEFAULT_OFFLINE_PROFILE);
+      setPaoItems((prev) => prev.map(({ imageUrl, ...rest }) => rest));
+      setMajorItems((prev) => prev.map(({ imageUrl, ...rest }) => rest));
+      setPeopleCards((prev) => prev.map((p) => ({ ...p, avatarUrl: '' })));
     } catch (err) {
       console.error(err);
     }
@@ -1799,44 +1941,72 @@ export function useMemoryStore() {
     }
   };
 
-  const syncAllToFirestore = async (isManual = true): Promise<{ success: boolean; message: string }> => {
+  const syncAllToFirestore = async (
+    isManual = true,
+    explicitUser?: FirebaseUser | null
+  ): Promise<{ success: boolean; message: string }> => {
     if (!isNetworkOnline()) {
       const msg = 'מצב אופליין: כל השינויים נשמרים במכשיר ויסונכרנו אוטומטית כשתתחבר לרשת.';
       setSyncStatusMessage(msg);
       return { success: true, message: msg };
     }
 
+    const latest = latestStateRef.current;
+    const activeUser = explicitUser !== undefined ? explicitUser : (latest.currentUser || auth.currentUser);
+
+    if (!activeUser) {
+      return { success: true, message: 'נתוני ברירת מחדל נטענו' };
+    }
+
     setIsSyncing(true);
     setSyncStatusMessage('מבצע סנכרון דו-כיווני מול Firestore...');
     try {
       // 1. Sync User Profile if authenticated
-      if (currentUser) {
-        await saveUserProfile({
-          ...profile,
-          uid: currentUser.uid,
-          email: currentUser.email || profile.email,
-          displayName: currentUser.displayName || profile.displayName,
-        });
-      }
+      await saveUserProfile({
+        ...latest.profile,
+        uid: activeUser.uid,
+        email: activeUser.email || latest.profile.email,
+        displayName: activeUser.displayName || latest.profile.displayName,
+      });
 
-      // 2. Perform Full Bidirectional Sync with Last-Write-Wins and multi-tenant partitioning
+      // 2. Perform Full Bidirectional Sync using latestStateRef so we never use stale mount-time state
       const res = await performFullBidirectionalSync({
-        majorDigits,
-        majorItems,
-        paoItems,
-        shapePegs,
-        bodyPegs,
-        palaces,
-        peopleCards,
-        abstractShapes,
-        academicPoints,
-        personalAssociations,
-      }, currentUser?.uid, currentUser?.email || undefined);
+        majorDigits: latestStateRef.current.majorDigits,
+        majorItems: latestStateRef.current.majorItems,
+        paoItems: latestStateRef.current.paoItems,
+        shapePegs: latestStateRef.current.shapePegs,
+        bodyPegs: latestStateRef.current.bodyPegs,
+        palaces: latestStateRef.current.palaces,
+        peopleCards: latestStateRef.current.peopleCards,
+        abstractShapes: latestStateRef.current.abstractShapes,
+        academicPoints: latestStateRef.current.academicPoints,
+        personalAssociations: latestStateRef.current.personalAssociations,
+      }, activeUser.uid, activeUser.email || undefined);
 
       if (res.success && res.mergedData) {
         setMajorDigits(res.mergedData.majorDigits);
-        setMajorItems(res.mergedData.majorItems);
-        setPaoItems(res.mergedData.paoItems);
+        setMajorItems((prev) => {
+          const prevImgByNum = new Map<number, string>();
+          for (const it of prev) {
+            if (it.imageUrl && it.imageUrl !== 'null') prevImgByNum.set(it.number, it.imageUrl);
+          }
+          return res.mergedData!.majorItems.map((it) => {
+            const hasRemoteImg = it.imageUrl && it.imageUrl !== 'null';
+            const fallbackImg = prevImgByNum.get(it.number);
+            return hasRemoteImg ? it : fallbackImg ? { ...it, imageUrl: fallbackImg } : it;
+          });
+        });
+        setPaoItems((prev) => {
+          const prevImgByNum = new Map<number, string>();
+          for (const it of prev) {
+            if (it.imageUrl && it.imageUrl !== 'null') prevImgByNum.set(it.number, it.imageUrl);
+          }
+          return res.mergedData!.paoItems.map((it) => {
+            const hasRemoteImg = it.imageUrl && it.imageUrl !== 'null';
+            const fallbackImg = prevImgByNum.get(it.number);
+            return hasRemoteImg ? it : fallbackImg ? { ...it, imageUrl: fallbackImg } : it;
+          });
+        });
         setShapePegs(res.mergedData.shapePegs);
         setBodyPegs(res.mergedData.bodyPegs);
         setPalaces(res.mergedData.palaces);

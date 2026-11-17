@@ -18,10 +18,10 @@ app.use(express.json({ limit: '10mb' }));
 const FAST_TEXT_MODEL = 'gemini-3.1-flash-lite';
 const FAST_THINKING_CONFIG = { thinkingLevel: ThinkingLevel.MINIMAL };
 
-// Initialize Gemini Client
+// Initialize Gemini Client lazily on request so startup never fails if env vars load asynchronously
 export function getGeminiClient(): GoogleGenAI {
   return new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY,
+    apiKey: process.env.GEMINI_API_KEY || 'missing_api_key',
     httpOptions: {
       headers: {
         'User-Agent': 'aistudio-build',
@@ -29,8 +29,6 @@ export function getGeminiClient(): GoogleGenAI {
     },
   });
 }
-
-const ai = getGeminiClient();
 
 // System prompt grounded in world memory championships and Hebrew Major mapping
 const MEMORY_CHAMPION_SYSTEM_PROMPT = `הגדרה קבועה למנטור ה-AI:
@@ -1379,7 +1377,8 @@ ${JSON.stringify((testHistory || []).slice(0, 15))}
   "nextTrainingPlan": string // תוכנית אימון מומלצת לשבוע הקרוב
 }`;
 
-    const response = await ai.models.generateContent({
+    const client = getGeminiClient();
+    const response = await client.models.generateContent({
       model: FAST_TEXT_MODEL,
       contents: prompt,
       config: {
@@ -2009,12 +2008,26 @@ async function startServer() {
   const isDev = process.env.NODE_ENV !== 'production';
 
   if (isDev) {
-    const { createServer: createViteServer } = await import('vite');
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
+    // Initialize Vite asynchronously while binding port 3000 immediately so readiness probes never get ECONNREFUSED
+    const vitePromise = import('vite').then(({ createServer: createViteServer }) =>
+      createViteServer({
+        server: {
+          middlewareMode: true,
+          hmr: false,
+          watch: null,
+        },
+        appType: 'spa',
+      })
+    );
+
+    app.use(async (req, res, next) => {
+      try {
+        const vite = await vitePromise;
+        vite.middlewares(req, res, next);
+      } catch (err) {
+        next(err);
+      }
     });
-    app.use(vite.middlewares);
   } else {
     const distPath = path.resolve(__dirname, 'dist');
     app.use(express.static(distPath));
@@ -2028,4 +2041,7 @@ async function startServer() {
   });
 }
 
-startServer();
+startServer().catch((err) => {
+  console.error('Failed to start server:', err);
+});
+

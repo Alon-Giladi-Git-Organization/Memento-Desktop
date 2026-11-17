@@ -65,7 +65,7 @@ export interface SyncResult {
  * Checks if the browser is currently online
  */
 export function isNetworkOnline(): boolean {
-  return typeof navigator !== 'undefined' ? navigator.onLine : true;
+  return typeof navigator !== 'undefined' && typeof navigator.onLine === 'boolean' ? navigator.onLine : true;
 }
 
 /**
@@ -91,6 +91,7 @@ export async function seedAllDefaultsToFirestore(): Promise<{ success: boolean; 
         defaultWord: item.defaultWord,
         imageHint: item.imageHint,
         customNotes: item.customNotes || null,
+        imageUrl: null,
         is_ready_for_practice: item.is_ready_for_practice ?? false,
         userId: 'system_default',
         isDefault: true,
@@ -100,7 +101,7 @@ export async function seedAllDefaultsToFirestore(): Promise<{ success: boolean; 
     }
     await majorBatch.commit();
 
-    // 2. PAO 00-99 (100 rows)
+    // 2. PAO 00-99 (100 rows) - Default DB must NEVER contain any images
     const paoBatch = writeBatch(db);
     for (const item of DEFAULT_PAO_ITEMS) {
       const docId = item.numberStr.padStart(2, '0');
@@ -114,7 +115,7 @@ export async function seedAllDefaultsToFirestore(): Promise<{ success: boolean; 
         action: item.action,
         object: item.object,
         scene: item.scene || null,
-        imageUrl: item.imageUrl || null,
+        imageUrl: null,
         is_ready_for_practice: item.is_ready_for_practice ?? false,
         userId: 'system_default',
         isDefault: true,
@@ -279,35 +280,19 @@ export async function seedUserBranchFromDefaults(
     const now = Date.now();
     const email = userEmail || '';
 
-    const majorSource = initialData?.majorItems && initialData.majorItems.length > 0
-      ? initialData.majorItems
-      : DEFAULT_MAJOR_00_99;
-    const paoSource = initialData?.paoItems && initialData.paoItems.length > 0
-      ? initialData.paoItems
-      : DEFAULT_PAO_ITEMS;
-    const bodySource = initialData?.bodyPegs && initialData.bodyPegs.length > 0
-      ? initialData.bodyPegs
-      : DEFAULT_BODY_PEGS;
-    const shapeSource = initialData?.shapePegs && initialData.shapePegs.length > 0
-      ? initialData.shapePegs
-      : DEFAULT_NUMBER_SHAPE_PEGS;
-    const palacesSource = initialData?.palaces && initialData.palaces.length > 0
-      ? initialData.palaces
-      : DEFAULT_PALACES;
-    const peopleSource = initialData?.peopleCards && initialData.peopleCards.length > 0
-      ? initialData.peopleCards
-      : DEFAULT_PEOPLE_CARDS;
-    const shapesSource = initialData?.abstractShapes && initialData.abstractShapes.length > 0
-      ? initialData.abstractShapes
-      : DEFAULT_ABSTRACT_SHAPES;
-    const academicSource = initialData?.academicPoints && initialData.academicPoints.length > 0
-      ? initialData.academicPoints
-      : DEFAULT_ACADEMIC_POINTS;
-    const personalSource = initialData?.personalAssociations && initialData.personalAssociations.length > 0
-      ? initialData.personalAssociations
-      : DEFAULT_PERSONAL_ASSOCIATIONS;
+    // Always seed a new user's branch from clean defaults WITHOUT any images!
+    // Each user should only ever see images they explicitly created and saved for themselves.
+    const majorSource = DEFAULT_MAJOR_00_99;
+    const paoSource = DEFAULT_PAO_ITEMS;
+    const bodySource = DEFAULT_BODY_PEGS;
+    const shapeSource = DEFAULT_NUMBER_SHAPE_PEGS;
+    const palacesSource = DEFAULT_PALACES;
+    const peopleSource = DEFAULT_PEOPLE_CARDS;
+    const shapesSource = DEFAULT_ABSTRACT_SHAPES;
+    const academicSource = DEFAULT_ACADEMIC_POINTS;
+    const personalSource = DEFAULT_PERSONAL_ASSOCIATIONS;
 
-    // Batch 1: Major items (100 rows)
+    // Batch 1: Major items (100 rows) - no default images
     const majorBatch = writeBatch(db);
     for (const item of majorSource) {
       const rawId = (item.number < 10 ? `0${item.number}` : String(item.number)).padStart(2, '0');
@@ -315,18 +300,19 @@ export async function seedUserBranchFromDefaults(
       const docRef = doc(db, 'major_items', docId);
       majorBatch.set(docRef, cleanForFirestore({
         ...item,
+        imageUrl: null,
         id: docId,
         rawId,
         userId,
         userEmail: email,
         isDefault: false,
-        updatedAt: item.updatedAt || now,
+        updatedAt: now,
       }), { merge: true });
       totalCount++;
     }
     await majorBatch.commit();
 
-    // Batch 2: PAO items (100 rows)
+    // Batch 2: PAO items (100 rows) - no default images
     const paoBatch = writeBatch(db);
     for (const item of paoSource) {
       const rawId = (item.number < 10 ? `0${item.number}` : String(item.number)).padStart(2, '0');
@@ -334,12 +320,13 @@ export async function seedUserBranchFromDefaults(
       const docRef = doc(db, 'pao_items', docId);
       paoBatch.set(docRef, cleanForFirestore({
         ...item,
+        imageUrl: null,
         id: docId,
         rawId,
         userId,
         userEmail: email,
         isDefault: false,
-        updatedAt: item.updatedAt || now,
+        updatedAt: now,
       }), { merge: true });
       totalCount++;
     }
@@ -589,15 +576,18 @@ export function mergeWithRemoteItems<T extends { updatedAt?: number }>(
       if (different) {
         // Any difference arriving from Firestore (Rowy, Firebase Console, or other tabs)
         // must be accepted immediately without requiring updatedAt to be artificially higher.
+        // CRITICAL: Never let a null/empty imageUrl from a default doc overwrite a valid existing image!
         const prevImg = (prevItem as any).imageUrl;
         const remoteImg = (remoteItem as any).imageUrl;
-        const finalImg = remoteImg !== undefined ? remoteImg : prevImg;
+        const hasRemoteImg = typeof remoteImg === 'string' && remoteImg.trim().length > 0 && remoteImg !== 'null';
+        const hasPrevImg = typeof prevImg === 'string' && prevImg.trim().length > 0 && prevImg !== 'null';
+        const finalImg = hasRemoteImg ? remoteImg : (hasPrevImg ? prevImg : undefined);
 
         merged.push({
           ...prevItem,
           ...remoteItem,
           ...(finalImg !== undefined ? { imageUrl: finalImg } : {}),
-          updatedAt: Math.max(prevTime, remoteTime, Date.now()),
+          updatedAt: Math.max(prevTime, remoteTime),
         });
         hasAnyChanges = true;
       } else {
@@ -632,9 +622,19 @@ async function syncCollectionBidirectional<T extends { id?: string | number; num
   let downloadedCount = 0;
 
   try {
-    const snap = userId
-      ? await getDocs(query(collection(db, collectionName), where('userId', '==', userId)))
-      : await getDocs(collection(db, collectionName));
+    // Unauthenticated visitors must NEVER upload local data/images into the global system_default branch,
+    // and must NEVER see any images in the default DB.
+    if (!userId) {
+      const cleanDefaultItems = localItems.map((it: any) => {
+        const copy = { ...it };
+        delete copy.imageUrl;
+        if ('avatarUrl' in copy) copy.avatarUrl = '';
+        return copy as T;
+      });
+      return { mergedItems: cleanDefaultItems, uploadedCount: 0, downloadedCount: 0 };
+    }
+
+    const snap = await getDocs(query(collection(db, collectionName), where('userId', '==', userId)));
 
     const remoteMap = new Map<string, any>();
     snap.forEach((d) => {
@@ -645,15 +645,11 @@ async function syncCollectionBidirectional<T extends { id?: string | number; num
         return;
       }
       const data = d.data();
-      // If unauthenticated (no userId), NEVER read or overwrite with another user's isolated documents
-      if (!userId && (d.id.includes('_') || (data.userId && data.userId !== 'system_default'))) {
-        return;
-      }
-      const rawId = data.rawId || (userId && d.id.startsWith(`${userId}_`) ? d.id.slice(userId.length + 1) : d.id);
+      const rawId = data.rawId || (d.id.startsWith(`${userId}_`) ? d.id.slice(userId.length + 1) : d.id);
       remoteMap.set(rawId, { ...data, id: rawId });
     });
 
-    const getDocId = (rawId: string) => (userId ? `${userId}_${rawId}` : rawId);
+    const getDocId = (rawId: string) => `${userId}_${rawId}`;
 
     // If remote collection is completely empty and local items exist, upload all local items
     if (remoteMap.size === 0 && localItems.length > 0) {
@@ -669,9 +665,9 @@ async function syncCollectionBidirectional<T extends { id?: string | number; num
             ...item,
             id: docId,
             rawId,
-            userId: userId || 'system_default',
+            userId,
             userEmail: userEmail || '',
-            isDefault: !userId,
+            isDefault: false,
             updatedAt: item.updatedAt || Date.now(),
           }),
           { merge: true }
@@ -714,47 +710,100 @@ async function syncCollectionBidirectional<T extends { id?: string | number; num
         // Check for content differences between remote and local
         const different = isItemDifferent(localItem, remoteItem);
 
+        const localImg = (localItem as any).imageUrl;
+        const remoteImg = (remoteItem as any).imageUrl;
+        const hasRemoteImg = typeof remoteImg === 'string' && remoteImg.trim().length > 0 && remoteImg !== 'null';
+        const hasLocalImg = typeof localImg === 'string' && localImg.trim().length > 0 && localImg !== 'null';
+        const finalImg =
+          localTime > remoteTime && hasLocalImg
+            ? localImg
+            : hasRemoteImg
+            ? remoteImg
+            : hasLocalImg
+            ? localImg
+            : undefined;
+
         if (remoteTime > localTime || (remoteTime === 0 && different) || (remoteTime === localTime && different)) {
-          // Remote is newer or edited in Rowy: take remote, preserving local imageUrl if remote has none
-          const localImg = (localItem as any).imageUrl;
-          const remoteImg = (remoteItem as any).imageUrl;
-          const finalImg = remoteImg !== undefined ? remoteImg : localImg;
-          mergedList.push({
+          // Remote is newer or edited in Rowy: take remote, preserving local imageUrl if remote has none/null
+          const mergedItem = {
             ...localItem,
             ...remoteItem,
             ...(finalImg !== undefined ? { imageUrl: finalImg } : {}),
-          });
+          };
+          mergedList.push(mergedItem);
           downloadedCount++;
+
+          // If local had a valid image that was missing in remote, push that image back to remote so it's never lost
+          if (!hasRemoteImg && hasLocalImg) {
+            const docId = getDocId(rawId);
+            uploadBatch.set(
+              doc(db, collectionName, docId),
+              cleanForFirestore({
+                ...mergedItem,
+                id: docId,
+                rawId,
+                userId,
+                userEmail: userEmail || '',
+                isDefault: false,
+                updatedAt: Math.max(localTime, remoteTime, Date.now()),
+              }),
+              { merge: true }
+            );
+            batchHasOperations = true;
+            uploadedCount++;
+          }
         } else if (localTime > remoteTime) {
-          // Local is newer (e.g. edited locally in app while offline): upload to remote
+          // Local is newer (e.g. edited locally in app while offline): upload to remote,
+          // ALWAYS preserving remoteImg via finalImg if localItem has no imageUrl (e.g. loaded from text-only localStorage)
           const docId = getDocId(rawId);
           const docRef = doc(db, collectionName, docId);
+          const itemToUpload = {
+            ...remoteItem,
+            ...localItem,
+            ...(finalImg !== undefined ? { imageUrl: finalImg } : {}),
+          };
           uploadBatch.set(
             docRef,
             cleanForFirestore({
-              ...localItem,
+              ...itemToUpload,
               id: docId,
               rawId,
-              userId: userId || 'system_default',
+              userId,
               userEmail: userEmail || '',
-              isDefault: !userId,
+              isDefault: false,
               updatedAt: localTime,
             }),
             { merge: true }
           );
           batchHasOperations = true;
           uploadedCount++;
-          mergedList.push(localItem);
+          mergedList.push(itemToUpload);
         } else {
           // In sync: merge fields
-          const localImg = (localItem as any).imageUrl;
-          const remoteImg = (remoteItem as any).imageUrl;
-          const finalImg = remoteImg !== undefined ? remoteImg : localImg;
-          mergedList.push({
+          const mergedItem = {
             ...localItem,
             ...remoteItem,
             ...(finalImg !== undefined ? { imageUrl: finalImg } : {}),
-          });
+          };
+          if (!hasRemoteImg && hasLocalImg) {
+            const docId = getDocId(rawId);
+            uploadBatch.set(
+              doc(db, collectionName, docId),
+              cleanForFirestore({
+                ...mergedItem,
+                id: docId,
+                rawId,
+                userId,
+                userEmail: userEmail || '',
+                isDefault: false,
+                updatedAt: Math.max(localTime, remoteTime, Date.now()),
+              }),
+              { merge: true }
+            );
+            batchHasOperations = true;
+            uploadedCount++;
+          }
+          mergedList.push(mergedItem);
         }
       }
     }
@@ -1076,6 +1125,8 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks, userId?
           let word = (data.defaultWord && data.defaultWord !== 'null') ? data.defaultWord : '';
           let hint = (data.imageHint && data.imageHint !== 'null') ? data.imageHint : '';
           let cons = (data.consonants && data.consonants !== 'null') ? data.consonants : '';
+          // Only show images when a user is authenticated; default DB must have no images at all
+          let imageUrl = userId && data.imageUrl && data.imageUrl !== 'null' ? data.imageUrl : undefined;
 
           items.push({
             id: numStr,
@@ -1084,14 +1135,14 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks, userId?
             consonants: cons,
             defaultWord: word,
             imageHint: hint,
+            imageUrl,
             customNotes: data.customNotes && data.customNotes !== 'null' ? data.customNotes : undefined,
             is_ready_for_practice: Boolean(data.is_ready_for_practice),
             updatedAt: Math.max(
               getTimestampMillis(data.updatedAt),
               getTimestampMillis(data._updatedAt),
               getTimestampMillis(data.updated_at),
-              getTimestampMillis(data.lastModified),
-              Date.now()
+              getTimestampMillis(data.lastModified)
             ),
           });
         });
@@ -1133,7 +1184,8 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks, userId?
           let action = (data.action && data.action !== 'null') ? data.action : '';
           let object = (data.object && data.object !== 'null') ? data.object : '';
           let scene = (data.scene && data.scene !== 'null') ? data.scene : '';
-          let imageUrl = (data.imageUrl && data.imageUrl !== 'null') ? data.imageUrl : (data.imageUrl === '' ? '' : undefined);
+          // Only show images when a user is authenticated; default DB must have no images at all
+          let imageUrl = userId && data.imageUrl && data.imageUrl !== 'null' ? data.imageUrl : undefined;
 
           items.push({
             id: numStr,
@@ -1143,14 +1195,13 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks, userId?
             action,
             object,
             scene,
-            imageUrl: imageUrl || (data.imageUrl === '' ? '' : undefined),
+            imageUrl,
             is_ready_for_practice: Boolean(data.is_ready_for_practice),
             updatedAt: Math.max(
               getTimestampMillis(data.updatedAt),
               getTimestampMillis(data._updatedAt),
               getTimestampMillis(data.updated_at),
-              getTimestampMillis(data.lastModified),
-              Date.now()
+              getTimestampMillis(data.lastModified)
             ),
           });
         });
@@ -1192,8 +1243,7 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks, userId?
             updatedAt: Math.max(
               getTimestampMillis(data.updatedAt),
               getTimestampMillis(data._updatedAt),
-              getTimestampMillis(data.updated_at),
-              Date.now()
+              getTimestampMillis(data.updated_at)
             ),
           });
         });
@@ -1236,8 +1286,7 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks, userId?
             updatedAt: Math.max(
               getTimestampMillis(data.updatedAt),
               getTimestampMillis(data._updatedAt),
-              getTimestampMillis(data.updated_at),
-              Date.now()
+              getTimestampMillis(data.updated_at)
             ),
           });
         });
@@ -1344,7 +1393,7 @@ export function startRealtimeCloudSync(callbacks: RealtimeSyncCallbacks, userId?
             id: rawId,
             name: data.name || '',
             roleOrJob: data.roleOrJob || '',
-            avatarUrl: data.avatarUrl || '',
+            avatarUrl: userId ? (data.avatarUrl || '') : '',
             avatarSeed: data.avatarSeed || '',
             morphologicalAnchor: data.morphologicalAnchor || '',
             substituteWord: data.substituteWord || '',
@@ -1552,7 +1601,7 @@ export async function restoreOriginalPAOAndCleanDuplicates(
       }
     }
 
-    // 3. Update root default documents 00..99 with clean data (Rowy shows these!)
+    // 3. Update root default documents 00..99 with clean data WITHOUT ANY IMAGES (default DB must have 0 images!)
     const rootBatch = writeBatch(db);
     for (const it of finalCleanList) {
       rootBatch.set(
@@ -1566,7 +1615,7 @@ export async function restoreOriginalPAOAndCleanDuplicates(
           action: it.action,
           object: it.object,
           scene: it.scene || null,
-          imageUrl: it.imageUrl || null,
+          imageUrl: null,
           is_ready_for_practice: Boolean(it.is_ready_for_practice),
           userId: 'system_default',
           isDefault: true,
@@ -1615,3 +1664,61 @@ export async function restoreOriginalPAOAndCleanDuplicates(
     };
   }
 }
+
+/**
+ * Ensures the global default DB (userId === 'system_default') in Firestore has ZERO images,
+ * and refreshes timestamps on the authenticated user's own saved images so no stale localStorage
+ * entry on any device or production domain can ever hide images #24+.
+ */
+export async function sanitizeDefaultDbImagesInFirestore(userId?: string | null): Promise<void> {
+  if (!isNetworkOnline()) return;
+  try {
+    const now = Date.now();
+    // 1. Strip any leaked images from system_default PAO and Major documents
+    for (const colName of ['pao_items', 'major_items']) {
+      const qDefault = query(collection(db, colName), where('userId', '==', 'system_default'));
+      const snapDefault = await getDocs(qDefault);
+      if (!snapDefault.empty) {
+        const batch = writeBatch(db);
+        let changed = 0;
+        snapDefault.forEach((d) => {
+          const data = d.data();
+          if (data.imageUrl !== null && data.imageUrl !== undefined) {
+            batch.set(doc(db, colName, d.id), { imageUrl: null, updatedAt: now }, { merge: true });
+            changed++;
+          }
+        });
+        if (changed > 0) {
+          await batch.commit();
+        }
+      }
+    }
+
+    // 2. If a user is logged in, ensure their saved image documents have an authoritative updatedAt
+    if (userId && userId !== 'system_default') {
+      for (const colName of ['pao_items', 'major_items']) {
+        const qUser = query(collection(db, colName), where('userId', '==', userId));
+        const snapUser = await getDocs(qUser);
+        if (!snapUser.empty) {
+          const batch = writeBatch(db);
+          let changed = 0;
+          snapUser.forEach((d) => {
+            const data = d.data();
+            const hasImg = typeof data.imageUrl === 'string' && data.imageUrl.trim().length > 0 && data.imageUrl !== 'null';
+            const docUpdated = getTimestampMillis(data.updatedAt);
+            if (hasImg && docUpdated < 1794930000000) {
+              batch.set(doc(db, colName, d.id), { updatedAt: now }, { merge: true });
+              changed++;
+            }
+          });
+          if (changed > 0) {
+            await batch.commit();
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Error sanitizing default DB images:', err);
+  }
+}
+
