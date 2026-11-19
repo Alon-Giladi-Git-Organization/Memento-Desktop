@@ -327,6 +327,37 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
   const [quickUploadItem, setQuickUploadItem] = useState<PAOItem | null>(null);
   const [quickUploadUrl, setQuickUploadUrl] = useState('');
   const [isCompressing, setIsCompressing] = useState(false);
+  const [isEditingQuickPao, setIsEditingQuickPao] = useState(false);
+  const [quickEditPerson, setQuickEditPerson] = useState('');
+  const [quickEditAction, setQuickEditAction] = useState('');
+  const [quickEditObject, setQuickEditObject] = useState('');
+  const [quickEditScene, setQuickEditScene] = useState('');
+
+  const openQuickPaoEditor = (item: PAOItem) => {
+    setQuickEditPerson(item.person || '');
+    setQuickEditAction(item.action || '');
+    setQuickEditObject(item.object || '');
+    setQuickEditScene(item.scene || '');
+    setIsEditingQuickPao(true);
+  };
+
+  const saveQuickPaoEdits = () => {
+    if (!quickUploadItem) return;
+    const updatedFields = {
+      person: quickEditPerson.trim(),
+      action: quickEditAction.trim(),
+      object: quickEditObject.trim(),
+      scene: quickEditScene.trim(),
+    };
+    onUpdatePAOItem(quickUploadItem.number, updatedFields);
+    setQuickUploadItem((prev) => (prev ? { ...prev, ...updatedFields } : null));
+    setIsEditingQuickPao(false);
+  };
+
+  const closeQuickUploadModal = () => {
+    setQuickUploadItem(null);
+    setIsEditingQuickPao(false);
+  };
 
   // Validation Alert Modal
   const [validationModal, setValidationModal] = useState<{
@@ -493,7 +524,11 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
           return;
         }
         if (quickUploadItem) {
-          setQuickUploadItem(null);
+          if (isEditingQuickPao) {
+            setIsEditingQuickPao(false);
+            return;
+          }
+          closeQuickUploadModal();
           return;
         }
         if (editingNum !== null) {
@@ -515,7 +550,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedPreviewImage, quickUploadItem, validationModal, editingNum, itemsWithImages]);
+  }, [selectedPreviewImage, quickUploadItem, isEditingQuickPao, validationModal, editingNum, itemsWithImages]);
 
   // Add PAO Item
   const [showAddForm, setShowAddForm] = useState(false);
@@ -3519,7 +3554,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
           className="fixed inset-0 z-[70] bg-black/85 backdrop-blur-md flex flex-col sm:items-center sm:justify-center p-0 sm:p-5 md:p-8 animate-fadeIn overflow-y-auto"
           onMouseDown={(e) => {
             if (e.target === e.currentTarget) {
-              setQuickUploadItem(null);
+              closeQuickUploadModal();
             }
           }}
         >
@@ -3529,7 +3564,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3 gap-3">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-xl bg-pink-500/20 text-pink-400">
                   <ImageIcon className="w-5 h-5" />
@@ -3546,28 +3581,144 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setQuickUploadItem(null)}
-                className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer transition-colors"
-                title="סגור חלון"
-              >
-                <X className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (isEditingQuickPao) {
+                      setIsEditingQuickPao(false);
+                    } else {
+                      openQuickPaoEditor(quickUploadItem);
+                    }
+                  }}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                    isEditingQuickPao
+                      ? 'bg-amber-500/20 border-amber-400/60 text-amber-200 shadow-sm'
+                      : 'bg-slate-800/90 border-slate-700 text-slate-200 hover:text-white hover:border-indigo-400/60 hover:bg-indigo-600/20'
+                  }`}
+                  title={isEditingQuickPao ? 'צא ממצב עריכת ערכי PAO' : 'ערוך את ערכי ה-PAO'}
+                >
+                  <Edit3 className="w-4 h-4" />
+                  <span className="hidden sm:inline">{isEditingQuickPao ? 'סגור עריכה' : 'ערוך ערכי PAO'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={closeQuickUploadModal}
+                  className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer transition-colors"
+                  title="סגור חלון"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
-            <div className="text-xs text-slate-300 bg-slate-950/70 p-3.5 rounded-2xl border border-slate-800 space-y-2">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                <div><strong className="text-amber-400">👤 אדם:</strong> {quickUploadItem.person || '(ריק)'}</div>
-                <div><strong className="text-purple-400">⚡ פעולה:</strong> {quickUploadItem.action || '(ריק)'}</div>
-                <div><strong className="text-teal-400">📦 חפץ:</strong> {quickUploadItem.object || '(ריק)'}</div>
-              </div>
-              {quickUploadItem.scene && (
-                <div className="pt-2 border-t border-slate-800/80 leading-relaxed">
-                  <strong className="text-amber-300">🎬 סצנה שלמה:</strong> {quickUploadItem.scene}
+            {isEditingQuickPao ? (
+              <div className="bg-slate-950/90 p-4 rounded-2xl border-2 border-amber-500/40 space-y-3 animate-fadeIn">
+                <div className="flex items-center justify-between gap-2 pb-1 border-b border-slate-800/80">
+                  <div className="flex items-center gap-2 text-xs font-black text-amber-300">
+                    <Edit3 className="w-4 h-4" />
+                    <span>עריכת ערכי שלשת PAO #{quickUploadItem.numberStr}</span>
+                  </div>
+                  <span className="text-[11px] text-slate-400">השינויים יתעדכנו מיד גם במחולל התמונות</span>
                 </div>
-              )}
-            </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-amber-400 block">👤 אדם (Person)</label>
+                    <input
+                      type="text"
+                      value={quickEditPerson}
+                      onChange={(e) => setQuickEditPerson(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          saveQuickPaoEdits();
+                        }
+                      }}
+                      placeholder="הזן דמות / אדם..."
+                      className="w-full bg-slate-900 border border-slate-700 focus:border-amber-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-purple-400 block">⚡ פעולה (Action)</label>
+                    <input
+                      type="text"
+                      value={quickEditAction}
+                      onChange={(e) => setQuickEditAction(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          saveQuickPaoEdits();
+                        }
+                      }}
+                      placeholder="הזן פעולה..."
+                      className="w-full bg-slate-900 border border-slate-700 focus:border-purple-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-bold text-teal-400 block">📦 חפץ (Object)</label>
+                    <input
+                      type="text"
+                      value={quickEditObject}
+                      onChange={(e) => setQuickEditObject(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          saveQuickPaoEdits();
+                        }
+                      }}
+                      placeholder="הזן חפץ..."
+                      className="w-full bg-slate-900 border border-slate-700 focus:border-teal-400 rounded-xl px-3 py-2 text-xs text-white focus:outline-none"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[11px] font-bold text-amber-300 block">🎬 סצנה שלמה (Full Scene Details)</label>
+                  <textarea
+                    rows={2}
+                    value={quickEditScene}
+                    onChange={(e) => setQuickEditScene(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        saveQuickPaoEdits();
+                      }
+                    }}
+                    placeholder="תאר את הסצנה המלאה..."
+                    className="w-full bg-slate-900 border border-slate-700 focus:border-amber-300 rounded-xl px-3 py-2 text-xs text-white focus:outline-none leading-relaxed"
+                  />
+                </div>
+                <div className="flex items-center justify-end gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingQuickPao(false)}
+                    className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-slate-400 hover:text-white hover:bg-slate-800 cursor-pointer transition-colors"
+                  >
+                    ביטול
+                  </button>
+                  <button
+                    type="button"
+                    onClick={saveQuickPaoEdits}
+                    className="px-4 py-1.5 rounded-xl text-xs font-black bg-emerald-600 hover:bg-emerald-500 text-white flex items-center gap-1.5 shadow-md cursor-pointer transition-all active:scale-95"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>שמור שינויים (Enter)</span>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="text-xs text-slate-300 bg-slate-950/70 p-3.5 rounded-2xl border border-slate-800 space-y-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div><strong className="text-amber-400">👤 אדם:</strong> {quickUploadItem.person || '(ריק)'}</div>
+                  <div><strong className="text-purple-400">⚡ פעולה:</strong> {quickUploadItem.action || '(ריק)'}</div>
+                  <div><strong className="text-teal-400">📦 חפץ:</strong> {quickUploadItem.object || '(ריק)'}</div>
+                </div>
+                {quickUploadItem.scene && (
+                  <div className="pt-2 border-t border-slate-800/80 leading-relaxed">
+                    <strong className="text-amber-300">🎬 סצנה שלמה:</strong> {quickUploadItem.scene}
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Mode Switcher: AI Generation vs Upload File */}
             <div className="flex items-center gap-1.5 bg-slate-950 p-1.5 rounded-2xl border border-slate-800">
@@ -3575,7 +3726,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                 type="button"
                 onClick={() => setQuickUploadMode('ai')}
                 className={`flex-1 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center gap-2 cursor-pointer ${
-                  quickUploadMode === 'ai' ? 'bg-gradient-to-r from-indigo-600 to-pink-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+                  quickUploadMode === 'ai' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
                 }`}
               >
                 <Sparkles className="w-4 h-4 text-amber-300" />
@@ -3672,7 +3823,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                   onUpdatePAOItem(quickUploadItem.number, {
                     imageUrl: generatedUrl,
                   });
-                  setQuickUploadItem(null);
+                  closeQuickUploadModal();
                   onEarnPoints(15, 'יצירת תמונה מנמונית עם Gemini');
                 }}
               />
@@ -3682,7 +3833,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
               <button
                 type="button"
-                onClick={() => setQuickUploadItem(null)}
+                onClick={closeQuickUploadModal}
                 className="px-4 py-2 text-xs text-slate-400 hover:text-white cursor-pointer transition-colors"
               >
                 {quickUploadMode === 'ai' ? 'סגור חלון' : 'ביטול'}
@@ -3696,7 +3847,7 @@ export const PAOModule: React.FC<PAOModuleProps> = ({
                     onUpdatePAOItem(quickUploadItem.number, {
                       imageUrl: finalUrl,
                     });
-                    setQuickUploadItem(null);
+                    closeQuickUploadModal();
                     setQuickUploadUrl('');
                   }}
                   className="px-5 py-2 text-xs bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl cursor-pointer shadow-md transition-all active:scale-95"

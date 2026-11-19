@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ChevronRight,
   ChevronLeft,
@@ -10,7 +11,6 @@ import {
   Pause,
   Shuffle,
   X,
-  ArrowRight,
   Save,
   Check,
 } from 'lucide-react';
@@ -75,7 +75,7 @@ export const MajorGalleryCarousel: React.FC<MajorGalleryCarouselProps> = ({
     }
   }, [initialIndex, items.length]);
 
-  // Lock body scroll while gallery modal is open so background never scrolls
+  // Lock body scroll while lightbox is open so background never scrolls
   useEffect(() => {
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -111,6 +111,36 @@ export const MajorGalleryCarousel: React.FC<MajorGalleryCarouselProps> = ({
     setSlideDirection('left');
     setCurrentIndex(nextIndex);
   };
+
+  const currentItem = items[currentIndex];
+
+  const resolvedWord = currentItem
+    ? (currentItem.defaultWord && currentItem.defaultWord.trim()) ||
+      DEFAULT_MAJOR_00_99.find((d) => d.number === currentItem.number)?.defaultWord?.trim() ||
+      ''
+    : '';
+
+  const handleSaveSlideEdits = useCallback(() => {
+    if (!currentItem) return;
+    if (onUpdateMajorItem) {
+      onUpdateMajorItem(currentItem.number, {
+        defaultWord: editWord.trim(),
+        imageHint: editHint.trim(),
+      });
+      setSaveSuccessNotice('הערכים עודכנו בהצלחה');
+      setTimeout(() => setSaveSuccessNotice(null), 2600);
+      setIsEditingSlide(false);
+    } else if (onEditItem) {
+      onEditItem(currentItem.number);
+    }
+  }, [currentItem, onUpdateMajorItem, onEditItem, editWord, editHint]);
+
+  const handleCancelSlideEdits = useCallback(() => {
+    if (!currentItem) return;
+    setEditWord(resolvedWord);
+    setEditHint(currentItem.imageHint || '');
+    setIsEditingSlide(false);
+  }, [currentItem, resolvedWord]);
 
   // Keyboard navigation, Enter to save in edit mode & Light Dismiss via Escape key
   useEffect(() => {
@@ -148,7 +178,7 @@ export const MajorGalleryCarousel: React.FC<MajorGalleryCarouselProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [goToNext, goToPrev, onClose, isEditingSlide, editWord, editHint, currentIndex]);
+  }, [goToNext, goToPrev, onClose, isEditingSlide, handleSaveSlideEdits, handleCancelSlideEdits]);
 
   // Autoplay timer
   useEffect(() => {
@@ -174,14 +204,6 @@ export const MajorGalleryCarousel: React.FC<MajorGalleryCarouselProps> = ({
       }
     }
   }, [currentIndex]);
-
-  const currentItem = items[currentIndex];
-
-  const resolvedWord = currentItem
-    ? (currentItem.defaultWord && currentItem.defaultWord.trim()) ||
-      DEFAULT_MAJOR_00_99.find((d) => d.number === currentItem.number)?.defaultWord?.trim() ||
-      ''
-    : '';
 
   // Sync draft edit values whenever the active slide item changes
   useEffect(() => {
@@ -213,36 +235,36 @@ export const MajorGalleryCarousel: React.FC<MajorGalleryCarouselProps> = ({
 
     if (Math.abs(deltaX) > SWIPE_THRESHOLD) {
       if (deltaX > 0) {
-        // Swiped Left in RTL -> Next item
         goToNext();
       } else {
-        // Swiped Right in RTL -> Prev item
         goToPrev();
       }
     }
     touchStartXRef.current = null;
   };
 
+  const renderInPortal = (node: React.ReactNode) => {
+    if (typeof document === 'undefined') return node;
+    return createPortal(node, document.body);
+  };
+
   if (items.length === 0 || !currentItem) {
-    return (
+    return renderInPortal(
       <div
+        dir="rtl"
         onMouseDown={(e) => {
           if (e.target === e.currentTarget && onClose) onClose();
         }}
-        onClick={(e) => {
-          if (e.target === e.currentTarget && onClose) onClose();
-        }}
-        className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md overflow-y-auto flex items-center justify-center p-4 animate-fadeIn"
+        className="fixed inset-0 z-[60] bg-black/92 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn"
       >
         <div
           onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => e.stopPropagation()}
-          className="w-full max-w-md py-16 px-4 text-center rounded-3xl bg-slate-950/80 border border-slate-800 space-y-4"
+          className="w-full max-w-md py-10 px-6 text-center rounded-2xl bg-slate-950/95 border border-white/10 space-y-4 shadow-2xl"
         >
-          <div className="w-16 h-16 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 mx-auto flex items-center justify-center">
-            <ImagePlus className="w-8 h-8" />
+          <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 mx-auto flex items-center justify-center">
+            <ImagePlus className="w-7 h-7" />
           </div>
-          <h3 className="text-lg font-bold text-white">אין פריטים להצגה בגלריה</h3>
+          <h3 className="text-base font-bold text-white">אין פריטים להצגה בגלריה</h3>
           <p className="text-xs text-slate-400 max-w-sm mx-auto">
             לא נמצאו פריטי Major התואמים לחיפוש או לסינון הנוכחי.
           </p>
@@ -250,7 +272,7 @@ export const MajorGalleryCarousel: React.FC<MajorGalleryCarouselProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl cursor-pointer"
+              className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white font-semibold text-xs rounded-lg cursor-pointer transition-colors"
             >
               חזרה לתצוגת כוורת
             </button>
@@ -260,100 +282,36 @@ export const MajorGalleryCarousel: React.FC<MajorGalleryCarouselProps> = ({
     );
   }
 
-  const handleSaveSlideEdits = () => {
-    if (onUpdateMajorItem) {
-      onUpdateMajorItem(currentItem.number, {
-        defaultWord: editWord.trim(),
-        imageHint: editHint.trim(),
-      });
-      setSaveSuccessNotice('הערכים עודכנו בהצלחה!');
-      setTimeout(() => setSaveSuccessNotice(null), 3000);
-      setIsEditingSlide(false);
-    } else if (onEditItem) {
-      onEditItem(currentItem.number);
-    }
-  };
-
-  const handleCancelSlideEdits = () => {
-    setEditWord(resolvedWord);
-    setEditHint(currentItem.imageHint || '');
-    setIsEditingSlide(false);
-  };
-
-  return (
+  return renderInPortal(
     <div
+      dir="rtl"
       onMouseDown={(e) => {
-        // Light dismiss: close when clicking on the sides of the screen (the backdrop)
         if (e.target === e.currentTarget && onClose) {
           onClose();
         }
       }}
-      onClick={(e) => {
-        // Light dismiss: close when clicking on the sides of the screen (the backdrop)
-        if (e.target === e.currentTarget && onClose) {
-          onClose();
-        }
-      }}
-      className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md overflow-y-auto flex flex-col items-center justify-start p-1 sm:p-2.5 md:p-3.5 animate-fadeIn"
+      className="fixed inset-0 z-[60] bg-black/93 backdrop-blur-md flex flex-col justify-between overflow-y-auto select-none animate-fadeIn"
     >
-      <div
-        className="w-full max-w-[98vw] 2xl:max-w-[1750px] my-auto space-y-3 sm:space-y-4 select-none relative"
+      {/* Top Lightbox Controls Bar */}
+      <header
         onMouseDown={(e) => e.stopPropagation()}
-        onClick={(e) => e.stopPropagation()}
+        className="w-full flex items-center justify-between gap-3 px-4 sm:px-6 py-3 bg-gradient-to-b from-black/80 to-transparent shrink-0 z-20"
       >
-      {/* Top Gallery Header Bar */}
-      <div className="flex items-center justify-between bg-slate-950/90 border border-slate-800/90 px-4 py-3 rounded-2xl flex-wrap gap-2.5 backdrop-blur-md shadow-lg">
-        <div className="flex items-center gap-3">
-          {onClose && (
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-2 rounded-xl bg-slate-900 hover:bg-emerald-600 text-slate-300 hover:text-white border border-slate-700/80 transition-all cursor-pointer flex items-center gap-1.5 text-xs sm:text-sm font-bold"
-              title="חזרה לתצוגת רשת (Esc)"
-            >
-              <ArrowRight className="w-4 h-4" />
-              <span>חזרה לתצוגת רשת (Esc)</span>
-            </button>
-          )}
-
-          <div className="flex items-center gap-2.5">
-            <span className="font-mono text-base sm:text-lg font-black px-3.5 py-1 rounded-xl bg-gradient-to-r from-emerald-500/20 to-teal-500/20 text-emerald-300 border border-emerald-500/30">
-              #{currentItem.numberStr}
-            </span>
-            <span className="text-xs sm:text-sm text-slate-300 hidden sm:inline font-medium">
-              פריט {currentIndex + 1} מתוך {items.length}
-            </span>
-          </div>
+        <div className="flex items-center gap-3 text-xs text-slate-300 min-w-0">
+          <span className="font-mono text-sm font-bold text-emerald-300 tabular-nums whitespace-nowrap">
+            #{currentItem.numberStr}
+          </span>
+          <span aria-hidden="true" className="text-slate-600">·</span>
+          <span className="font-mono tabular-nums text-slate-400 whitespace-nowrap">
+            {currentIndex + 1} / {items.length}
+          </span>
+          <span aria-hidden="true" className="text-slate-600 hidden md:inline">·</span>
+          <span className="text-slate-400 hidden md:inline truncate">
+            עיצורים: {currentItem.consonants || '—'}
+          </span>
         </div>
 
-        {/* Center/Right Controls */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Autoplay button */}
-          <button
-            type="button"
-            onClick={() => setIsAutoPlaying((prev) => !prev)}
-            className={`px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-              isAutoPlaying
-                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/30'
-                : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700/80'
-            }`}
-            title="ניגון אוטומטי רציף של הגלריה"
-          >
-            {isAutoPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-            <span>{isAutoPlaying ? 'השהה ניגון' : 'ניגון אוטומטי'}</span>
-          </button>
-
-          {/* Random button */}
-          <button
-            type="button"
-            onClick={goToRandom}
-            className="px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700/80 flex items-center gap-1.5 transition-all cursor-pointer"
-            title="קפיצה לפריט אקראי"
-          >
-            <Shuffle className="w-4 h-4 text-teal-400" />
-            <span>אקראי</span>
-          </button>
-
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-wrap justify-end">
           {/* Quick Jump Dropdown */}
           <select
             value={currentItem.number}
@@ -362,151 +320,250 @@ export const MajorGalleryCarousel: React.FC<MajorGalleryCarouselProps> = ({
               const targetIdx = items.findIndex((it) => it.number === num);
               if (targetIdx !== -1) goToIndex(targetIdx);
             }}
-            className="bg-slate-900 border border-slate-700 text-emerald-300 text-xs sm:text-sm font-mono font-bold rounded-xl px-3 py-1.5 focus:outline-none cursor-pointer"
+            aria-label="בחר מספר Major"
+            className="bg-white/8 hover:bg-white/12 border border-white/10 text-emerald-200 text-xs font-mono rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-emerald-400 cursor-pointer max-w-[140px] sm:max-w-[180px]"
           >
             {items.map((it) => (
-              <option key={it.number} value={it.number}>
+              <option key={it.number} value={it.number} className="bg-slate-950 text-white">
                 #{it.numberStr} - {it.defaultWord || 'מספר'}
               </option>
             ))}
           </select>
 
+          <button
+            type="button"
+            onClick={() => setIsAutoPlaying((prev) => !prev)}
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+              isAutoPlaying
+                ? 'bg-amber-500 text-slate-950 font-bold'
+                : 'bg-white/8 hover:bg-white/15 text-slate-200 border border-white/10'
+            }`}
+            title="ניגון אוטומטי (מקש רווח)"
+          >
+            {isAutoPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+            <span className="hidden sm:inline">{isAutoPlaying ? 'השהה' : 'ניגון'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={goToRandom}
+            className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-white/8 hover:bg-white/15 text-slate-200 border border-white/10 flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+            title="פריט אקראי"
+          >
+            <Shuffle className="w-3.5 h-3.5 text-teal-300" />
+            <span className="hidden sm:inline">אקראי</span>
+          </button>
+
+          {onToggleReady && (
+            <button
+              type="button"
+              onClick={() => onToggleReady(currentItem.number, currentItem.is_ready_for_practice)}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+                currentItem.is_ready_for_practice
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                  : 'bg-white/8 hover:bg-white/15 text-slate-300 border border-white/10'
+              }`}
+              title={currentItem.is_ready_for_practice ? 'מוכן לתרגול' : 'סמן כמוכן לתרגול'}
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden md:inline">
+                {currentItem.is_ready_for_practice ? 'מוכן' : 'סמן כמוכן'}
+              </span>
+            </button>
+          )}
+
+          {/* Change Image button */}
+          <button
+            type="button"
+            onClick={() => onOpenImageGenerator?.(currentItem)}
+            className="px-2.5 py-1.5 rounded-lg bg-emerald-600/90 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+            title="שנה תמונה (יצירה עם AI או העלאה מהמחשב)"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+            <span>שנה תמונה</span>
+          </button>
+
+          {/* Edit Values button */}
+          {!isEditingSlide ? (
+            <button
+              type="button"
+              onClick={() => setIsEditingSlide(true)}
+              className="px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white border border-white/15 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+              title="ערוך את מילת העוגן והסצנה"
+            >
+              <Edit3 className="w-3.5 h-3.5 text-amber-300" />
+              <span>עריכה</span>
+            </button>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={handleCancelSlideEdits}
+                className="px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-slate-200 text-xs font-medium cursor-pointer transition-colors whitespace-nowrap"
+              >
+                ביטול
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveSlideEdits}
+                title="שמור שינויים (ניתן גם ללחוץ Enter)"
+                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>שמור (Enter)</span>
+              </button>
+            </div>
+          )}
+
           {onClose && (
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer mr-1"
+              className="p-1.5 rounded-lg bg-white/8 hover:bg-white/20 text-slate-300 hover:text-white border border-white/10 transition-colors cursor-pointer"
               title="סגור גלריה (Esc)"
+              aria-label="סגור גלריה"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           )}
         </div>
-      </div>
+      </header>
 
-      {/* Main Hero Carousel Viewport: Side-by-Side Text Panel & Enlarged Image */}
-      <div
-        className="relative w-full rounded-2xl sm:rounded-3xl bg-slate-950/95 border-2 border-emerald-500/30 p-2 sm:p-3.5 md:p-4 shadow-2xl overflow-hidden flex flex-col"
+      {/* Main Lightbox Stage: Centered Image Above + Compact Text Values Below */}
+      <main
+        className="flex-1 flex flex-col items-center justify-center relative px-4 sm:px-14 py-2 gap-3 sm:gap-4 min-h-0"
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget && onClose) {
+            onClose();
+          }
+        }}
       >
-        {/* Slide Container: Side-by-Side Layout (Text Panel on Right, Image on Left in RTL) */}
+        {/* Navigation Arrow: Right (Previous in RTL) */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            goToPrev();
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          className="fixed right-2.5 sm:right-5 top-1/2 -translate-y-1/2 z-30 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-black/60 hover:bg-white/15 text-white/90 hover:text-white border border-white/15 shadow-2xl flex items-center justify-center transition-all cursor-pointer active:scale-95 backdrop-blur-md"
+          title="לפריט הקודם (חץ ימינה)"
+          aria-label="לפריט הקודם"
+        >
+          <ChevronRight className="w-6 h-6" />
+        </button>
+
+        {/* Navigation Arrow: Left (Next in RTL) */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            goToNext();
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          className="fixed left-2.5 sm:left-5 top-1/2 -translate-y-1/2 z-30 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-black/60 hover:bg-white/15 text-white/90 hover:text-white border border-white/15 shadow-2xl flex items-center justify-center transition-all cursor-pointer active:scale-95 backdrop-blur-md"
+          title="לפריט הבא (חץ שמאלה)"
+          aria-label="לפריט הבא"
+        >
+          <ChevronLeft className="w-6 h-6" />
+        </button>
+
+        {/* Slide Content Column: Image on Top, Compact Caption Below */}
         <div
           key={currentItem.number}
-          className={`w-full grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4 items-stretch ${
+          onMouseDown={(e) => e.stopPropagation()}
+          className={`w-full max-w-4xl flex flex-col items-center gap-3 sm:gap-4 ${
             slideDirection === 'left' ? 'animate-slide-left' : 'animate-slide-right'
           }`}
         >
-          {/* 1. RIGHT SIDE (in RTL): Full Textual Information & In-Gallery Editing at Image Height */}
-          <div className="lg:col-span-5 xl:col-span-5 bg-slate-900/95 border border-slate-800 rounded-xl sm:rounded-2xl p-4 sm:p-6 text-right flex flex-col justify-between gap-4 shadow-xl lg:h-[74vh] lg:min-h-[500px] lg:max-h-[760px] overflow-y-auto">
-            <div className="space-y-4">
-              {/* Header: Number, Consonants, Ready Toggle & In-Gallery Edit Controls */}
-              <div className="flex items-center justify-between border-b border-slate-800/80 pb-3.5 flex-wrap gap-2.5">
-                <div className="flex items-center gap-3">
-                  <span className="font-mono text-2xl sm:text-3xl font-black px-4 py-1.5 rounded-xl bg-gradient-to-r from-emerald-500/20 to-teal-500/20 text-emerald-300 border border-emerald-500/40 shadow-inner">
-                    #{currentItem.numberStr}
-                  </span>
-                  <div>
-                    <span className="text-sm sm:text-base font-bold text-amber-400 block">
-                      עיצורי Major: {currentItem.consonants || '—'}
-                    </span>
-                    <span className="text-xs sm:text-sm text-slate-300 font-medium">
-                      מילת עוגן: {resolvedWord || '(טרם הוגדרה)'}
-                    </span>
-                  </div>
+          {/* 1. HERO IMAGE FRAME */}
+          <div className="relative w-full flex items-center justify-center">
+            {currentItem.imageUrl ? (
+              <img
+                src={currentItem.imageUrl}
+                referrerPolicy="no-referrer"
+                alt={`Major #${currentItem.numberStr} - ${resolvedWord}`}
+                className={`w-auto max-w-full object-contain rounded-xl shadow-[0_24px_80px_rgba(0,0,0,0.85)] border border-white/10 transition-all duration-300 ${
+                  isEditingSlide ? 'max-h-[40vh] sm:max-h-[45vh]' : 'max-h-[58vh] sm:max-h-[64vh]'
+                }`}
+              />
+            ) : (
+              <div className="w-full max-w-lg py-12 px-6 rounded-2xl bg-white/[0.04] border border-white/10 flex flex-col items-center justify-center text-center space-y-3">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-300">
+                  <ImagePlus className="w-7 h-7" />
                 </div>
-
-                <div className="flex items-center gap-2 flex-wrap">
-                  {onToggleReady && (
-                    <button
-                      type="button"
-                      onClick={() => onToggleReady(currentItem.number, currentItem.is_ready_for_practice)}
-                      className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                        currentItem.is_ready_for_practice
-                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-xs'
-                          : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
-                      }`}
-                    >
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                      <span>{currentItem.is_ready_for_practice ? 'מוכן לתרגול' : 'סמן כמוכן'}</span>
-                    </button>
-                  )}
-
-                  {/* In-Gallery Edit Toggle Button or Save / Cancel Buttons */}
-                  {!isEditingSlide ? (
-                    <button
-                      type="button"
-                      onClick={() => setIsEditingSlide(true)}
-                      className="px-3.5 py-2 rounded-xl bg-emerald-600/25 hover:bg-emerald-600/40 text-emerald-300 border border-emerald-500/35 hover:border-emerald-500/50 text-xs sm:text-sm font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-                      title="ערוך את מילת העוגן והסצנה ישירות בגלריה"
-                    >
-                      <Edit3 className="w-4 h-4 text-emerald-400" />
-                      <span>עריכת ערכים</span>
-                    </button>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleCancelSlideEdits}
-                        className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs sm:text-sm font-bold flex items-center gap-1 transition-all cursor-pointer"
-                      >
-                        <X className="w-4 h-4" />
-                        <span>ביטול</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleSaveSlideEdits}
-                        title="שמור שינויים (ניתן גם ללחוץ Enter)"
-                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/30 transition-all cursor-pointer"
-                      >
-                        <Save className="w-4 h-4" />
-                        <span>שמור (Enter)</span>
-                      </button>
-                    </div>
-                  )}
+                <div className="space-y-1">
+                  <h4 className="text-sm font-bold text-white">
+                    אין עדיין תמונה למספר Major #{currentItem.numberStr}
+                  </h4>
+                  <p className="text-xs text-slate-400 max-w-xs mx-auto">
+                    צור תמונה עם Gemini AI או העלה תמונה מהמכשיר.
+                  </p>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => onOpenImageGenerator?.(currentItem)}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-lg flex items-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <Sparkles className="w-4 h-4 text-amber-300" />
+                  <span>שנה תמונה</span>
+                </button>
               </div>
+            )}
+          </div>
 
-              {saveSuccessNotice && (
-                <div className="text-sm font-bold text-emerald-400 bg-emerald-500/20 border border-emerald-500/40 px-3.5 py-2.5 rounded-xl flex items-center gap-2 animate-fade-in">
-                  <Check className="w-4 h-4 shrink-0" />
-                  <span>{saveSuccessNotice}</span>
-                </div>
-              )}
+          {saveSuccessNotice && (
+            <div className="text-xs font-semibold text-emerald-300 bg-emerald-500/15 border border-emerald-500/35 px-3 py-1.5 rounded-lg flex items-center gap-1.5 animate-fade-in">
+              <Check className="w-3.5 h-3.5 shrink-0" />
+              <span>{saveSuccessNotice}</span>
+            </div>
+          )}
 
-              {/* View Mode vs Inline Edit Mode */}
-              {!isEditingSlide ? (
-                <div className="space-y-4">
-                  {/* 1. Anchor Word Display */}
-                  <div className="bg-slate-950/90 border border-amber-500/35 p-4 sm:p-5 rounded-2xl">
-                    <span className="text-sm sm:text-base font-bold text-amber-400 block mb-1.5">
-                      🏷️ מילת עוגן / חפץ (Word):
-                    </span>
-                    <span className="text-xl sm:text-2xl md:text-3xl font-black text-white leading-snug block break-words">
-                      {resolvedWord || '(טרם הוגדר)'}
-                    </span>
-                  </div>
-
-                  {/* 2. Scene / Visual Hint Display */}
-                  <div className="bg-gradient-to-br from-amber-500/10 via-emerald-500/10 to-teal-500/10 border border-amber-500/40 rounded-2xl p-4 sm:p-5 space-y-2 shadow-sm">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-5 h-5 text-amber-400 shrink-0" />
-                      <span className="text-sm sm:text-base font-black text-amber-300">
-                        🎬 סצנה שלמה / רמז ויזואלי (Scene Hint):
+          {/* 2. COMPACT TEXTUAL CAPTION / INLINE EDITOR BELOW IMAGE */}
+          <div className="w-full max-w-3xl text-right">
+            {!isEditingSlide ? (
+              <div className="bg-slate-950/75 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-md space-y-2">
+                <div className="flex items-center justify-between gap-3 flex-wrap text-xs sm:text-[13px]">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div>
+                      <span className="text-[11px] font-semibold text-amber-400/90 ml-1.5">מילת עוגן:</span>
+                      <span className="font-semibold text-white">
+                        {resolvedWord || '(טרם הוגדר)'}
                       </span>
                     </div>
-                    <p className="text-base sm:text-lg md:text-xl text-white leading-relaxed font-semibold">
-                      "{currentItem.imageHint?.trim() || 'טרם הוזנה סצנה. מומלץ לתאר חפץ או אינטראקציה ויזואלית חיה.'}"
-                    </p>
+                    <span aria-hidden="true" className="text-slate-600">·</span>
+                    <div>
+                      <span className="text-[11px] font-semibold text-teal-400/90 ml-1.5">עיצורים:</span>
+                      <span className="font-mono text-slate-200">{currentItem.consonants || '—'}</span>
+                    </div>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingSlide(true)}
+                    className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                    title="ערוך ערכי Major"
+                    aria-label="ערוך ערכי Major"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
-              ) : (
-                /* Inline Editable Mode with AI Field Generators */
-                <div className="space-y-3.5 pt-0.5">
-                  {/* Anchor Word Input with AI Generator */}
-                  <div className="bg-slate-950/90 border border-amber-500/40 p-3.5 rounded-2xl space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-sm sm:text-base font-bold text-amber-400">🏷️ מילת עוגן / חפץ:</label>
+
+                <div className="pt-2 border-t border-white/10">
+                  <p className="text-xs sm:text-[13px] text-slate-300 leading-relaxed">
+                    <span className="text-[11px] font-semibold text-amber-300/90 ml-1.5">סצנה / רמז:</span>
+                    {currentItem.imageHint?.trim() || 'טרם הוזן תיאור סצנה.'}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              /* Compact Inline Edit Form below the image */
+              <div className="bg-slate-950/95 border border-white/15 rounded-2xl p-3.5 sm:p-4 space-y-3 backdrop-blur-md shadow-2xl">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <label className="text-[11px] font-semibold text-amber-400">מילת עוגן / חפץ</label>
                       <AIFieldGeneratorButton
                         promptType="major_word"
                         inputContext={currentItem.numberStr}
@@ -514,7 +571,7 @@ export const MajorGalleryCarousel: React.FC<MajorGalleryCarouselProps> = ({
                         customDigits={majorDigits}
                         connectingLetters={connectingLetters}
                         onGenerated={(val) => setEditWord(val)}
-                        label="חולל עם AI"
+                        label="AI"
                         compact
                       />
                     </div>
@@ -528,141 +585,58 @@ export const MajorGalleryCarousel: React.FC<MajorGalleryCarouselProps> = ({
                           handleSaveSlideEdits();
                         }
                       }}
-                      placeholder="מילת עוגן (לדוגמה: סם, גג)..."
-                      className="w-full bg-slate-900 border border-slate-700 focus:border-amber-500 rounded-xl px-3.5 py-2.5 text-base sm:text-lg font-bold text-white focus:outline-none"
+                      placeholder="מילת עוגן..."
+                      className="w-full bg-slate-900 border border-slate-700 focus:border-amber-400 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm font-medium text-white focus:outline-none"
                     />
                   </div>
 
-                  {/* Consonants Info Badge */}
-                  <div className="bg-slate-950/70 border border-slate-800 p-3.5 rounded-2xl flex flex-col justify-center">
-                    <span className="text-sm font-bold text-slate-300 block mb-1">עיצורים פונטיים נדרשים:</span>
-                    <span className="font-mono text-base sm:text-lg font-black text-teal-300">
+                  <div className="space-y-1">
+                    <span className="text-[11px] font-semibold text-teal-400 block">עיצורים פונטיים</span>
+                    <div className="bg-slate-900/70 border border-slate-800 rounded-lg px-2.5 py-1.5 font-mono text-xs sm:text-sm text-teal-300">
                       {currentItem.consonants || '—'}
-                    </span>
-                  </div>
-
-                  {/* Scene / Visual Hint Input with AI Generator */}
-                  <div className="bg-slate-950/90 border border-amber-500/40 p-3.5 rounded-2xl space-y-2">
-                    <div className="flex items-center justify-between flex-wrap gap-1">
-                      <div className="flex items-center gap-1.5">
-                        <Sparkles className="w-4 h-4 text-amber-400" />
-                        <label className="text-sm sm:text-base font-bold text-amber-300">
-                          🎬 סצנה / רמז ויזואלי:
-                        </label>
-                      </div>
-                      <AIFieldGeneratorButton
-                        promptType="major_hint"
-                        inputContext={editWord || resolvedWord}
-                        extraContext={currentItem.numberStr}
-                        customDigits={majorDigits}
-                        connectingLetters={connectingLetters}
-                        onGenerated={(val) => setEditHint(val)}
-                        label="סצנה עם AI"
-                        compact
-                      />
                     </div>
-                    <textarea
-                      rows={4}
-                      value={editHint}
-                      onChange={(e) => setEditHint(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                          e.preventDefault();
-                          handleSaveSlideEdits();
-                        }
-                      }}
-                      placeholder="תאר סצנה חיה, הומוריסטית ורב-חושית הממקמת את החפץ בצורה מנמונית בלתי נשכחת..."
-                      className="w-full bg-slate-900 border border-slate-700 focus:border-amber-500 rounded-xl px-3.5 py-2.5 text-base sm:text-lg text-white focus:outline-none leading-relaxed"
-                    />
-                    <p className="text-xs text-slate-400 text-left">
-                      לחץ <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-slate-200">Enter</kbd> לשמירה מהירה
-                    </p>
                   </div>
                 </div>
-              )}
-            </div>
-          </div>
 
-          {/* 2. LEFT SIDE (in RTL): Enlarged Wide Image Viewport at Matching Height */}
-          <div className="lg:col-span-7 xl:col-span-7 relative w-full rounded-xl sm:rounded-2xl overflow-hidden border border-slate-800/90 bg-black/90 flex items-center justify-center lg:h-[74vh] lg:min-h-[500px] lg:max-h-[760px] min-h-[360px] sm:min-h-[460px] shadow-inner group">
-            {/* Navigation Arrow: Right (Previous in RTL) — anchored inside image viewport so it never covers the text panel */}
-            <button
-              type="button"
-              onClick={goToPrev}
-              className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 z-30 w-11 h-11 sm:w-13 sm:h-13 rounded-full bg-slate-950/85 hover:bg-emerald-600 text-white border border-slate-700 hover:border-emerald-400 shadow-2xl flex items-center justify-center transition-all cursor-pointer active:scale-90 group/nav backdrop-blur-md"
-              title="לפריט הקודם (חץ ימינה ➔)"
-            >
-              <ChevronRight className="w-6 h-6 sm:w-7 sm:h-7 group-hover/nav:scale-110 transition-transform" />
-            </button>
-
-            {/* Navigation Arrow: Left (Next in RTL) — anchored inside image viewport */}
-            <button
-              type="button"
-              onClick={goToNext}
-              className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 z-30 w-11 h-11 sm:w-13 sm:h-13 rounded-full bg-slate-950/85 hover:bg-emerald-600 text-white border border-slate-700 hover:border-emerald-400 shadow-2xl flex items-center justify-center transition-all cursor-pointer active:scale-90 group/nav backdrop-blur-md"
-              title="לפריט הבא (חץ שמאלה ⬅)"
-            >
-              <ChevronLeft className="w-6 h-6 sm:w-7 sm:h-7 group-hover/nav:scale-110 transition-transform" />
-            </button>
-
-            {currentItem.imageUrl ? (
-              <>
-                <img
-                  src={currentItem.imageUrl}
-                  alt={`Major #${currentItem.numberStr} - ${resolvedWord}`}
-                  className="w-full h-full max-h-[74vh] object-contain transition-transform duration-500 group-hover:scale-[1.01] drop-shadow-2xl"
-                />
-
-                {/* Floating Quick Action Overlay on Image (Change Image: Upload or AI) */}
-                <div className="absolute top-3 left-3 z-20 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => onOpenImageGenerator?.(currentItem)}
-                    className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600/90 to-teal-600/90 hover:from-emerald-500 hover:to-teal-500 text-white backdrop-blur-md border border-white/10 shadow-lg transition-all cursor-pointer flex items-center gap-1.5 text-xs sm:text-sm font-bold"
-                    title="שנה תמונה (יצירה עם AI או העלאת תמונה)"
-                  >
-                    <Sparkles className="w-4 h-4 text-amber-300" />
-                    <span>שנה תמונה</span>
-                  </button>
-                </div>
-
-                {/* Bottom subtle tag on image */}
-                <div className="absolute bottom-3 right-3 z-20 px-3.5 py-1.5 rounded-xl bg-black/75 backdrop-blur-md border border-white/10 text-white text-xs sm:text-sm font-mono font-bold">
-                  #{currentItem.numberStr} • {resolvedWord}
-                </div>
-              </>
-            ) : (
-              /* High-impact placeholder if no image exists yet */
-              <div className="w-full py-16 px-6 flex flex-col items-center justify-center text-center space-y-4">
-                <div className="w-20 h-20 rounded-3xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shadow-xl">
-                  <ImagePlus className="w-10 h-10" />
-                </div>
                 <div className="space-y-1">
-                  <h4 className="text-base sm:text-lg font-black text-white">
-                    אין עדיין תמונה למספר Major #{currentItem.numberStr}
-                  </h4>
-                  <p className="text-xs sm:text-sm text-emerald-200/80 max-w-md mx-auto">
-                    הפק דימוי מנמוני חי ומרהיב של מילת העוגן והסצנה באמצעות Gemini AI או העלה תמונה בלחיצת כפתור.
-                  </p>
+                  <div className="flex items-center justify-between gap-1">
+                    <label className="text-[11px] font-semibold text-amber-300">סצנה / רמז ויזואלי</label>
+                    <AIFieldGeneratorButton
+                      promptType="major_hint"
+                      inputContext={editWord || resolvedWord}
+                      extraContext={currentItem.numberStr}
+                      customDigits={majorDigits}
+                      connectingLetters={connectingLetters}
+                      onGenerated={(val) => setEditHint(val)}
+                      label="סצנה עם AI"
+                      compact
+                    />
+                  </div>
+                  <textarea
+                    rows={2}
+                    value={editHint}
+                    onChange={(e) => setEditHint(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSaveSlideEdits();
+                      }
+                    }}
+                    placeholder="תאר סצנה חיה ורב-חושית..."
+                    className="w-full bg-slate-900 border border-slate-700 focus:border-amber-400 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm text-white focus:outline-none leading-relaxed"
+                  />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onOpenImageGenerator?.(currentItem)}
-                  className="px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-sm rounded-2xl flex items-center gap-2.5 shadow-xl shadow-emerald-600/30 cursor-pointer transition-all active:scale-95"
-                >
-                  <Sparkles className="w-5 h-5 text-amber-300" />
-                  <span>שנה תמונה</span>
-                </button>
               </div>
             )}
           </div>
         </div>
-      </div>
+      </main>
 
-      {/* Bottom Thumbnail Scrub Strip */}
-      <div
+      {/* Slim Bottom Lightbox Filmstrip */}
+      <footer
+        onMouseDown={(e) => e.stopPropagation()}
         ref={thumbnailListRef}
-        className="flex items-center gap-2 overflow-x-auto p-2.5 bg-slate-950/90 rounded-2xl border border-slate-800/80 scroll-smooth max-w-full"
+        className="w-full flex items-center gap-1.5 overflow-x-auto px-4 py-2 bg-black/75 border-t border-white/10 scroll-smooth shrink-0 z-20"
       >
         {items.map((it, idx) => {
           const isActive = idx === currentIndex;
@@ -672,32 +646,29 @@ export const MajorGalleryCarousel: React.FC<MajorGalleryCarouselProps> = ({
               type="button"
               data-thumb-index={idx}
               onClick={() => goToIndex(idx)}
-              className={`shrink-0 flex items-center gap-1.5 p-1.5 rounded-xl border transition-all cursor-pointer ${
+              className={`shrink-0 flex items-center gap-1.5 p-1 rounded-lg border transition-all cursor-pointer ${
                 isActive
-                  ? 'bg-emerald-500/20 border-emerald-400 shadow-md shadow-emerald-500/30 scale-105'
-                  : 'bg-slate-900/80 border-slate-800 hover:border-slate-700 opacity-70 hover:opacity-100'
+                  ? 'bg-emerald-600/90 text-white border-emerald-400 shadow-md'
+                  : 'bg-white/5 hover:bg-white/12 text-slate-400 border-white/10 opacity-75 hover:opacity-100'
               }`}
             >
-              <div className="w-10 h-10 rounded-lg overflow-hidden bg-black/60 border border-slate-800 flex items-center justify-center shrink-0">
-                {it.imageUrl ? (
-                  <img src={it.imageUrl} alt={it.defaultWord} className="w-full h-full object-cover" />
-                ) : (
-                  <span className="font-mono text-xs font-bold text-slate-400">#{it.numberStr}</span>
-                )}
-              </div>
-              <div className="text-right pl-1 min-w-[50px]">
-                <span className="font-mono text-[11px] font-black text-emerald-300 block">
-                  #{it.numberStr}
-                </span>
-                <span className="text-[10px] text-slate-300 block truncate max-w-[80px]">
-                  {it.defaultWord || '—'}
-                </span>
-              </div>
+              {it.imageUrl ? (
+                <img
+                  src={it.imageUrl}
+                  referrerPolicy="no-referrer"
+                  alt={it.defaultWord}
+                  className="w-7 h-7 object-cover rounded shrink-0"
+                />
+              ) : (
+                <div className="w-7 h-7 rounded bg-white/10 flex items-center justify-center text-[10px] font-mono text-slate-400">
+                  {it.numberStr}
+                </div>
+              )}
+              <span className="font-mono text-[11px] font-semibold px-1 tabular-nums">#{it.numberStr}</span>
             </button>
           );
         })}
-      </div>
-      </div>
+      </footer>
     </div>
   );
 };

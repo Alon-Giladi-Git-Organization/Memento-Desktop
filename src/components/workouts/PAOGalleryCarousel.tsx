@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ChevronRight,
   ChevronLeft,
@@ -10,7 +11,6 @@ import {
   Pause,
   Shuffle,
   X,
-  ArrowRight,
   Save,
   Check,
 } from 'lucide-react';
@@ -79,7 +79,7 @@ export const PAOGalleryCarousel: React.FC<PAOGalleryCarouselProps> = ({
     }
   }, [initialIndex, items.length]);
 
-  // Lock body scroll while gallery modal is open so background never scrolls
+  // Lock body scroll while lightbox is open so background never scrolls
   useEffect(() => {
     const originalOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
@@ -116,6 +116,44 @@ export const PAOGalleryCarousel: React.FC<PAOGalleryCarouselProps> = ({
     setCurrentIndex(nextIndex);
   };
 
+  const currentItem = items[currentIndex];
+
+  // Resolve Object value reliably (falling back to Major anchor word or default PAO object if empty)
+  const resolvedObject = currentItem
+    ? (currentItem.object && currentItem.object.trim()) ||
+      ((currentItem as any).defaultObject && String((currentItem as any).defaultObject).trim()) ||
+      ((currentItem as any).defaultWord && String((currentItem as any).defaultWord).trim()) ||
+      majorItems?.find((m) => m.number === currentItem.number)?.defaultWord?.trim() ||
+      DEFAULT_PAO_ITEMS.find((d) => d.number === currentItem.number)?.object?.trim() ||
+      ''
+    : '';
+
+  const handleSaveSlideEdits = useCallback(() => {
+    if (!currentItem) return;
+    if (onUpdateItem) {
+      onUpdateItem(currentItem.number, {
+        person: editPerson.trim(),
+        action: editAction.trim(),
+        object: editObject.trim(),
+        scene: editScene.trim(),
+      });
+      setSaveSuccessNotice('הערכים עודכנו בהצלחה');
+      setTimeout(() => setSaveSuccessNotice(null), 2600);
+      setIsEditingSlide(false);
+    } else if (onEditItem) {
+      onEditItem(currentItem.number);
+    }
+  }, [currentItem, onUpdateItem, onEditItem, editPerson, editAction, editObject, editScene]);
+
+  const handleCancelSlideEdits = useCallback(() => {
+    if (!currentItem) return;
+    setEditPerson(currentItem.person || '');
+    setEditAction(currentItem.action || '');
+    setEditObject(resolvedObject);
+    setEditScene(currentItem.scene || '');
+    setIsEditingSlide(false);
+  }, [currentItem, resolvedObject]);
+
   // Keyboard navigation, Enter to save in edit mode & Light Dismiss via Escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -125,7 +163,6 @@ export const PAOGalleryCarousel: React.FC<PAOGalleryCarouselProps> = ({
         return;
       }
 
-      // Don't intercept arrow keys / space if user is typing in an input
       if (['INPUT', 'TEXTAREA'].includes((e.target as HTMLElement)?.tagName)) {
         if (e.key === 'Escape') {
           e.preventDefault();
@@ -153,7 +190,7 @@ export const PAOGalleryCarousel: React.FC<PAOGalleryCarouselProps> = ({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [goToNext, goToPrev, onClose, isEditingSlide, editPerson, editAction, editObject, editScene, currentIndex]);
+  }, [goToNext, goToPrev, onClose, isEditingSlide, handleSaveSlideEdits, handleCancelSlideEdits]);
 
   // Autoplay timer
   useEffect(() => {
@@ -178,18 +215,6 @@ export const PAOGalleryCarousel: React.FC<PAOGalleryCarouselProps> = ({
       });
     }
   }, [currentIndex]);
-
-  const currentItem = items[currentIndex];
-
-  // Resolve Object value reliably (falling back to Major anchor word or default PAO object if empty)
-  const resolvedObject = currentItem
-    ? (currentItem.object && currentItem.object.trim()) ||
-      ((currentItem as any).defaultObject && String((currentItem as any).defaultObject).trim()) ||
-      ((currentItem as any).defaultWord && String((currentItem as any).defaultWord).trim()) ||
-      majorItems?.find((m) => m.number === currentItem.number)?.defaultWord?.trim() ||
-      DEFAULT_PAO_ITEMS.find((d) => d.number === currentItem.number)?.object?.trim() ||
-      ''
-    : '';
 
   // Sync draft edit values whenever active slide item changes
   useEffect(() => {
@@ -225,7 +250,6 @@ export const PAOGalleryCarousel: React.FC<PAOGalleryCarouselProps> = ({
     touchStartXRef.current = null;
 
     if (Math.abs(deltaX) > 45) {
-      // Swipe left on RTL advances forward, swipe right goes back
       if (deltaX < 0) {
         goToNext();
       } else {
@@ -234,26 +258,28 @@ export const PAOGalleryCarousel: React.FC<PAOGalleryCarouselProps> = ({
     }
   };
 
+  const renderInPortal = (node: React.ReactNode) => {
+    if (typeof document === 'undefined') return node;
+    return createPortal(node, document.body);
+  };
+
   if (items.length === 0 || !currentItem) {
-    return (
+    return renderInPortal(
       <div
+        dir="rtl"
         onMouseDown={(e) => {
           if (e.target === e.currentTarget && onClose) onClose();
         }}
-        onClick={(e) => {
-          if (e.target === e.currentTarget && onClose) onClose();
-        }}
-        className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md overflow-y-auto flex items-center justify-center p-4 animate-fadeIn"
+        className="fixed inset-0 z-[60] bg-black/92 backdrop-blur-md flex items-center justify-center p-4 animate-fadeIn"
       >
         <div
           onMouseDown={(e) => e.stopPropagation()}
-          onClick={(e) => e.stopPropagation()}
-          className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-12 text-center space-y-4 my-6"
+          className="w-full max-w-md bg-slate-950/95 border border-white/10 rounded-2xl p-10 text-center space-y-4 shadow-2xl"
         >
-          <div className="w-16 h-16 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center mx-auto text-indigo-400">
-            <ImagePlus className="w-8 h-8" />
+          <div className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mx-auto text-indigo-400">
+            <ImagePlus className="w-7 h-7" />
           </div>
-          <h3 className="text-lg font-bold text-white">אין שלשות להצגה בגלריה</h3>
+          <h3 className="text-base font-bold text-white">אין שלשות להצגה בגלריה</h3>
           <p className="text-xs text-slate-400 max-w-sm mx-auto">
             לא נמצאו פריטים התואמים לחיפוש או לסינון הנוכחי.
           </p>
@@ -261,7 +287,7 @@ export const PAOGalleryCarousel: React.FC<PAOGalleryCarouselProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs rounded-xl cursor-pointer"
+              className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white font-semibold text-xs rounded-lg cursor-pointer transition-colors"
             >
               חזרה לתצוגת כוורת
             </button>
@@ -273,104 +299,37 @@ export const PAOGalleryCarousel: React.FC<PAOGalleryCarouselProps> = ({
 
   const initialsObj = getPAOInitials(currentItem.number, majorDigits);
 
-  const handleSaveSlideEdits = () => {
-    if (onUpdateItem) {
-      onUpdateItem(currentItem.number, {
-        person: editPerson.trim(),
-        action: editAction.trim(),
-        object: editObject.trim(),
-        scene: editScene.trim(),
-      });
-      setSaveSuccessNotice('הערכים עודכנו בהצלחה!');
-      setTimeout(() => setSaveSuccessNotice(null), 3000);
-      setIsEditingSlide(false);
-    } else if (onEditItem) {
-      onEditItem(currentItem.number);
-    }
-  };
-
-  const handleCancelSlideEdits = () => {
-    setEditPerson(currentItem.person || '');
-    setEditAction(currentItem.action || '');
-    setEditObject(resolvedObject);
-    setEditScene(currentItem.scene || '');
-    setIsEditingSlide(false);
-  };
-
-  return (
+  return renderInPortal(
     <div
+      dir="rtl"
       onMouseDown={(e) => {
-        // Light dismiss: close when clicking on the sides of the screen (the backdrop)
+        // Lightbox Dimmed Overlay Light Dismiss: clicking backdrop closes gallery
         if (e.target === e.currentTarget && onClose) {
           onClose();
         }
       }}
-      onClick={(e) => {
-        // Light dismiss: close when clicking on the sides of the screen (the backdrop)
-        if (e.target === e.currentTarget && onClose) {
-          onClose();
-        }
-      }}
-      className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md overflow-y-auto flex flex-col items-center justify-start p-1 sm:p-2.5 md:p-3.5 animate-fadeIn"
+      className="fixed inset-0 z-[60] bg-black/93 backdrop-blur-md flex flex-col justify-between overflow-y-auto select-none animate-fadeIn"
     >
-      <div
-        className="w-full max-w-[98vw] 2xl:max-w-[1750px] my-auto space-y-3 sm:space-y-4 select-none relative"
+      {/* Top Lightbox Controls Bar (minimal, unobtrusive over dimmed backdrop) */}
+      <header
         onMouseDown={(e) => e.stopPropagation()}
-        onClick={(e) => e.stopPropagation()}
+        className="w-full flex items-center justify-between gap-3 px-4 sm:px-6 py-3 bg-gradient-to-b from-black/80 to-transparent shrink-0 z-20"
       >
-      {/* Top Gallery Header Bar */}
-      <div className="flex items-center justify-between bg-slate-950/90 border border-slate-800/90 px-4 py-3 rounded-2xl flex-wrap gap-2.5 backdrop-blur-md shadow-lg">
-        <div className="flex items-center gap-3">
-          {onClose && (
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-2 rounded-xl bg-slate-900 hover:bg-indigo-600 text-slate-300 hover:text-white border border-slate-700/80 transition-all cursor-pointer flex items-center gap-1.5 text-xs sm:text-sm font-bold"
-              title="חזרה לתצוגת רשת (Esc או לחיצה מחוץ לתמונה)"
-            >
-              <ArrowRight className="w-4 h-4" />
-              <span>חזרה לתצוגת רשת (Esc)</span>
-            </button>
-          )}
-
-          <div className="flex items-center gap-2.5">
-            <span className="font-mono text-base sm:text-lg font-black px-3.5 py-1 rounded-xl bg-gradient-to-r from-pink-500/20 to-indigo-500/20 text-pink-300 border border-pink-500/30">
-              #{currentItem.numberStr}
-            </span>
-            <span className="text-xs sm:text-sm text-slate-300 hidden sm:inline font-medium">
-              שלשה {currentIndex + 1} מתוך {items.length}
-            </span>
-          </div>
+        <div className="flex items-center gap-3 text-xs text-slate-300 min-w-0">
+          <span className="font-mono text-sm font-bold text-white tabular-nums whitespace-nowrap">
+            #{currentItem.numberStr}
+          </span>
+          <span aria-hidden="true" className="text-slate-600">·</span>
+          <span className="font-mono tabular-nums text-slate-400 whitespace-nowrap">
+            {currentIndex + 1} / {items.length}
+          </span>
+          <span aria-hidden="true" className="text-slate-600 hidden md:inline">·</span>
+          <span className="text-slate-400 hidden md:inline truncate">
+            {initialsObj.initials} ({initialsObj.fullFormula})
+          </span>
         </div>
 
-        {/* Center/Right Controls */}
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Autoplay button */}
-          <button
-            type="button"
-            onClick={() => setIsAutoPlaying((prev) => !prev)}
-            className={`px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-              isAutoPlaying
-                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/30'
-                : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700/80'
-            }`}
-            title="ניגון אוטומטי רציף של הגלריה"
-          >
-            {isAutoPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-            <span>{isAutoPlaying ? 'השהה ניגון' : 'ניגון אוטומטי'}</span>
-          </button>
-
-          {/* Random button */}
-          <button
-            type="button"
-            onClick={goToRandom}
-            className="px-3.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-700/80 flex items-center gap-1.5 transition-all cursor-pointer"
-            title="קפיצה לשלשה אקראית"
-          >
-            <Shuffle className="w-4 h-4 text-purple-400" />
-            <span>אקראי</span>
-          </button>
-
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-wrap justify-end">
           {/* Quick Jump Dropdown */}
           <select
             value={currentItem.number}
@@ -379,289 +338,261 @@ export const PAOGalleryCarousel: React.FC<PAOGalleryCarouselProps> = ({
               const targetIdx = items.findIndex((it) => it.number === num);
               if (targetIdx !== -1) goToIndex(targetIdx);
             }}
-            className="bg-slate-900 border border-slate-700 text-indigo-300 text-xs sm:text-sm font-mono font-bold rounded-xl px-3 py-1.5 focus:outline-none cursor-pointer"
+            aria-label="בחר שלשה"
+            className="bg-white/8 hover:bg-white/12 border border-white/10 text-slate-200 text-xs font-mono rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-indigo-400 cursor-pointer max-w-[140px] sm:max-w-[180px]"
           >
             {items.map((it) => (
-              <option key={it.number} value={it.number}>
+              <option key={it.number} value={it.number} className="bg-slate-950 text-white">
                 #{it.numberStr} - {it.person || 'שלשה'}
               </option>
             ))}
           </select>
 
+          <button
+            type="button"
+            onClick={() => setIsAutoPlaying((prev) => !prev)}
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+              isAutoPlaying
+                ? 'bg-amber-500 text-slate-950 font-bold'
+                : 'bg-white/8 hover:bg-white/15 text-slate-200 border border-white/10'
+            }`}
+            title="ניגון אוטומטי (מקש רווח)"
+          >
+            {isAutoPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+            <span className="hidden sm:inline">{isAutoPlaying ? 'השהה' : 'ניגון'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={goToRandom}
+            className="px-2.5 py-1.5 rounded-lg text-xs font-medium bg-white/8 hover:bg-white/15 text-slate-200 border border-white/10 flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+            title="שלשה אקראית"
+          >
+            <Shuffle className="w-3.5 h-3.5 text-purple-300" />
+            <span className="hidden sm:inline">אקראי</span>
+          </button>
+
+          {onToggleReady && (
+            <button
+              type="button"
+              onClick={() => onToggleReady(currentItem.number, currentItem.is_ready_for_practice)}
+              className={`px-2.5 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap ${
+                currentItem.is_ready_for_practice
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                  : 'bg-white/8 hover:bg-white/15 text-slate-300 border border-white/10'
+              }`}
+              title={currentItem.is_ready_for_practice ? 'מוכן לתרגול' : 'סמן כמוכן לתרגול'}
+            >
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="hidden md:inline">
+                {currentItem.is_ready_for_practice ? 'מוכן' : 'סמן כמוכן'}
+              </span>
+            </button>
+          )}
+
+          {/* Change Image button */}
+          <button
+            type="button"
+            onClick={() => onOpenImageGenerator?.(currentItem)}
+            className="px-2.5 py-1.5 rounded-lg bg-indigo-600/90 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+            title="שנה תמונה (יצירה עם AI או העלאה מהמחשב)"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+            <span>שנה תמונה</span>
+          </button>
+
+          {/* Edit Values button */}
+          {!isEditingSlide ? (
+            <button
+              type="button"
+              onClick={() => setIsEditingSlide(true)}
+              className="px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-white border border-white/15 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap"
+              title="ערוך את ערכי ה-PAO והסצנה"
+            >
+              <Edit3 className="w-3.5 h-3.5 text-amber-300" />
+              <span>עריכה</span>
+            </button>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={handleCancelSlideEdits}
+                className="px-2.5 py-1.5 rounded-lg bg-white/10 hover:bg-white/20 text-slate-200 text-xs font-medium cursor-pointer transition-colors whitespace-nowrap"
+              >
+                ביטול
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveSlideEdits}
+                title="שמור שינויים (ניתן גם ללחוץ Enter)"
+                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-colors whitespace-nowrap"
+              >
+                <Save className="w-3.5 h-3.5" />
+                <span>שמור (Enter)</span>
+              </button>
+            </div>
+          )}
+
           {onClose && (
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer mr-1"
-              title="סגור גלריה (Esc)"
+              className="p-1.5 rounded-lg bg-white/8 hover:bg-white/20 text-slate-300 hover:text-white border border-white/10 transition-colors cursor-pointer"
+              title="סגור תצוגת גלריה (Esc)"
+              aria-label="סגור גלריה"
             >
-              <X className="w-5 h-5" />
+              <X className="w-4 h-4" />
             </button>
           )}
         </div>
-      </div>
+      </header>
 
-      {/* Main Hero Carousel Viewport: Side-by-Side Text Panel & Enlarged Image */}
-      <div
-        className="relative w-full rounded-2xl sm:rounded-3xl bg-slate-950/95 border-2 border-indigo-500/30 p-2 sm:p-3.5 md:p-4 shadow-2xl overflow-hidden flex flex-col"
+      {/* Main Lightbox Stage: Centered Image Above + Compact Text Values Below */}
+      <main
+        className="flex-1 flex flex-col items-center justify-center relative px-4 sm:px-14 py-2 gap-3 sm:gap-4 min-h-0"
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget && onClose) {
+            onClose();
+          }
+        }}
       >
-        {/* Slide Container: Side-by-Side Layout (Text Panel on Right, Image on Left in RTL) */}
+        {/* Navigation Arrow: Right (Previous in RTL) — Floating over dimmed backdrop */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            goToPrev();
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          className="fixed right-2.5 sm:right-5 top-1/2 -translate-y-1/2 z-30 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-black/60 hover:bg-white/15 text-white/90 hover:text-white border border-white/15 shadow-2xl flex items-center justify-center transition-all cursor-pointer active:scale-95 backdrop-blur-md"
+          title="לשלשה הקודמת (חץ ימינה)"
+          aria-label="לשלשה הקודמת"
+        >
+          <ChevronRight className="w-6 h-6" />
+        </button>
+
+        {/* Navigation Arrow: Left (Next in RTL) — Floating over dimmed backdrop */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            goToNext();
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          className="fixed left-2.5 sm:left-5 top-1/2 -translate-y-1/2 z-30 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-black/60 hover:bg-white/15 text-white/90 hover:text-white border border-white/15 shadow-2xl flex items-center justify-center transition-all cursor-pointer active:scale-95 backdrop-blur-md"
+          title="לשלשה הבאה (חץ שמאלה)"
+          aria-label="לשלשה הבאה"
+        >
+          <ChevronLeft className="w-6 h-6" />
+        </button>
+
+        {/* Slide Content Column: Image on Top, Compact Text Caption Underneath */}
         <div
           key={currentItem.number}
-          className={`w-full grid grid-cols-1 lg:grid-cols-12 gap-3.5 sm:gap-4 items-stretch ${
+          onMouseDown={(e) => e.stopPropagation()}
+          className={`w-full max-w-4xl flex flex-col items-center gap-3 sm:gap-4 ${
             slideDirection === 'left' ? 'animate-slide-left' : 'animate-slide-right'
           }`}
         >
-          {/* 1. RIGHT SIDE (in RTL): Full Textual Information & Inline Editing at Image Height */}
-          <div className="lg:col-span-5 xl:col-span-5 bg-slate-900/95 border border-slate-800 rounded-xl sm:rounded-2xl p-4 sm:p-6 text-right flex flex-col justify-between gap-4 shadow-xl lg:h-[74vh] lg:min-h-[500px] lg:max-h-[760px] overflow-y-auto">
-            <div className="space-y-4">
-              {/* Header: Number, Initials, Ready Toggle & Edit */}
-              <div className="flex items-center justify-between border-b border-slate-800/80 pb-3.5 flex-wrap gap-2.5">
-                <div className="flex items-center gap-3">
-                  <span className="font-mono text-2xl sm:text-3xl font-black px-4 py-1.5 rounded-xl bg-gradient-to-r from-indigo-500/20 to-purple-500/20 text-indigo-300 border border-indigo-500/40 shadow-inner">
-                    #{currentItem.numberStr}
-                  </span>
-                  <div>
-                    <span className="text-sm sm:text-base font-bold text-amber-400 block">
-                      אותיות פונטיות: {initialsObj.initials}
+          {/* 1. HERO IMAGE FRAME */}
+          <div className="relative w-full flex items-center justify-center">
+            {currentItem.imageUrl ? (
+              <img
+                src={currentItem.imageUrl}
+                referrerPolicy="no-referrer"
+                alt={`PAO #${currentItem.numberStr} - ${currentItem.person}`}
+                className={`w-auto max-w-full object-contain rounded-xl shadow-[0_24px_80px_rgba(0,0,0,0.85)] border border-white/10 transition-all duration-300 ${
+                  isEditingSlide ? 'max-h-[38vh] sm:max-h-[42vh]' : 'max-h-[56vh] sm:max-h-[62vh]'
+                }`}
+              />
+            ) : (
+              <div className="w-full max-w-lg py-12 px-6 rounded-2xl bg-white/[0.04] border border-white/10 flex flex-col items-center justify-center text-center space-y-3">
+                <div className="w-14 h-14 rounded-2xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-300">
+                  <ImagePlus className="w-7 h-7" />
+                </div>
+                <div className="space-y-1">
+                  <h4 className="text-sm font-bold text-white">
+                    אין עדיין תמונה לשלשת PAO #{currentItem.numberStr}
+                  </h4>
+                  <p className="text-xs text-slate-400 max-w-xs mx-auto">
+                    צור תמונה עם Gemini AI או העלה תמונה מהמכשיר.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => onOpenImageGenerator?.(currentItem)}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-lg flex items-center gap-1.5 cursor-pointer transition-colors"
+                >
+                  <Sparkles className="w-4 h-4 text-amber-300" />
+                  <span>שנה תמונה</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Save confirmation toast */}
+          {saveSuccessNotice && (
+            <div className="text-xs font-semibold text-emerald-300 bg-emerald-500/15 border border-emerald-500/35 px-3 py-1.5 rounded-lg flex items-center gap-1.5 animate-fade-in">
+              <Check className="w-3.5 h-3.5 shrink-0" />
+              <span>{saveSuccessNotice}</span>
+            </div>
+          )}
+
+          {/* 2. COMPACT TEXTUAL CAPTION / INLINE EDITOR BELOW IMAGE */}
+          <div className="w-full max-w-3xl text-right">
+            {!isEditingSlide ? (
+              <div className="bg-slate-950/75 border border-white/10 rounded-xl px-4 py-3 backdrop-blur-md space-y-2">
+                {/* Compact single-row PAO triplet values */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-5 gap-y-1.5 text-xs sm:text-[13px]">
+                  <div className="min-w-0">
+                    <span className="text-[11px] font-semibold text-amber-400/90 ml-1.5">אדם:</span>
+                    <span className="font-semibold text-white break-words">
+                      {currentItem.person?.trim() || '(טרם הוגדר)'}
                     </span>
-                    <span className="text-xs sm:text-sm text-slate-300 font-medium">
-                      עיצורי Major: {initialsObj.fullFormula}
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-[11px] font-semibold text-purple-400/90 ml-1.5">פעולה:</span>
+                    <span className="font-semibold text-white break-words">
+                      {currentItem.action?.trim() || '(טרם הוגדר)'}
+                    </span>
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-[11px] font-semibold text-teal-400/90 ml-1.5">חפץ:</span>
+                    <span className="font-semibold text-white break-words">
+                      {resolvedObject || '(טרם הוגדר)'}
                     </span>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 flex-wrap">
-                  {onToggleReady && (
-                    <button
-                      type="button"
-                      onClick={() => onToggleReady(currentItem.number, currentItem.is_ready_for_practice)}
-                      className={`px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                        currentItem.is_ready_for_practice
-                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-xs'
-                          : 'bg-slate-950 text-slate-400 hover:text-white border border-slate-800'
-                      }`}
-                    >
-                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                      <span>{currentItem.is_ready_for_practice ? 'מוכן לתרגול' : 'סמן כמוכן'}</span>
-                    </button>
-                  )}
-
-                  {/* In-Gallery Edit Toggle Button or Save / Cancel Buttons */}
-                  {!isEditingSlide ? (
-                    <button
-                      type="button"
-                      onClick={() => setIsEditingSlide(true)}
-                      className="px-3.5 py-2 rounded-xl bg-indigo-600/25 hover:bg-indigo-600/40 text-indigo-300 border border-indigo-500/35 hover:border-indigo-500/50 text-xs sm:text-sm font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-                      title="ערוך את ערכי ה-PAO והסצנה ישירות בגלריה"
-                    >
-                      <Edit3 className="w-4 h-4 text-indigo-400" />
-                      <span>עריכת ערכים</span>
-                    </button>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={handleCancelSlideEdits}
-                        className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-xs sm:text-sm font-bold flex items-center gap-1 transition-all cursor-pointer"
-                      >
-                        <X className="w-4 h-4" />
-                        <span>ביטול</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={handleSaveSlideEdits}
-                        title="שמור שינויים (ניתן גם ללחוץ Enter)"
-                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs sm:text-sm font-bold flex items-center gap-1.5 shadow-md shadow-emerald-600/30 transition-all cursor-pointer"
-                      >
-                        <Save className="w-4 h-4" />
-                        <span>שמור (Enter)</span>
-                      </button>
-                    </div>
-                  )}
+                {/* Compact Full Scene Description underneath */}
+                <div className="pt-2 border-t border-white/10 flex items-start justify-between gap-3">
+                  <p className="text-xs sm:text-[13px] text-slate-300 leading-relaxed flex-1">
+                    <span className="text-[11px] font-semibold text-amber-300/90 ml-1.5">סצנה:</span>
+                    {currentItem.scene?.trim() || 'טרם הוזנה סצנה שלמה.'}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingSlide(true)}
+                    className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                    title="ערוך ערכי PAO"
+                    aria-label="ערוך ערכי PAO"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
-
-              {saveSuccessNotice && (
-                <div className="text-sm font-bold text-emerald-400 bg-emerald-500/20 border border-emerald-500/40 px-3.5 py-2.5 rounded-xl flex items-center gap-2 animate-fade-in">
-                  <Check className="w-4 h-4 shrink-0" />
-                  <span>{saveSuccessNotice}</span>
-                </div>
-              )}
-
-              {/* View Mode vs Inline Edit Mode */}
-              {!isEditingSlide ? (
-                <div className="space-y-3.5">
-                  {/* 3 Core Fields Stack (Person, Action, Object) */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-1 gap-3">
-                    <div className="bg-slate-950/90 border border-amber-500/35 p-3.5 sm:p-4 rounded-2xl">
-                      <span className="text-sm sm:text-base font-bold text-amber-400 block mb-1">
-                        👤 אדם (Person):
-                      </span>
-                      <span className="text-lg sm:text-xl md:text-2xl font-black text-white leading-snug block break-words">
-                        {currentItem.person?.trim() || '(טרם הוגדר)'}
-                      </span>
-                    </div>
-                    <div className="bg-slate-950/90 border border-purple-500/35 p-3.5 sm:p-4 rounded-2xl">
-                      <span className="text-sm sm:text-base font-bold text-purple-400 block mb-1">
-                        ⚡ פעולה (Action):
-                      </span>
-                      <span className="text-lg sm:text-xl md:text-2xl font-black text-white leading-snug block break-words">
-                        {currentItem.action?.trim() || '(טרם הוגדר)'}
-                      </span>
-                    </div>
-                    <div className="bg-slate-950/90 border border-teal-500/40 p-3.5 sm:p-4 rounded-2xl">
-                      <span className="text-sm sm:text-base font-bold text-teal-400 block mb-1">
-                        📦 חפץ (Object):
-                      </span>
-                      <span className="text-lg sm:text-xl md:text-2xl font-black text-white leading-snug block break-words">
-                        {resolvedObject || '(טרם הוגדר)'}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* 4th Field: Full Scene Description */}
-                  <div className="bg-gradient-to-br from-amber-500/10 via-indigo-500/10 to-purple-500/10 border border-amber-500/40 rounded-2xl p-4 sm:p-5 space-y-2 shadow-sm">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-5 h-5 text-amber-400 shrink-0" />
-                      <span className="text-sm sm:text-base font-black text-amber-300">
-                        🎬 סצנה שלמה (תיאור מנמוני רב-חושי):
-                      </span>
-                    </div>
-                    <p className="text-base sm:text-lg md:text-xl text-white leading-relaxed font-semibold">
-                      "{currentItem.scene?.trim() || 'טרם הוזנה סצנה שלמה. מומלץ לתאר אינטראקציה חיה ורב-חושית.'}"
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                /* Inline Editable Mode with AI Field Generators */
-                <div className="space-y-3.5 pt-0.5">
-                  <div className="grid grid-cols-1 gap-3">
-                    {/* Person Input */}
-                    <div className="bg-slate-950/90 border border-amber-500/40 p-3.5 rounded-2xl space-y-2">
-                      <div className="flex items-center justify-between">
-                        <label className="text-sm sm:text-base font-bold text-amber-400">👤 אדם (Person):</label>
-                        <AIFieldGeneratorButton
-                          promptType="pao_person"
-                          inputContext={currentItem.numberStr}
-                          paoContext={{
-                            number: currentItem.number,
-                            numberStr: currentItem.numberStr,
-                            person: editPerson,
-                            action: editAction,
-                            object: editObject,
-                            scene: editScene,
-                          }}
-                          customDigits={majorDigits}
-                          connectingLetters={connectingLetters}
-                          onGenerated={(val) => setEditPerson(val)}
-                          label="AI"
-                          compact
-                        />
-                      </div>
-                      <input
-                        type="text"
-                        value={editPerson}
-                        onChange={(e) => setEditPerson(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleSaveSlideEdits();
-                          }
-                        }}
-                        placeholder="שם הדמות..."
-                        className="w-full bg-slate-900 border border-slate-700 focus:border-amber-500 rounded-xl px-3.5 py-2 text-base sm:text-lg font-bold text-white focus:outline-none"
-                      />
-                    </div>
-
-                    {/* Action Input */}
-                    <div className="bg-slate-950/90 border border-purple-500/40 p-3.5 rounded-2xl space-y-2">
-                      <div className="flex items-center justify-between">
-                        <label className="text-sm sm:text-base font-bold text-purple-400">⚡ פעולה (Action):</label>
-                        <AIFieldGeneratorButton
-                          promptType="pao_action"
-                          inputContext={currentItem.numberStr}
-                          paoContext={{
-                            number: currentItem.number,
-                            numberStr: currentItem.numberStr,
-                            person: editPerson,
-                            action: editAction,
-                            object: editObject,
-                            scene: editScene,
-                          }}
-                          customDigits={majorDigits}
-                          connectingLetters={connectingLetters}
-                          onGenerated={(val) => setEditAction(val)}
-                          label="AI"
-                          compact
-                        />
-                      </div>
-                      <input
-                        type="text"
-                        value={editAction}
-                        onChange={(e) => setEditAction(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleSaveSlideEdits();
-                          }
-                        }}
-                        placeholder="פעולה קינטית..."
-                        className="w-full bg-slate-900 border border-slate-700 focus:border-purple-500 rounded-xl px-3.5 py-2 text-base sm:text-lg font-bold text-white focus:outline-none"
-                      />
-                    </div>
-
-                    {/* Object Input */}
-                    <div className="bg-slate-950/90 border border-teal-500/40 p-3.5 rounded-2xl space-y-2">
-                      <div className="flex items-center justify-between">
-                        <label className="text-sm sm:text-base font-bold text-teal-400">📦 חפץ (Object):</label>
-                        <AIFieldGeneratorButton
-                          promptType="pao_object"
-                          inputContext={currentItem.numberStr}
-                          paoContext={{
-                            number: currentItem.number,
-                            numberStr: currentItem.numberStr,
-                            person: editPerson,
-                            action: editAction,
-                            object: editObject,
-                            scene: editScene,
-                          }}
-                          customDigits={majorDigits}
-                          connectingLetters={connectingLetters}
-                          onGenerated={(val) => setEditObject(val)}
-                          label="AI"
-                          compact
-                        />
-                      </div>
-                      <input
-                        type="text"
-                        value={editObject}
-                        onChange={(e) => setEditObject(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            e.preventDefault();
-                            handleSaveSlideEdits();
-                          }
-                        }}
-                        placeholder="חפץ פסיבי מובחן..."
-                        className="w-full bg-slate-900 border border-slate-700 focus:border-teal-500 rounded-xl px-3.5 py-2 text-base sm:text-lg font-bold text-white focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Scene Input */}
-                  <div className="bg-slate-950/90 border border-amber-500/40 p-3.5 rounded-2xl space-y-2">
-                    <div className="flex items-center justify-between flex-wrap gap-1">
-                      <div className="flex items-center gap-1.5">
-                        <Sparkles className="w-4 h-4 text-amber-400" />
-                        <label className="text-sm sm:text-base font-bold text-amber-300">
-                          🎬 סצנה שלמה:
-                        </label>
-                      </div>
+            ) : (
+              /* Compact Inline Edit Form below the image */
+              <div className="bg-slate-950/95 border border-white/15 rounded-2xl p-3.5 sm:p-4 space-y-3 backdrop-blur-md shadow-2xl">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  {/* Person */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <label className="text-[11px] font-semibold text-amber-400">אדם (Person)</label>
                       <AIFieldGeneratorButton
-                        promptType="pao_scene"
+                        promptType="pao_person"
                         inputContext={currentItem.numberStr}
                         paoContext={{
                           number: currentItem.number,
@@ -673,113 +604,148 @@ export const PAOGalleryCarousel: React.FC<PAOGalleryCarouselProps> = ({
                         }}
                         customDigits={majorDigits}
                         connectingLetters={connectingLetters}
-                        onGenerated={(val) => setEditScene(val)}
-                        label="סצנה עם AI"
+                        onGenerated={(val) => setEditPerson(val)}
+                        label="AI"
                         compact
                       />
                     </div>
-                    <textarea
-                      rows={3}
-                      value={editScene}
-                      onChange={(e) => setEditScene(e.target.value)}
+                    <input
+                      type="text"
+                      value={editPerson}
+                      onChange={(e) => setEditPerson(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
+                        if (e.key === 'Enter') {
                           e.preventDefault();
                           handleSaveSlideEdits();
                         }
                       }}
-                      placeholder="תאר סצנה חיה, הומוריסטית ורב-חושית המשלבת את הדמות, הפעולה והחפץ יחד..."
-                      className="w-full bg-slate-900 border border-slate-700 focus:border-amber-500 rounded-xl px-3.5 py-2.5 text-base sm:text-lg text-white focus:outline-none leading-relaxed"
+                      placeholder="שם הדמות..."
+                      className="w-full bg-slate-900 border border-slate-700 focus:border-amber-400 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm font-medium text-white focus:outline-none"
                     />
-                    <p className="text-xs text-slate-400 text-left">
-                      לחץ <kbd className="px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 font-mono text-slate-200">Enter</kbd> לשמירה מהירה
-                    </p>
+                  </div>
+
+                  {/* Action */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <label className="text-[11px] font-semibold text-purple-400">פעולה (Action)</label>
+                      <AIFieldGeneratorButton
+                        promptType="pao_action"
+                        inputContext={currentItem.numberStr}
+                        paoContext={{
+                          number: currentItem.number,
+                          numberStr: currentItem.numberStr,
+                          person: editPerson,
+                          action: editAction,
+                          object: editObject,
+                          scene: editScene,
+                        }}
+                        customDigits={majorDigits}
+                        connectingLetters={connectingLetters}
+                        onGenerated={(val) => setEditAction(val)}
+                        label="AI"
+                        compact
+                      />
+                    </div>
+                    <input
+                      type="text"
+                      value={editAction}
+                      onChange={(e) => setEditAction(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleSaveSlideEdits();
+                        }
+                      }}
+                      placeholder="פעולה קינטית..."
+                      className="w-full bg-slate-900 border border-slate-700 focus:border-purple-400 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm font-medium text-white focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Object */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between gap-1">
+                      <label className="text-[11px] font-semibold text-teal-400">חפץ (Object)</label>
+                      <AIFieldGeneratorButton
+                        promptType="pao_object"
+                        inputContext={currentItem.numberStr}
+                        paoContext={{
+                          number: currentItem.number,
+                          numberStr: currentItem.numberStr,
+                          person: editPerson,
+                          action: editAction,
+                          object: editObject,
+                          scene: editScene,
+                        }}
+                        customDigits={majorDigits}
+                        connectingLetters={connectingLetters}
+                        onGenerated={(val) => setEditObject(val)}
+                        label="AI"
+                        compact
+                      />
+                    </div>
+                    <input
+                      type="text"
+                      value={editObject}
+                      onChange={(e) => setEditObject(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleSaveSlideEdits();
+                        }
+                      }}
+                      placeholder="חפץ מובחן..."
+                      className="w-full bg-slate-900 border border-slate-700 focus:border-teal-400 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm font-medium text-white focus:outline-none"
+                    />
                   </div>
                 </div>
-              )}
-            </div>
-          </div>
 
-          {/* 2. LEFT SIDE (in RTL): Enlarged Wide Image Viewport at Matching Height */}
-          <div className="lg:col-span-7 xl:col-span-7 relative w-full rounded-xl sm:rounded-2xl overflow-hidden border border-slate-800/90 bg-black/90 flex items-center justify-center lg:h-[74vh] lg:min-h-[500px] lg:max-h-[760px] min-h-[360px] sm:min-h-[460px] shadow-inner group">
-            {/* Navigation Arrow: Right (Previous in RTL) — anchored inside image viewport so it never covers the text panel */}
-            <button
-              type="button"
-              onClick={goToPrev}
-              className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 z-30 w-11 h-11 sm:w-13 sm:h-13 rounded-full bg-slate-950/85 hover:bg-indigo-600 text-white border border-slate-700 hover:border-indigo-400 shadow-2xl flex items-center justify-center transition-all cursor-pointer active:scale-90 group/nav backdrop-blur-md"
-              title="לשלשה הקודמת (חץ ימינה ➔)"
-            >
-              <ChevronRight className="w-6 h-6 sm:w-7 sm:h-7 group-hover/nav:scale-110 transition-transform" />
-            </button>
-
-            {/* Navigation Arrow: Left (Next in RTL) — anchored inside image viewport */}
-            <button
-              type="button"
-              onClick={goToNext}
-              className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 z-30 w-11 h-11 sm:w-13 sm:h-13 rounded-full bg-slate-950/85 hover:bg-indigo-600 text-white border border-slate-700 hover:border-indigo-400 shadow-2xl flex items-center justify-center transition-all cursor-pointer active:scale-90 group/nav backdrop-blur-md"
-              title="לשלשה הבאה (חץ שמאלה ⬅)"
-            >
-              <ChevronLeft className="w-6 h-6 sm:w-7 sm:h-7 group-hover/nav:scale-110 transition-transform" />
-            </button>
-
-            {currentItem.imageUrl ? (
-              <>
-                <img
-                  src={currentItem.imageUrl}
-                  alt={`PAO #${currentItem.numberStr} - ${currentItem.person}`}
-                  className="w-full h-full max-h-[74vh] object-contain transition-transform duration-500 group-hover:scale-[1.01] drop-shadow-2xl"
-                />
-
-                {/* Floating Quick Action Overlay on Image (Change Image: Upload or AI) */}
-                <div className="absolute top-3 left-3 z-20 flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => onOpenImageGenerator?.(currentItem)}
-                    className="px-3.5 py-2 rounded-xl bg-gradient-to-r from-indigo-600/90 to-pink-600/90 hover:from-indigo-500 hover:to-pink-500 text-white backdrop-blur-md border border-white/10 shadow-lg transition-all cursor-pointer flex items-center gap-1.5 text-xs sm:text-sm font-bold"
-                    title="שנה תמונה (יצירה עם AI או העלאת תמונה)"
-                  >
-                    <Sparkles className="w-4 h-4 text-amber-300" />
-                    <span>שנה תמונה</span>
-                  </button>
-                </div>
-
-                {/* Bottom subtle tag on image */}
-                <div className="absolute bottom-3 right-3 z-20 px-3.5 py-1.5 rounded-xl bg-black/75 backdrop-blur-md border border-white/10 text-white text-xs sm:text-sm font-mono font-bold">
-                  #{currentItem.numberStr} • {currentItem.person}
-                </div>
-              </>
-            ) : (
-              /* High-impact placeholder if no image exists yet */
-              <div className="w-full py-16 px-6 flex flex-col items-center justify-center text-center space-y-4">
-                <div className="w-20 h-20 rounded-3xl bg-indigo-500/15 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shadow-xl">
-                  <ImagePlus className="w-10 h-10" />
-                </div>
+                {/* Scene Input */}
                 <div className="space-y-1">
-                  <h4 className="text-base sm:text-lg font-black text-white">
-                    אין עדיין תמונה לשלשת PAO #{currentItem.numberStr}
-                  </h4>
-                  <p className="text-xs sm:text-sm text-indigo-200/80 max-w-md mx-auto">
-                    הפק דימוי מנמוני חי ומרהיב של הסצנה באמצעות Gemini AI או העלה תמונה בלחיצת כפתור.
-                  </p>
+                  <div className="flex items-center justify-between gap-1">
+                    <label className="text-[11px] font-semibold text-amber-300">סצנה שלמה</label>
+                    <AIFieldGeneratorButton
+                      promptType="pao_scene"
+                      inputContext={currentItem.numberStr}
+                      paoContext={{
+                        number: currentItem.number,
+                        numberStr: currentItem.numberStr,
+                        person: editPerson,
+                        action: editAction,
+                        object: editObject,
+                        scene: editScene,
+                      }}
+                      customDigits={majorDigits}
+                      connectingLetters={connectingLetters}
+                      onGenerated={(val) => setEditScene(val)}
+                      label="סצנה עם AI"
+                      compact
+                    />
+                  </div>
+                  <textarea
+                    rows={2}
+                    value={editScene}
+                    onChange={(e) => setEditScene(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSaveSlideEdits();
+                      }
+                    }}
+                    placeholder="תאר סצנה חיה ורב-חושית..."
+                    className="w-full bg-slate-900 border border-slate-700 focus:border-amber-400 rounded-lg px-2.5 py-1.5 text-xs sm:text-sm text-white focus:outline-none leading-relaxed"
+                  />
                 </div>
-                <button
-                  type="button"
-                  onClick={() => onOpenImageGenerator?.(currentItem)}
-                  className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-pink-600 hover:from-indigo-500 hover:to-pink-500 text-white font-black text-sm rounded-2xl flex items-center gap-2.5 shadow-xl shadow-indigo-600/30 cursor-pointer transition-all active:scale-95"
-                >
-                  <Sparkles className="w-5 h-5 text-amber-300" />
-                  <span>שנה תמונה</span>
-                </button>
               </div>
             )}
           </div>
         </div>
-      </div>
+      </main>
 
-      {/* Bottom Thumbnail Scrub Strip */}
-      <div
+      {/* Slim Bottom Lightbox Filmstrip */}
+      <footer
+        onMouseDown={(e) => e.stopPropagation()}
         ref={thumbnailListRef}
-        className="flex items-center gap-2 overflow-x-auto p-2.5 bg-slate-950/90 rounded-2xl border border-slate-800/80 scroll-smooth max-w-full"
+        className="w-full flex items-center gap-1.5 overflow-x-auto px-4 py-2 bg-black/75 border-t border-white/10 scroll-smooth shrink-0 z-20"
       >
         {items.map((it, idx) => {
           const isActive = idx === currentIndex;
@@ -789,29 +755,29 @@ export const PAOGalleryCarousel: React.FC<PAOGalleryCarouselProps> = ({
               type="button"
               data-thumb-index={idx}
               onClick={() => goToIndex(idx)}
-              className={`shrink-0 flex items-center gap-1.5 p-1.5 rounded-xl border transition-all cursor-pointer ${
+              className={`shrink-0 flex items-center gap-1.5 p-1 rounded-lg border transition-all cursor-pointer ${
                 isActive
-                  ? 'bg-indigo-600 text-white border-indigo-400 shadow-md scale-105 ring-2 ring-indigo-400/40'
-                  : 'bg-slate-900 hover:bg-slate-800 text-slate-400 border-slate-800 hover:border-slate-700'
+                  ? 'bg-indigo-600/90 text-white border-indigo-400 shadow-md'
+                  : 'bg-white/5 hover:bg-white/12 text-slate-400 border-white/10 opacity-75 hover:opacity-100'
               }`}
             >
               {it.imageUrl ? (
                 <img
                   src={it.imageUrl}
+                  referrerPolicy="no-referrer"
                   alt={it.numberStr}
-                  className="w-8 h-8 object-cover rounded-lg shrink-0"
+                  className="w-7 h-7 object-cover rounded shrink-0"
                 />
               ) : (
-                <div className="w-8 h-8 rounded-lg bg-slate-800 flex items-center justify-center text-[10px] font-mono text-slate-400">
+                <div className="w-7 h-7 rounded bg-white/10 flex items-center justify-center text-[10px] font-mono text-slate-400">
                   {it.numberStr}
                 </div>
               )}
-              <span className="font-mono text-xs font-bold px-1">#{it.numberStr}</span>
+              <span className="font-mono text-[11px] font-semibold px-1 tabular-nums">#{it.numberStr}</span>
             </button>
           );
         })}
-      </div>
-      </div>
+      </footer>
     </div>
   );
 };
