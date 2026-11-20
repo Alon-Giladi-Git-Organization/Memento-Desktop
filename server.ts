@@ -1,5 +1,7 @@
-import express, { Request, Response } from 'express';
+import express from 'express';
+import type { Request, Response } from 'express';
 import dotenv from 'dotenv';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type, ThinkingLevel } from '@google/genai';
@@ -10,7 +12,10 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+const rawPort = process.env.PORT ? parseInt(process.env.PORT, 10) : NaN;
+const nginxPort = process.env.NGINX_PORT ? parseInt(process.env.NGINX_PORT, 10) : NaN;
+const defaultAppPort = process.env.DEFAULT_APP_PORT ? parseInt(process.env.DEFAULT_APP_PORT, 10) : 3000;
+const PORT = !isNaN(rawPort) && rawPort !== nginxPort ? rawPort : defaultAppPort;
 
 app.use(express.json({ limit: '10mb' }));
 
@@ -2117,9 +2122,19 @@ app.post('/api/gemini/tts', async (req: Request, res: Response) => {
   }
 });
 
+// Lightweight health endpoint for Cloud Run / deployment readiness probes
+app.get('/api/health', (_req: Request, res: Response) => {
+  res.status(200).json({ status: 'ok' });
+});
+
 // Vite middleware for dev / static serve for prod
 async function startServer() {
-  const isDev = process.env.NODE_ENV !== 'production';
+  const distPath = path.resolve(__dirname, 'dist');
+  const hasDistBuild = fs.existsSync(path.join(distPath, 'index.html'));
+  const isNpmStart = process.env.npm_lifecycle_event === 'start';
+  const isDev = hasDistBuild
+    ? !isNpmStart && process.env.NODE_ENV === 'development'
+    : true;
 
   if (isDev) {
     // Initialize Vite asynchronously while binding port 3000 immediately so readiness probes never get ECONNREFUSED
@@ -2143,7 +2158,6 @@ async function startServer() {
       }
     });
   } else {
-    const distPath = path.resolve(__dirname, 'dist');
     app.use(express.static(distPath));
     app.get('*', (_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
@@ -2151,11 +2165,12 @@ async function startServer() {
   }
 
   app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Memory Champion Academy Server running on http://localhost:${PORT}`);
+    console.log(`Memory Champion Academy Server running on http://0.0.0.0:${PORT} (mode=${isDev ? 'dev' : 'prod'})`);
   });
 }
 
 startServer().catch((err) => {
   console.error('Failed to start server:', err);
+  process.exit(1);
 });
 
